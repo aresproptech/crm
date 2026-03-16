@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { Topbar } from "@/components/crm/topbar";
 import { NewLeadModal } from "@/components/crm/new-lead-modal";
 import { LeadDetailPanel } from "@/components/crm/lead-detail-panel";
+import { ImportLeadsCsvModal } from "@/components/crm/import-leads-csv-modal";
 import {
   Plus,
   Circle,
@@ -92,6 +93,7 @@ function fmt(d: string) {
 
 export default function LeadsPage() {
   const [modalOpen, setModalOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [leads, setLeads] = useState<Lead[]>(MOCK_LEADS);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -123,7 +125,6 @@ export default function LeadsPage() {
         lead.phone,
         lead.source,
         lead.owner,
-        lead.planner ?? "",
         PHASE_LABELS[lead.phase],
         STATUS_CONFIG[lead.status].label,
         lead.valor,
@@ -222,6 +223,14 @@ export default function LeadsPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1.5 text-xs font-semibold"
+              onClick={() => setImportOpen(true)}
+            >
+              Importar CSV
+            </Button>
             <Button
               size="sm"
               className="h-7 gap-1.5 text-xs font-semibold"
@@ -442,6 +451,13 @@ export default function LeadsPage() {
       </main>
 
       <NewLeadModal open={modalOpen} onOpenChange={setModalOpen} />
+      <ImportLeadsCsvModal
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onImport={(newLeads) => {
+          setLeads((prev) => [...newLeads, ...prev]);
+        }}
+      />
       <LeadDetailPanel
         lead={selectedLead}
         onClose={() => setSelectedLead(null)}
