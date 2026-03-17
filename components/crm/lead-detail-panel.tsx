@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import {
   X,
   Phone,
@@ -51,6 +51,7 @@ import {
 } from "@/lib/crm-data";
 
 const STATUS_CONFIG = {
+  identificar: { label: "Identificar", className: "bg-violet-50 text-violet-700 border-violet-200" },
   seguimiento: { label: "Seguimiento", className: "bg-blue-50 text-blue-700 border-blue-200" },
   caliente: { label: "Caliente", className: "bg-orange-50 text-orange-700 border-orange-200" },
   desestimada: { label: "Desestimada", className: "bg-muted text-muted-foreground border-border" },
@@ -83,7 +84,9 @@ function IconRow({ icon: Icon, children }: { icon: React.ElementType; children: 
 
 function fmtDate(d: string) {
   if (!d) return "—";
-  return new Date(d).toLocaleDateString("es-ES", {
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return "—";
+  return dt.toLocaleDateString("es-ES", {
     day: "numeric",
     month: "long",
     year: "numeric",
@@ -91,12 +94,74 @@ function fmtDate(d: string) {
 }
 
 function fmtShort(d: string) {
-  if (!d) return "";
-  return new Date(d).toLocaleDateString("es-ES", {
+  if (!d) return "—";
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return "—";
+  return dt.toLocaleDateString("es-ES", {
     day: "2-digit",
     month: "short",
     year: "numeric",
   });
+}
+
+type HistoryEventType = "note" | "field_change";
+
+type LeadHistoryEvent = {
+  id: string;
+  leadId: string;
+  type: HistoryEventType;
+  field?: keyof Lead;
+  prevValue?: string;
+  newValue?: string;
+  createdAt: string; // ISO
+  createdBy: string;
+  noteText?: string;
+};
+
+const CURRENT_USER = "Ana Martínez";
+
+function normalizeValue(v: unknown): string {
+  if (v === null || v === undefined) return "";
+  return String(v).trim();
+}
+
+function statusLabel(value: string) {
+  return STATUS_OPTIONS.find((o) => o.value === value)?.label ?? value;
+}
+
+function phaseLabel(value: string) {
+  return PHASE_LABELS[value as keyof typeof PHASE_LABELS] ?? value;
+}
+
+function fieldDisplayName(field: keyof Lead): string {
+  switch (field) {
+    case "status":
+      return "Estado";
+    case "phase":
+      return "Fase";
+    case "valor":
+      return "Valor";
+    case "fechaNoticia":
+      return "Fecha noticia";
+    case "fechaValoracion":
+      return "Fecha valoración";
+    case "hora":
+      return "Hora";
+    case "planner":
+      return "Planner";
+    case "owner":
+      return "Owner";
+    default:
+      return String(field);
+  }
+}
+
+function formatFieldValue(field: keyof Lead, value: string) {
+  if (!value) return "—";
+  if (field === "status") return statusLabel(value);
+  if (field === "phase") return phaseLabel(value);
+  if (field === "fechaNoticia" || field === "fechaValoracion") return fmtShort(value);
+  return value;
 }
 
 // ─── CP lookup via API ────────────────────────────────────────────────────────
@@ -124,12 +189,18 @@ interface EditLeadModalProps {
   lead: Lead;
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  onSave: (next: Lead) => void;
 }
 
-function EditLeadModal({ lead, open, onOpenChange }: EditLeadModalProps) {
+function EditLeadModal({ lead, open, onOpenChange, onSave }: EditLeadModalProps) {
   const [form, setForm] = useState({ ...lead });
   const [cpLoading, setCpLoading] = useState(false);
   const [cpAutoFilled, setCpAutoFilled] = useState(false);
+
+  useEffect(() => {
+    setForm({ ...lead });
+    setCpAutoFilled(false);
+  }, [lead]);
 
   function set(field: keyof Lead, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -162,6 +233,7 @@ function EditLeadModal({ lead, open, onOpenChange }: EditLeadModalProps) {
   }
 
   function handleSave() {
+    onSave(form);
     onOpenChange(false);
   }
 
@@ -405,7 +477,16 @@ function EditLeadModal({ lead, open, onOpenChange }: EditLeadModalProps) {
             />
           </div>
 
-          {/* Planber removed – Owner is the responsible */}
+          {/* Planner */}
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs font-medium">Planner</Label>
+            <Input
+              value={form.planner ?? ""}
+              onChange={(e) => set("planner", e.target.value)}
+              className="h-8 text-sm"
+              placeholder="—"
+            />
+          </div>
 
           {/* Notas */}
           <div className="col-span-2 flex flex-col gap-1.5">
@@ -437,13 +518,46 @@ function EditLeadModal({ lead, open, onOpenChange }: EditLeadModalProps) {
 export function LeadDetailPanel({ lead, onClose }: LeadDetailPanelProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [obsText, setObsText] = useState("");
-  const [localObs, setLocalObs] = useState<Observacion[]>([]);
+  const [localObsByLead, setLocalObsByLead] = useState<Record<string, Observacion[]>>(
+    {}
+  );
+  const [historyByLead, setHistoryByLead] = useState<Record<string, LeadHistoryEvent[]>>(
+    {}
+  );
+  const [overridesByLead, setOverridesByLead] = useState<Record<string, Partial<Lead>>>(
+    {}
+  );
+
+  const effectiveLead = useMemo(() => {
+    if (!lead) return null;
+    const override = overridesByLead[lead.id];
+    return override ? ({ ...lead, ...override } as Lead) : lead;
+  }, [lead, overridesByLead]);
 
   // Merge mock observaciones + locally added ones
-  const allObs: Observacion[] = [
-    ...(lead?.observaciones ?? []),
-    ...localObs,
-  ].sort((a, b) => b.date.localeCompare(a.date));
+  const allObs: Observacion[] = useMemo(() => {
+    if (!effectiveLead) return [];
+    const local = localObsByLead[effectiveLead.id] ?? [];
+    return [...(effectiveLead.observaciones ?? []), ...local].sort((a, b) =>
+      b.date.localeCompare(a.date)
+    );
+  }, [effectiveLead, localObsByLead]);
+
+  const allHistory: LeadHistoryEvent[] = useMemo(() => {
+    if (!effectiveLead) return [];
+    const noteEvents: LeadHistoryEvent[] = allObs.map((o) => ({
+      id: `note-${o.id}`,
+      leadId: effectiveLead.id,
+      type: "note",
+      createdAt: `${o.date || new Date().toISOString().slice(0, 10)}T00:00:00.000Z`,
+      createdBy: CURRENT_USER,
+      noteText: o.text,
+    }));
+    const fieldEvents = historyByLead[effectiveLead.id] ?? [];
+    return [...fieldEvents, ...noteEvents].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  }, [effectiveLead, allObs, historyByLead]);
 
   function addObservacion() {
     const trimmed = obsText.trim();
@@ -453,8 +567,49 @@ export function LeadDetailPanel({ lead, onClose }: LeadDetailPanelProps) {
       date: new Date().toISOString().slice(0, 10),
       text: trimmed,
     };
-    setLocalObs((prev) => [newObs, ...prev]);
+    if (!effectiveLead) return;
+    setLocalObsByLead((prev) => ({
+      ...prev,
+      [effectiveLead.id]: [newObs, ...(prev[effectiveLead.id] ?? [])],
+    }));
     setObsText("");
+  }
+
+  function appendFieldChangeEvents(prev: Lead, next: Lead) {
+    const tracked: Array<keyof Lead> = [
+      "valor",
+      "phase",
+      "status",
+      "fechaNoticia",
+      "fechaValoracion",
+      "hora",
+      "planner",
+      "owner",
+    ];
+
+    const changes: LeadHistoryEvent[] = [];
+    for (const field of tracked) {
+      const before = normalizeValue(prev[field]);
+      const after = normalizeValue(next[field]);
+      if (before === after) continue;
+      changes.push({
+        id: crypto.randomUUID(),
+        leadId: prev.id,
+        type: "field_change",
+        field,
+        prevValue: before,
+        newValue: after,
+        createdAt: new Date().toISOString(),
+        createdBy: CURRENT_USER,
+      });
+    }
+
+    if (changes.length === 0) return;
+
+    setHistoryByLead((prevMap) => ({
+      ...prevMap,
+      [prev.id]: [...changes, ...(prevMap[prev.id] ?? [])],
+    }));
   }
 
   return (
@@ -477,15 +632,15 @@ export function LeadDetailPanel({ lead, onClose }: LeadDetailPanelProps) {
         )}
         aria-label="Detalle del lead"
       >
-        {lead && (
+        {effectiveLead && (
           <>
             {/* Header */}
             <div className="flex items-start justify-between border-b border-border px-5 py-4">
               <div className="flex flex-col gap-0.5 flex-1 min-w-0 pr-3">
                 <h2 className="text-sm font-semibold text-foreground leading-tight truncate">
-                  {lead.ownerName}
+                  {effectiveLead.ownerName}
                 </h2>
-                <p className="text-xs text-muted-foreground truncate">{lead.address}</p>
+                <p className="text-xs text-muted-foreground truncate">{effectiveLead.address}</p>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
                 <Button
@@ -513,23 +668,23 @@ export function LeadDetailPanel({ lead, onClose }: LeadDetailPanelProps) {
             <div className="flex flex-wrap gap-1.5 border-b border-border px-5 py-3">
               <Badge
                 variant="outline"
-                className={cn("text-xs font-medium", STATUS_CONFIG[lead.status].className)}
+                className={cn("text-xs font-medium", STATUS_CONFIG[effectiveLead.status].className)}
               >
                 <Circle className="mr-1 h-1.5 w-1.5 fill-current" />
-                {STATUS_CONFIG[lead.status].label}
+                {STATUS_CONFIG[effectiveLead.status].label}
               </Badge>
               <Badge
                 variant="outline"
                 className="text-xs font-medium"
                 style={{
-                  borderColor: PHASE_COLORS[lead.phase] + "55",
-                  color: PHASE_COLORS[lead.phase],
+                  borderColor: PHASE_COLORS[effectiveLead.phase] + "55",
+                  color: PHASE_COLORS[effectiveLead.phase],
                 }}
               >
-                {PHASE_LABELS[lead.phase]}
+                {PHASE_LABELS[effectiveLead.phase]}
               </Badge>
               <Badge variant="outline" className="text-xs font-medium text-muted-foreground">
-                {lead.source}
+                {effectiveLead.source}
               </Badge>
             </div>
 
@@ -538,21 +693,21 @@ export function LeadDetailPanel({ lead, onClose }: LeadDetailPanelProps) {
               {/* Core fields */}
               <div className="flex flex-col gap-3.5 px-5 py-5">
                 <IconRow icon={Phone}>
-                  <Row label="Teléfono">{lead.phone}</Row>
+                  <Row label="Teléfono">{effectiveLead.phone}</Row>
                 </IconRow>
                 <IconRow icon={MapPin}>
                   <Row label="Domicilio">
-                    {lead.address}{lead.distrito ? `, ${lead.distrito}` : ""}{lead.cp ? ` (${lead.cp})` : ""}
+                    {effectiveLead.address}{effectiveLead.distrito ? `, ${effectiveLead.distrito}` : ""}{effectiveLead.cp ? ` (${effectiveLead.cp})` : ""}
                   </Row>
                 </IconRow>
                 <IconRow icon={Euro}>
-                  <Row label="Valor estimado">{lead.valor || "—"}</Row>
+                  <Row label="Valor estimado">{effectiveLead.valor || "—"}</Row>
                 </IconRow>
                 <IconRow icon={User}>
-                  <Row label="Owner / Agente">{lead.owner}</Row>
+                  <Row label="Owner / Agente">{effectiveLead.owner}</Row>
                 </IconRow>
                 <IconRow icon={Tag}>
-                  <Row label="Origen">{lead.source}</Row>
+                  <Row label="Origen">{effectiveLead.source}</Row>
                 </IconRow>
               </div>
 
@@ -560,30 +715,30 @@ export function LeadDetailPanel({ lead, onClose }: LeadDetailPanelProps) {
               <div className="grid grid-cols-2 gap-3 px-5 py-5">
                 <div className="flex flex-col gap-0.5">
                   <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">F. Noticia</span>
-                  <span className="text-xs text-foreground">{fmtDate(lead.fechaNoticia)}</span>
+                  <span className="text-xs text-foreground">{fmtDate(effectiveLead.fechaNoticia)}</span>
                 </div>
                 <div className="flex flex-col gap-0.5">
                   <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">F. Contacto</span>
-                  <span className="text-xs text-foreground">{fmtDate(lead.fechaContacto)}</span>
+                  <span className="text-xs text-foreground">{fmtDate(effectiveLead.fechaContacto)}</span>
                 </div>
                 <div className="flex flex-col gap-0.5">
                   <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">F. Valoración</span>
-                  <span className="text-xs text-foreground">{fmtDate(lead.fechaValoracion)}</span>
+                  <span className="text-xs text-foreground">{fmtDate(effectiveLead.fechaValoracion)}</span>
                 </div>
                 <div className="flex flex-col gap-0.5">
                   <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Hora visita</span>
-                  <span className="text-xs text-foreground">{lead.hora || "—"}</span>
+                  <span className="text-xs text-foreground">{effectiveLead.hora || "—"}</span>
                 </div>
               </div>
 
               {/* Notas */}
-              {lead.notes && (
+              {effectiveLead.notes && (
                 <div className="flex flex-col gap-1.5 px-5 py-5">
                   <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                     Notas
                   </span>
                   <p className="rounded-md border border-border bg-muted/40 px-3 py-2.5 text-sm text-foreground leading-relaxed">
-                    {lead.notes}
+                    {effectiveLead.notes}
                   </p>
                 </div>
               )}
@@ -628,24 +783,55 @@ export function LeadDetailPanel({ lead, onClose }: LeadDetailPanelProps) {
                 </div>
 
                 {/* Timeline */}
-                {allObs.length > 0 ? (
+                {allHistory.length > 0 ? (
                   <div className="flex flex-col gap-0 relative">
                     {/* Vertical line */}
                     <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border" aria-hidden="true" />
-                    {allObs.map((obs) => (
-                      <div key={obs.id} className="relative flex gap-3 pb-4 last:pb-0">
+                    {allHistory.map((ev) => (
+                      <div key={ev.id} className="relative flex gap-3 pb-4 last:pb-0">
                         {/* Dot */}
-                        <div className="relative z-10 mt-1 h-3.5 w-3.5 shrink-0 rounded-full border-2 border-primary/30 bg-card" />
+                        <div
+                          className={cn(
+                            "relative z-10 mt-1 h-3.5 w-3.5 shrink-0 rounded-full border-2 bg-card",
+                            ev.type === "field_change"
+                              ? "border-muted-foreground/30"
+                              : "border-primary/30"
+                          )}
+                        />
                         <div className="flex flex-col gap-1 flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
                             <Clock className="h-3 w-3 shrink-0 text-muted-foreground" />
                             <time className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">
-                              {fmtShort(obs.date)}
+                              {fmtShort(ev.createdAt)}
                             </time>
                           </div>
-                          <p className="text-sm text-foreground leading-relaxed rounded-md border border-border bg-muted/30 px-3 py-2">
-                            {obs.text}
-                          </p>
+                          {ev.type === "note" ? (
+                            <p className="text-sm text-foreground leading-relaxed rounded-md border border-border bg-muted/30 px-3 py-2">
+                              {ev.noteText}
+                            </p>
+                          ) : (
+                            <p className="text-sm text-foreground leading-relaxed rounded-md border border-border bg-background px-3 py-2">
+                              <span className="font-medium">{ev.createdBy}</span>{" "}
+                              cambió{" "}
+                              <span className="font-medium">
+                                {fieldDisplayName(ev.field as keyof Lead)}
+                              </span>{" "}
+                              de{" "}
+                              <span className="font-medium">
+                                {formatFieldValue(
+                                  ev.field as keyof Lead,
+                                  ev.prevValue ?? ""
+                                )}
+                              </span>{" "}
+                              a{" "}
+                              <span className="font-medium">
+                                {formatFieldValue(
+                                  ev.field as keyof Lead,
+                                  ev.newValue ?? ""
+                                )}
+                              </span>
+                            </p>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -673,8 +859,16 @@ export function LeadDetailPanel({ lead, onClose }: LeadDetailPanelProps) {
         )}
       </aside>
 
-      {lead && (
-        <EditLeadModal lead={lead} open={editOpen} onOpenChange={setEditOpen} />
+      {effectiveLead && (
+        <EditLeadModal
+          lead={effectiveLead}
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          onSave={(next) => {
+            appendFieldChangeEvents(effectiveLead, next);
+            setOverridesByLead((prev) => ({ ...prev, [next.id]: { ...next } }));
+          }}
+        />
       )}
     </>
   );

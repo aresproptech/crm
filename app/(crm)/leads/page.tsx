@@ -77,6 +77,7 @@ function getValue(lead: Lead, key: SortKey): string | number {
 }
 
 const STATUS_CONFIG = {
+  identificar: { label: "Identificar", dot: "bg-violet-500" },
   seguimiento: { label: "Seguimiento", dot: "bg-blue-500" },
   caliente: { label: "Caliente", dot: "bg-orange-500" },
   desestimada: { label: "Desestimada", dot: "bg-muted-foreground" },

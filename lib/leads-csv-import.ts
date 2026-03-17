@@ -27,9 +27,9 @@ export type ImportTargetField =
 
 export const IMPORT_TARGET_FIELDS: { key: ImportTargetField; label: string; required?: boolean }[] =
   [
-    { key: "ownerName", label: "Propietario", required: true },
-    { key: "phone", label: "Teléfono", required: true },
-    { key: "address", label: "Domicilio", required: true },
+    { key: "ownerName", label: "Propietario" },
+    { key: "phone", label: "Teléfono" },
+    { key: "address", label: "Domicilio" },
     { key: "distrito", label: "Distrito" },
     { key: "cp", label: "CP" },
     { key: "valor", label: "Valor" },
@@ -54,6 +54,18 @@ function norm(s: string) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
+// Default mapping for common exports (e.g. Kommo).
+// Note: we intentionally do NOT auto-assign estado, owner, fechaContacto, fechaValoracion, hora, planner.
+export const DEFAULT_MAPPING: Partial<Record<ImportTargetField, string>> = {
+  ownerName: "Nombre completo",
+  address: "Domicilio",
+  cp: "Código Postal",
+  valor: "Presupuesto €",
+  source: "Origen",
+  phase: "Embudo de ventas",
+  fechaNoticia: "Fecha de Creación",
+};
+
 const KOMMO_SUGGESTIONS: Array<{ csv: string; target: ImportTargetField }> = [
   { csv: "Nombre completo", target: "ownerName" },
   { csv: "Teléfono celular", target: "phone" },
@@ -72,7 +84,37 @@ export function suggestMapping(headers: string[]): ColumnMapping {
   const mapping: ColumnMapping = {};
   const headerNorm = new Map(headers.map((h) => [norm(h), h]));
 
+  // 1) Apply DEFAULT_MAPPING when the CSV contains those columns.
+  for (const [target, desiredHeader] of Object.entries(DEFAULT_MAPPING) as Array<
+    [ImportTargetField, string]
+  >) {
+    const match = headerNorm.get(norm(desiredHeader));
+    if (match) mapping[target] = match;
+  }
+
+  // Phone fallback: oficina -> celular -> teléfono
+  const phoneCandidates = ["Teléfono oficina", "Teléfono celular", "Teléfono"];
+  for (const candidate of phoneCandidates) {
+    const match = headerNorm.get(norm(candidate));
+    if (match) {
+      mapping.phone = match;
+      break;
+    }
+  }
+
   for (const s of KOMMO_SUGGESTIONS) {
+    // Do not override defaults / intentional non-auto fields.
+    if (mapping[s.target]) continue;
+    if (
+      s.target === "status" ||
+      s.target === "owner" ||
+      s.target === "fechaContacto" ||
+      s.target === "fechaValoracion" ||
+      s.target === "hora" ||
+      s.target === "planner"
+    ) {
+      continue;
+    }
     const match = headerNorm.get(norm(s.csv));
     if (match) mapping[s.target] = match;
   }
@@ -98,6 +140,16 @@ export function suggestMapping(headers: string[]): ColumnMapping {
     const n = norm(h);
     for (const { re, target } of heuristics) {
       if (mapping[target]) continue;
+      if (
+        target === "status" ||
+        target === "owner" ||
+        target === "fechaContacto" ||
+        target === "fechaValoracion" ||
+        target === "hora" ||
+        target === "planner"
+      ) {
+        continue;
+      }
       if (re.test(n)) mapping[target] = h;
     }
   }
@@ -116,6 +168,15 @@ function normalizePhase(value: string): LeadPhase {
 
 function normalizeStatus(value: string): LeadStatus {
   const v = norm(value);
+  if (
+    v === "identificar" ||
+    v === "identificada" ||
+    v === "identificado" ||
+    v === "identificacion" ||
+    v === "identificación"
+  ) {
+    return "identificar";
+  }
   const direct = STATUS_OPTIONS.find((o) => norm(o.value) === v)?.value;
   if (direct) return direct as LeadStatus;
   const byLabel = STATUS_OPTIONS.find((o) => norm(o.label) === v)?.value;
@@ -137,13 +198,13 @@ export type RowValidationResult = {
 export function validateMappedRow(
   mapped: Partial<Record<ImportTargetField, string>>
 ): RowValidationResult {
+  const hasName = Boolean(mapped.ownerName && mapped.ownerName.trim());
+  const hasPhone = Boolean(mapped.phone && mapped.phone.trim());
+  const valid = hasName || hasPhone;
   const missing: ImportTargetField[] = [];
-  for (const f of IMPORT_TARGET_FIELDS) {
-    if (!f.required) continue;
-    const v = mapped[f.key];
-    if (!v || !v.trim()) missing.push(f.key);
-  }
-  return { valid: missing.length === 0, missingRequired: missing };
+  if (!hasName) missing.push("ownerName");
+  if (!hasPhone) missing.push("phone");
+  return { valid, missingRequired: valid ? [] : missing };
 }
 
 export function mapCsvRowToTargets(
@@ -163,7 +224,8 @@ export function buildLeadFromMapped(
   mapped: Partial<Record<ImportTargetField, string>>
 ): Lead {
   const now = new Date().toISOString().slice(0, 10);
-  const owner = mapped.owner?.trim() || "-";
+  const currentUser = "Ana Martínez";
+  const owner = mapped.owner?.trim() || currentUser;
 
   const address = mapped.address?.trim() || "";
   const distrito = mapped.distrito?.trim() || "";
@@ -174,7 +236,13 @@ export function buildLeadFromMapped(
   const fechaValoracion = mapped.fechaValoracion?.trim() || "";
 
   const phase = mapped.phase ? normalizePhase(mapped.phase) : "noticia";
-  const status = mapped.status ? normalizeStatus(mapped.status) : "seguimiento";
+  // If address is missing, force status to "Identificar" even if Estado isn't mapped.
+  const status =
+    !address
+      ? "identificar"
+      : mapped.status
+        ? normalizeStatus(mapped.status)
+        : "seguimiento";
   const source = mapped.source ? normalizeSource(mapped.source) : "Otro";
 
   return {

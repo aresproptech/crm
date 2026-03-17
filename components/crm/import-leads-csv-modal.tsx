@@ -151,9 +151,8 @@ export function ImportLeadsCsvModal({
   }
 
   function canGoPreview() {
-    // Require at least the required targets to be mapped to some column.
-    const required = IMPORT_TARGET_FIELDS.filter((f) => f.required).map((f) => f.key);
-    return required.every((k) => Boolean(mapping[k]));
+    // Do not block preview due to incomplete mappings.
+    return true;
   }
 
   function doImport() {
@@ -277,11 +276,9 @@ export function ImportLeadsCsvModal({
                   </div>
                 ))}
               </div>
-              {!canGoPreview() && (
-                <div className="mt-3 text-[11px] text-muted-foreground">
-                  Asigna al menos los campos requeridos: Propietario, Teléfono y Domicilio.
-                </div>
-              )}
+              <div className="mt-3 text-[11px] text-muted-foreground">
+                Puedes dejar campos sin asignar. La validez de cada fila se calculará en la previsualización.
+              </div>
             </div>
           </div>
         )}

@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
-import { Phone, Radio, Flame, XCircle } from "lucide-react";
+import { Phone, Radio, Flame, XCircle, BadgeHelp } from "lucide-react";
 
-export type LeadStatus = "seguimiento" | "caliente" | "desestimada";
+export type LeadStatus = "identificar" | "seguimiento" | "caliente" | "desestimada";
 
 export interface Lead {
   id: string;
@@ -16,6 +16,11 @@ const statusConfig: Record<
   LeadStatus,
   { label: string; icon: React.ElementType; className: string }
 > = {
+  identificar: {
+    label: "Identificar",
+    icon: BadgeHelp,
+    className: "bg-violet-50 text-violet-600 border border-violet-100",
+  },
   seguimiento: {
     label: "Seguimiento",
     icon: Radio,
