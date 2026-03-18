@@ -1,25 +1,23 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { cn } from "@/lib/utils";
 import { Topbar } from "@/components/crm/topbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from "@/components/ui/chart";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
   Line,
   LineChart,
-  ResponsiveContainer,
+  Pie,
+  PieChart,
+  Cell,
+  CartesianGrid,
   XAxis,
   YAxis,
+  ResponsiveContainer,
+  Tooltip,
+  Legend,
 } from "recharts";
-import { type LeadPhase, type Lead, PHASE_LABELS, MOCK_LEADS } from "@/lib/crm-data";
+import { type Lead, PHASE_LABELS, MOCK_LEADS } from "@/lib/crm-data";
 
 type PeriodOption = "last7" | "currentMonth" | "custom";
 
@@ -27,6 +25,36 @@ type DateRange = {
   start: Date;
   end: Date;
 };
+
+type FunnelItem = {
+  phase: "noticia" | "concertada" | "valorada" | "cualificada" | "encargo";
+  label: string;
+  value: number;
+};
+
+type SourceItem = {
+  name: string;
+  value: number;
+};
+
+const PHASE_ORDER: FunnelItem["phase"][] = [
+  "noticia",
+  "concertada",
+  "valorada",
+  "cualificada",
+  "encargo",
+];
+
+const SOURCE_COLORS = [
+  "#d8c7ef",
+  "#facc15",
+  "#2563eb",
+  "#a21caf",
+  "#dc2626",
+  "#14b8a6",
+  "#84cc16",
+  "#f97316",
+];
 
 function startOfDay(date: Date): Date {
   const d = new Date(date);
@@ -49,7 +77,7 @@ function createLast7DaysRange(today = new Date()): DateRange {
 
 function createCurrentMonthRange(today = new Date()): DateRange {
   const start = startOfDay(new Date(today.getFullYear(), today.getMonth(), 1));
-  const end = endOfDay(new Date(today.getFullYear(), today.getMonth() + 1, 0));
+  const end = endOfDay(today);
   return { start, end };
 }
 
@@ -60,24 +88,16 @@ function createCustomRange(
 ): DateRange {
   const fromDate = from ? new Date(from) : null;
   const toDate = to ? new Date(to) : null;
+
   if (!fromDate || isNaN(fromDate.getTime()) || !toDate || isNaN(toDate.getTime())) {
     return fallback;
   }
+
   if (fromDate > toDate) {
     return fallback;
   }
-  return { start: startOfDay(fromDate), end: endOfDay(toDate) };
-}
 
-function getPreviousRange(range: DateRange): DateRange {
-  const oneDay = 24 * 60 * 60 * 1000;
-  const lengthDays =
-    Math.max(1, Math.round((range.end.getTime() - range.start.getTime()) / oneDay) + 1);
-  const prevEnd = endOfDay(new Date(range.start.getTime() - oneDay));
-  const prevStart = startOfDay(
-    new Date(prevEnd.getTime() - (lengthDays - 1) * oneDay)
-  );
-  return { start: prevStart, end: prevEnd };
+  return { start: startOfDay(fromDate), end: endOfDay(toDate) };
 }
 
 function isWithinRange(date: Date, range: DateRange): boolean {
@@ -85,137 +105,237 @@ function isWithinRange(date: Date, range: DateRange): boolean {
   return time >= range.start.getTime() && time <= range.end.getTime();
 }
 
-function buildCreatedSeries(leads: Lead[]) {
-  const map = new Map<string, number>();
-  for (const lead of leads) {
-    const month = (lead.createdAt || "").slice(0, 7);
-    if (!month) continue;
-    map.set(month, (map.get(month) ?? 0) + 1);
-  }
-  return [...map.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([month, value]) => ({ month, value }));
+function formatDayLabel(date: Date) {
+  return date.toLocaleDateString("es-ES", {
+    day: "numeric",
+    month: "short",
+  });
 }
 
-function formatDelta(current: number, previous: number) {
-  const diff = current - previous;
-  if (previous === 0 && current === 0) {
-    return { text: "Sin cambios", tone: "muted" as const };
+function getDatesInRange(range: DateRange) {
+  const dates: Date[] = [];
+  const cursor = startOfDay(range.start);
+
+  while (cursor <= range.end) {
+    dates.push(new Date(cursor));
+    cursor.setDate(cursor.getDate() + 1);
   }
-  if (previous === 0) {
-    return { text: `+${current}`, tone: "positive" as const };
-  }
-  if (diff === 0) {
-    return { text: "Sin cambios", tone: "muted" as const };
-  }
-  const pct = Math.round((diff / previous) * 100);
-  const sign = diff > 0 ? "+" : "";
-  return {
-    text: `${sign}${diff} (${sign}${pct}%)`,
-    tone: diff > 0 ? ("positive" as const) : ("negative" as const),
-  };
+
+  return dates;
+}
+
+function normalizeSource(source: string | undefined | null) {
+  return String(source || "Sin origen").trim() || "Sin origen";
+}
+
+function calcConversion(from: number, to: number) {
+  if (from === 0) return 0;
+  return Math.round((to / from) * 100);
+}
+
+function FunnelBar({
+  label,
+  value,
+  maxValue,
+  colorClass,
+}: {
+  label: string;
+  value: number;
+  maxValue: number;
+  colorClass: string;
+}) {
+  const width = maxValue > 0 ? Math.max(18, (value / maxValue) * 100) : 18;
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-xs">
+        <span className="font-medium text-foreground">{label}</span>
+        <span className="tabular-nums text-muted-foreground">{value}</span>
+      </div>
+      <div className="h-10 w-full rounded-xl bg-muted/50 px-2 py-1">
+        <div
+          className={cn(
+            "flex h-full items-center rounded-lg px-3 text-sm font-semibold text-white transition-all",
+            colorClass
+          )}
+          style={{ width: `${width}%` }}
+        >
+          {value}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function DashboardPage() {
   const [period, setPeriod] = useState<PeriodOption>("last7");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
-  const [comparePrevious, setComparePrevious] = useState(false);
 
   const currentRange = useMemo(() => {
     const today = new Date();
     const defaultRange = createLast7DaysRange(today);
+
     if (period === "last7") return defaultRange;
     if (period === "currentMonth") return createCurrentMonthRange(today);
     return createCustomRange(customFrom, customTo, defaultRange);
   }, [period, customFrom, customTo]);
 
-  const previousRange = useMemo(
-    () => (comparePrevious ? getPreviousRange(currentRange) : null),
-    [comparePrevious, currentRange]
-  );
-
-  const { currentLeads, previousLeads } = useMemo(() => {
+  const currentLeads = useMemo(() => {
     const current: Lead[] = [];
-    const previous: Lead[] = [];
+
     for (const lead of MOCK_LEADS) {
       const created = new Date(lead.createdAt);
       if (!isNaN(created.getTime()) && isWithinRange(created, currentRange)) {
         current.push(lead);
-      } else if (
-        previousRange &&
-        !isNaN(created.getTime()) &&
-        isWithinRange(created, previousRange)
-      ) {
-        previous.push(lead);
       }
     }
-    return { currentLeads: current, previousLeads: previous };
-  }, [currentRange, previousRange]);
 
-  const totalLeads = currentLeads.length;
+    return current;
+  }, [currentRange]);
 
-  const leadsByPhase = useMemo(() => {
-    const phases: LeadPhase[] = [
-      "noticia",
-      "concertada",
-      "valorada",
-      "cualificada",
-      "encargo",
-      "vender",
-    ];
-
-    return phases.map((phase) => ({
+  const funnelData = useMemo<FunnelItem[]>(() => {
+    return PHASE_ORDER.map((phase) => ({
       phase,
-      name: PHASE_LABELS[phase],
+      label: PHASE_LABELS[phase],
       value: currentLeads.filter((l) => l.phase === phase).length,
     }));
   }, [currentLeads]);
 
-  const leadsByStatus = useMemo(() => {
-    const base = { seguimiento: 0, caliente: 0, desestimada: 0 };
-    const currentCounts = currentLeads.reduce(
-      (acc, l) => {
-        acc[l.status] += 1;
-        return acc;
-      },
-      { ...base } as Record<keyof typeof base, number>
-    );
-    const previousCounts = previousLeads.reduce(
-      (acc, l) => {
-        acc[l.status] += 1;
-        return acc;
-      },
-      { ...base } as Record<keyof typeof base, number>
-    );
-    return { current: currentCounts, previous: previousCounts };
-  }, [currentLeads, previousLeads]);
-
-  const leadsCreatedSeries = useMemo(
-    () => buildCreatedSeries(currentLeads),
-    [currentLeads]
+  const maxFunnelValue = useMemo(
+    () => Math.max(...funnelData.map((item) => item.value), 0),
+    [funnelData]
   );
+
+  const conversionData = useMemo(() => {
+    const noticia = funnelData.find((x) => x.phase === "noticia")?.value ?? 0;
+    const concertada = funnelData.find((x) => x.phase === "concertada")?.value ?? 0;
+    const valorada = funnelData.find((x) => x.phase === "valorada")?.value ?? 0;
+    const cualificada =
+      funnelData.find((x) => x.phase === "cualificada")?.value ?? 0;
+    const encargo = funnelData.find((x) => x.phase === "encargo")?.value ?? 0;
+
+    return [
+      {
+        label: "Noticia → Concertada",
+        value: `${calcConversion(noticia, concertada)}%`,
+        detail: `${concertada} de ${noticia}`,
+      },
+      {
+        label: "Concertada → Valorada",
+        value: `${calcConversion(concertada, valorada)}%`,
+        detail: `${valorada} de ${concertada}`,
+      },
+      {
+        label: "Valorada → Cualificada",
+        value: `${calcConversion(valorada, cualificada)}%`,
+        detail: `${cualificada} de ${valorada}`,
+      },
+      {
+        label: "Cualificada → Encargo",
+        value: `${calcConversion(cualificada, encargo)}%`,
+        detail: `${encargo} de ${cualificada}`,
+      },
+      {
+        label: "Noticia → Encargo",
+        value: `${calcConversion(noticia, encargo)}%`,
+        detail: `Conversión total`,
+      },
+    ];
+  }, [funnelData]);
+
+  const dailySeries = useMemo(() => {
+    const dates = getDatesInRange(currentRange);
+
+    return dates.map((date) => {
+      const label = formatDayLabel(date);
+      const dayStart = startOfDay(date).getTime();
+      const dayEnd = endOfDay(date).getTime();
+
+      const dayLeads = currentLeads.filter((lead) => {
+        const created = new Date(lead.createdAt).getTime();
+        return created >= dayStart && created <= dayEnd;
+      });
+
+      return {
+        date: label,
+        ingresados: dayLeads.length,
+        desestimados: dayLeads.filter((l) => l.status === "desestimada").length,
+        identificar: dayLeads.filter((l) => l.status === "identificar").length,
+      };
+    });
+  }, [currentLeads, currentRange]);
+
+  const sourceSeries = useMemo<SourceItem[]>(() => {
+    const map = new Map<string, number>();
+
+    for (const lead of currentLeads) {
+      const source = normalizeSource(lead.source);
+      map.set(source, (map.get(source) ?? 0) + 1);
+    }
+
+    return [...map.entries()]
+      .sort(([, a], [, b]) => b - a)
+      .map(([name, value]) => ({ name, value }));
+  }, [currentLeads]);
+
+  const sourceTrendSeries = useMemo(() => {
+    const topSources = sourceSeries.slice(0, 5).map((s) => s.name);
+    const dates = getDatesInRange(currentRange);
+
+    const cumulative = new Map<string, number>();
+    topSources.forEach((source) => cumulative.set(source, 0));
+
+    return dates.map((date) => {
+      const label = formatDayLabel(date);
+      const dayStart = startOfDay(date).getTime();
+      const dayEnd = endOfDay(date).getTime();
+
+      const dayLeads = currentLeads.filter((lead) => {
+        const created = new Date(lead.createdAt).getTime();
+        return created >= dayStart && created <= dayEnd;
+      });
+
+      const row: Record<string, string | number> = { date: label };
+
+      for (const source of topSources) {
+        const dayCount = dayLeads.filter(
+          (lead) => normalizeSource(lead.source) === source
+        ).length;
+
+        const next = (cumulative.get(source) ?? 0) + dayCount;
+        cumulative.set(source, next);
+        row[source] = next;
+      }
+
+      return row;
+    });
+  }, [sourceSeries, currentLeads, currentRange]);
+
+  const sourceCards = sourceSeries.slice(0, 5);
 
   return (
     <>
       <Topbar title="Dashboard" />
 
-      <main className="flex flex-col flex-1 overflow-hidden mt-14 min-h-0">
-        {/* Header with date range selector */}
-        <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border bg-card px-6 py-2.5">
-          <span className="text-xs text-muted-foreground">
-            Resumen de actividad de leads
-          </span>
-          <div className="flex flex-col items-end gap-1.5">
-            <div className="inline-flex items-center gap-1 rounded-full border border-border bg-background p-0.5 text-[11px]">
+      <main className="mt-14 flex min-h-0 flex-1 flex-col overflow-hidden bg-[#0b71a9]">
+        <div className="flex shrink-0 items-center justify-between gap-4 px-6 py-4">
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight text-white">
+              Leads por Origen
+            </h1>
+          </div>
+
+          <div className="flex flex-col items-end gap-2">
+            <div className="inline-flex items-center gap-1 rounded-xl bg-white p-1 text-[11px] shadow-sm">
               <button
                 type="button"
                 onClick={() => setPeriod("last7")}
                 className={cn(
-                  "px-3 py-1 rounded-full font-semibold transition-colors",
+                  "rounded-lg px-3 py-1.5 font-semibold transition-colors",
                   period === "last7"
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-[#0b71a9] text-white"
+                    : "text-slate-600 hover:text-slate-900"
                 )}
               >
                 Últimos 7 días
@@ -224,10 +344,10 @@ export default function DashboardPage() {
                 type="button"
                 onClick={() => setPeriod("currentMonth")}
                 className={cn(
-                  "px-3 py-1 rounded-full font-semibold transition-colors",
+                  "rounded-lg px-3 py-1.5 font-semibold transition-colors",
                   period === "currentMonth"
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-[#0b71a9] text-white"
+                    : "text-slate-600 hover:text-slate-900"
                 )}
               >
                 Mes actual
@@ -236,10 +356,10 @@ export default function DashboardPage() {
                 type="button"
                 onClick={() => setPeriod("custom")}
                 className={cn(
-                  "px-3 py-1 rounded-full font-semibold transition-colors",
+                  "rounded-lg px-3 py-1.5 font-semibold transition-colors",
                   period === "custom"
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-[#0b71a9] text-white"
+                    : "text-slate-600 hover:text-slate-900"
                 )}
               >
                 Rango personalizado
@@ -247,14 +367,14 @@ export default function DashboardPage() {
             </div>
 
             {period === "custom" && (
-              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+              <div className="flex items-center gap-2 text-[11px] text-white/90">
                 <label className="flex items-center gap-1.5">
                   <span>Desde</span>
                   <input
                     type="date"
                     value={customFrom}
                     onChange={(e) => setCustomFrom(e.target.value)}
-                    className="h-7 rounded-md border border-border bg-background px-2 text-[11px] text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                    className="h-8 rounded-md border border-white/20 bg-white px-2 text-slate-900 shadow-sm outline-none"
                   />
                 </label>
                 <label className="flex items-center gap-1.5">
@@ -263,223 +383,251 @@ export default function DashboardPage() {
                     type="date"
                     value={customTo}
                     onChange={(e) => setCustomTo(e.target.value)}
-                    className="h-7 rounded-md border border-border bg-background px-2 text-[11px] text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                    className="h-8 rounded-md border border-white/20 bg-white px-2 text-slate-900 shadow-sm outline-none"
                   />
                 </label>
               </div>
             )}
-
-            <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={comparePrevious}
-                onChange={(e) => setComparePrevious(e.target.checked)}
-                className="h-3.5 w-3.5 rounded border-border text-primary"
-              />
-              <span>Comparar con período anterior</span>
-            </label>
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5">
-
-          {/* KPI CARDS */}
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Leads totales</CardTitle>
+        <div className="flex-1 overflow-y-auto px-6 pb-8">
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.4fr_0.9fr]">
+            <Card className="border-white/10 bg-white/95 shadow-xl">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Embudo de fases</CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-semibold tabular-nums">
-                  {totalLeads}
-                </div>
-                <div className="mt-1 text-xs text-muted-foreground">
-                  Basado en datos actuales (mock)
-                </div>
-                {comparePrevious && (
+              <CardContent className="space-y-4">
+                <FunnelBar
+                  label="Noticia"
+                  value={funnelData[0]?.value ?? 0}
+                  maxValue={maxFunnelValue}
+                  colorClass="bg-[#cdb8ef]"
+                />
+                <FunnelBar
+                  label="Concertada"
+                  value={funnelData[1]?.value ?? 0}
+                  maxValue={maxFunnelValue}
+                  colorClass="bg-[#facc15]"
+                />
+                <FunnelBar
+                  label="Valorada"
+                  value={funnelData[2]?.value ?? 0}
+                  maxValue={maxFunnelValue}
+                  colorClass="bg-[#2563eb]"
+                />
+                <FunnelBar
+                  label="Cualificada"
+                  value={funnelData[3]?.value ?? 0}
+                  maxValue={maxFunnelValue}
+                  colorClass="bg-[#a21caf]"
+                />
+                <FunnelBar
+                  label="Encargo"
+                  value={funnelData[4]?.value ?? 0}
+                  maxValue={maxFunnelValue}
+                  colorClass="bg-[#dc2626]"
+                />
+              </CardContent>
+            </Card>
+
+            <Card className="border-white/10 bg-white/95 shadow-xl">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Conversión por fase</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {conversionData.map((item) => (
                   <div
-                    className={cn(
-                      "mt-1 text-[11px]",
-                      formatDelta(totalLeads, previousLeads.length).tone === "positive"
-                        ? "text-emerald-600"
-                        : formatDelta(totalLeads, previousLeads.length).tone ===
-                          "negative"
-                        ? "text-red-600"
-                        : "text-muted-foreground"
-                    )}
+                    key={item.label}
+                    className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
                   >
-                    vs período anterior:{" "}
-                    {formatDelta(totalLeads, previousLeads.length).text}
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-medium text-slate-700">
+                        {item.label}
+                      </span>
+                      <span className="text-lg font-semibold tabular-nums text-slate-900">
+                        {item.value}
+                      </span>
+                    </div>
+                    <div className="mt-1 text-xs text-slate-500">{item.detail}</div>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Estado</CardTitle>
-              </CardHeader>
-
-              <CardContent className="space-y-1.5 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Seguimiento</span>
-                  <span className="font-medium tabular-nums">
-                    {leadsByStatus.current.seguimiento}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Caliente</span>
-                  <span className="font-medium tabular-nums">
-                    {leadsByStatus.current.caliente}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Desestimada</span>
-                  <span className="font-medium tabular-nums">
-                    {leadsByStatus.current.desestimada}
-                  </span>
-                </div>
-                {comparePrevious && (
-                  <div className="pt-1 text-[11px] text-muted-foreground">
-                    Comparando distribución de estado con el período anterior.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Fase top</CardTitle>
-              </CardHeader>
-
-              <CardContent>
-                {(() => {
-                  const top = [...leadsByPhase].sort((a, b) => b.value - a.value)[0];
-
-                  return (
-                    <>
-                      <div className="text-2xl font-semibold">
-                        {top?.name ?? "—"}
-                      </div>
-
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {top ? `${top.value} leads` : "Sin datos"}
-                      </div>
-                    </>
-                  );
-                })()}
+                ))}
               </CardContent>
             </Card>
           </div>
 
-          {/* CHARTS */}
-          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[240px_1fr]">
+            <div className="space-y-4">
+              <div className="rounded-xl bg-white px-4 py-3 text-center shadow-lg">
+                <div className="text-sm text-slate-500">Leads ingresados</div>
+                <div className="text-4xl font-semibold text-slate-900">
+                  {currentLeads.length}
+                </div>
+              </div>
 
-            {/* Leads por fase */}
-            <Card>
+              <div className="rounded-xl bg-[#ef7b7b] px-4 py-3 text-center text-white shadow-lg">
+                <div className="text-sm text-white/90">Desestimados</div>
+                <div className="text-4xl font-semibold">
+                  {currentLeads.filter((l) => l.status === "desestimada").length}
+                </div>
+              </div>
+
+              <div className="rounded-xl bg-[#7ecf7a] px-4 py-3 text-center text-white shadow-lg">
+                <div className="text-sm text-white/90">Identificar</div>
+                <div className="text-4xl font-semibold">
+                  {currentLeads.filter((l) => l.status === "identificar").length}
+                </div>
+              </div>
+            </div>
+
+            <Card className="border-white/10 bg-[#e8edf1] shadow-xl">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Leads por fase</CardTitle>
-              </CardHeader>
-
-              <CardContent>
-                <ChartContainer
-                  className="h-[260px] w-full"
-                  config={{
-                    value: { label: "Leads", color: "hsl(var(--primary))" },
-                  }}
-                >
-                  <ResponsiveContainer>
-                    <BarChart data={leadsByPhase} margin={{ left: 8, right: 8 }}>
-                      <CartesianGrid vertical={false} />
-
-                      <XAxis
-                        dataKey="name"
-                        tickLine={false}
-                        axisLine={false}
-                        interval={0}
-                        tickMargin={8}
-                        fontSize={11}
-                      />
-
-                      <YAxis
-                        tickLine={false}
-                        axisLine={false}
-                        width={28}
-                        fontSize={11}
-                        allowDecimals={false}
-                      />
-
-                      <ChartTooltip
-                        cursor={false}
-                        content={<ChartTooltipContent hideLabel />}
-                      />
-
-                      <Bar
-                        dataKey="value"
-                        fill="var(--color-value)"
-                        radius={6}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </ChartContainer>
-              </CardContent>
-            </Card>
-
-            {/* Leads por mes */}
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">
-                  Leads creados (por mes)
+                <CardTitle className="text-base">
+                  Ingresados / Desestimados / Identificar
                 </CardTitle>
               </CardHeader>
-
               <CardContent>
-                <ChartContainer
-                  className="h-[260px] w-full"
-                  config={{
-                    value: { label: "Leads", color: "hsl(var(--primary))" },
-                  }}
-                >
-                  <ResponsiveContainer>
-                    <LineChart data={leadsCreatedSeries} margin={{ left: 8, right: 8 }}>
-                      <CartesianGrid vertical={false} />
-
+                <div className="h-[320px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={dailySeries} margin={{ top: 12, right: 16, left: 0, bottom: 0 }}>
+                      <CartesianGrid stroke="#cbd5e1" vertical={false} />
                       <XAxis
-                        dataKey="month"
+                        dataKey="date"
                         tickLine={false}
                         axisLine={false}
-                        tickMargin={8}
-                        fontSize={11}
+                        tick={{ fontSize: 11 }}
                       />
-
                       <YAxis
                         tickLine={false}
                         axisLine={false}
-                        width={28}
-                        fontSize={11}
                         allowDecimals={false}
+                        tick={{ fontSize: 11 }}
                       />
-
-                      <ChartTooltip
-                        cursor={false}
-                        content={<ChartTooltipContent hideLabel />}
-                      />
-
+                      <Tooltip />
+                      <Legend />
                       <Line
                         type="monotone"
-                        dataKey="value"
-                        stroke="var(--color-value)"
-                        strokeWidth={2}
-                        dot={false}
+                        dataKey="ingresados"
+                        stroke="#16a34a"
+                        strokeWidth={2.5}
+                        dot={{ r: 3 }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="desestimados"
+                        stroke="#dc2626"
+                        strokeWidth={2.5}
+                        dot={{ r: 3 }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="identificar"
+                        stroke="#d4a15f"
+                        strokeWidth={2.5}
+                        dot={{ r: 3 }}
                       />
                     </LineChart>
                   </ResponsiveContainer>
-                </ChartContainer>
+                </div>
               </CardContent>
             </Card>
+          </div>
 
+          <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[420px_1fr]">
+            <div className="grid grid-cols-2 gap-4">
+              {sourceCards.map((item, index) => (
+                <div
+                  key={item.name}
+                  className="rounded-xl px-4 py-4 text-center text-white shadow-lg"
+                  style={{
+                    backgroundColor: SOURCE_COLORS[index % SOURCE_COLORS.length],
+                  }}
+                >
+                  <div className="text-sm text-white/90">{item.name}</div>
+                  <div className="text-4xl font-semibold">{item.value}</div>
+                </div>
+              ))}
+            </div>
+
+            <Card className="border-white/10 bg-[#e8edf1] shadow-xl">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Distribución por origen</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[320px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={sourceSeries}
+                        dataKey="value"
+                        nameKey="name"
+                        outerRadius={110}
+                        innerRadius={55}
+                        paddingAngle={2}
+                        label={({ percent }) =>
+                          percent && percent > 0 ? `${(percent * 100).toFixed(1)}%` : ""
+                        }
+                      >
+                        {sourceSeries.map((entry, index) => (
+                          <Cell
+                            key={entry.name}
+                            fill={SOURCE_COLORS[index % SOURCE_COLORS.length]}
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="mt-5">
+            <Card className="border-white/10 bg-[#0b71a9] shadow-none">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base text-white">
+                  Evolución por origen
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[340px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart
+                      data={sourceTrendSeries}
+                      margin={{ top: 12, right: 16, left: 0, bottom: 0 }}
+                    >
+                      <CartesianGrid stroke="rgba(255,255,255,0.18)" vertical={false} />
+                      <XAxis
+                        dataKey="date"
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 11, fill: "#ffffff" }}
+                      />
+                      <YAxis
+                        tickLine={false}
+                        axisLine={false}
+                        allowDecimals={false}
+                        tick={{ fontSize: 11, fill: "#ffffff" }}
+                      />
+                      <Tooltip />
+                      <Legend wrapperStyle={{ color: "#fff" }} />
+                      {sourceCards.map((item, index) => (
+                        <Line
+                          key={item.name}
+                          type="monotone"
+                          dataKey={item.name}
+                          stroke={SOURCE_COLORS[index % SOURCE_COLORS.length]}
+                          strokeWidth={2.5}
+                          dot={{ r: 3 }}
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </main>
