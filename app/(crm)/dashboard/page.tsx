@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Topbar } from "@/components/crm/topbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/lib/supabase";
 import {
   Line,
   LineChart,
@@ -171,6 +172,27 @@ export default function DashboardPage() {
   const [period, setPeriod] = useState<PeriodOption>("last7");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
+  const [supabaseTest, setSupabaseTest] = useState("cargando...");
+
+  useEffect(() => {
+    async function testSupabase() {
+      const { data, error } = await supabase
+        .from("crm_leads_view")
+        .select("*")
+        .limit(3);
+
+      if (error) {
+        console.error("Supabase error:", error);
+        setSupabaseTest("error");
+        return;
+      }
+
+      console.log("Supabase crm_leads_view test:", data);
+      setSupabaseTest(`ok: ${data?.length ?? 0} filas`);
+    }
+
+    testSupabase();
+  }, []);
 
   const currentRange = useMemo(() => {
     const today = new Date();
@@ -239,7 +261,7 @@ export default function DashboardPage() {
       {
         label: "Noticia → Encargo",
         value: `${calcConversion(noticia, encargo)}%`,
-        detail: `Conversión total`,
+        detail: "Conversión total",
       },
     ];
   }, [funnelData]);
@@ -319,6 +341,10 @@ export default function DashboardPage() {
       <Topbar title="Dashboard" />
 
       <main className="mt-14 flex min-h-0 flex-1 flex-col overflow-hidden bg-[#0b71a9]">
+        <div className="px-6 py-2 text-sm text-white">
+          Supabase test: {supabaseTest}
+        </div>
+
         <div className="flex shrink-0 items-center justify-between gap-4 px-6 py-4">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight text-white">
@@ -489,7 +515,10 @@ export default function DashboardPage() {
               <CardContent>
                 <div className="h-[320px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={dailySeries} margin={{ top: 12, right: 16, left: 0, bottom: 0 }}>
+                    <LineChart
+                      data={dailySeries}
+                      margin={{ top: 12, right: 16, left: 0, bottom: 0 }}
+                    >
                       <CartesianGrid stroke="#cbd5e1" vertical={false} />
                       <XAxis
                         dataKey="date"
@@ -565,7 +594,9 @@ export default function DashboardPage() {
                         innerRadius={55}
                         paddingAngle={2}
                         label={({ percent }) =>
-                          percent && percent > 0 ? `${(percent * 100).toFixed(1)}%` : ""
+                          percent && percent > 0
+                            ? `${(percent * 100).toFixed(1)}%`
+                            : ""
                         }
                       >
                         {sourceSeries.map((entry, index) => (
@@ -598,7 +629,10 @@ export default function DashboardPage() {
                       data={sourceTrendSeries}
                       margin={{ top: 12, right: 16, left: 0, bottom: 0 }}
                     >
-                      <CartesianGrid stroke="rgba(255,255,255,0.18)" vertical={false} />
+                      <CartesianGrid
+                        stroke="rgba(255,255,255,0.18)"
+                        vertical={false}
+                      />
                       <XAxis
                         dataKey="date"
                         tickLine={false}
