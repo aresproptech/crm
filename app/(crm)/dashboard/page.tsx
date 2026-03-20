@@ -173,6 +173,7 @@ export default function DashboardPage() {
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [supabaseTest, setSupabaseTest] = useState("cargando...");
+  const [realLeadsPreview, setRealLeadsPreview] = useState<Record<string, any>[]>([]);
 
   useEffect(() => {
     async function testSupabase() {
@@ -180,18 +181,35 @@ export default function DashboardPage() {
         .from("crm_leads_view")
         .select("*")
         .limit(3);
-
+  
       if (error) {
         console.error("Supabase error:", error);
         setSupabaseTest("error");
         return;
       }
-
+  
       console.log("Supabase crm_leads_view test:", data);
       setSupabaseTest(`ok: ${data?.length ?? 0} filas`);
     }
-
+  
+    async function fetchRealLeadsPreview() {
+      const { data, error } = await supabase
+        .from("crm_leads_view")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(5);
+  
+      if (error) {
+        console.error("Supabase preview error:", error);
+        return;
+      }
+  
+      console.log("Supabase real leads preview:", data);
+      setRealLeadsPreview(data ?? []);
+    }
+  
     testSupabase();
+    fetchRealLeadsPreview();
   }, []);
 
   const currentRange = useMemo(() => {
@@ -418,7 +436,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 pb-8">
-          <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.4fr_0.9fr]">
+                <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.4fr_0.9fr]">
             <Card className="border-white/10 bg-white/95 shadow-xl">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Embudo de fases</CardTitle>
