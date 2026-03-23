@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Topbar } from "@/components/crm/topbar";
 import { NewLeadModal } from "@/components/crm/new-lead-modal";
 import { LeadDetailPanel } from "@/components/crm/lead-detail-panel";
@@ -16,11 +16,11 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/lib/supabase";
 import {
   type Lead,
   PHASE_LABELS,
   PHASE_COLORS,
-  MOCK_LEADS,
 } from "@/lib/crm-data";
 import {
   Dialog,
@@ -33,6 +33,33 @@ import {
 
 type SortKey = keyof Lead;
 type SortDir = "asc" | "desc";
+
+type CrmLeadRow = {
+  id: number;
+  created_at: string | null;
+  fecha: string | null;
+  propietario: string | null;
+  telefono: string | null;
+  domicilio: string | null;
+  tasacion: string | null;
+  estado: string | null;
+  memo: string | null;
+  en_venta: string | null;
+  fase_id: number | null;
+  fase_name: string | null;
+  source_id: number | null;
+  source_name: string | null;
+  comercial_user_id: number | null;
+  comercial_name: string | null;
+  contact_user_id: number | null;
+  contact_name: string | null;
+  postal_id: number | null;
+  cp: number | null;
+  provincia: string | null;
+  distrito: string | null;
+  team_id: number | null;
+  dominio_desc: string | null;
+};
 
 function SortIcon({
   col,
@@ -85,24 +112,105 @@ const STATUS_CONFIG = {
 
 function fmt(d: string) {
   if (!d) return "—";
-  return new Date(d).toLocaleDateString("es-ES", {
+  const parsed = new Date(d);
+  if (isNaN(parsed.getTime())) return d;
+  return parsed.toLocaleDateString("es-ES", {
     day: "2-digit",
     month: "2-digit",
     year: "2-digit",
   });
 }
 
+function normalizePhase(raw: string | null | undefined): Lead["phase"] {
+  const value = (raw || "").toLowerCase().trim();
+
+  if (value === "noticia") return "noticia";
+  if (value === "concertada") return "concertada";
+  if (value === "valorada") return "valorada";
+  if (value === "cualificada") return "cualificada";
+  if (value === "encargo") return "encargo";
+  if (value === "vendida" || value === "vender") return "vender";
+
+  return "noticia";
+}
+
+function normalizeStatus(raw: string | null | undefined): Lead["status"] {
+  const value = (raw || "").toLowerCase().trim();
+
+  if (value === "identificar" || value === "identificada") return "identificar";
+  if (value === "seguimiento") return "seguimiento";
+  if (value === "caliente") return "caliente";
+  if (value === "desestimada") return "desestimada";
+
+  return "seguimiento";
+}
+
+function normalizeValor(raw: string | null | undefined) {
+  if (!raw) return "—";
+  return raw;
+}
+
+function mapCrmLeadToLead(row: CrmLeadRow): Lead {
+  const ownerLabel =
+    row.comercial_name?.trim() ||
+    row.contact_name?.trim() ||
+    "Sin asignar";
+
+  return {
+    id: String(row.id),
+    ownerName: row.propietario?.trim() || "—",
+    address: row.domicilio?.trim() || "—",
+    distrito: row.distrito?.trim() || row.provincia?.trim() || "—",
+    cp: row.cp ? String(row.cp) : "—",
+    valor: normalizeValor(row.tasacion),
+    phone: row.telefono?.trim() || "—",
+    source: row.source_name?.trim() || "Sin origen",
+    phase: normalizePhase(row.fase_name),
+    status: normalizeStatus(row.estado),
+    fechaNoticia: row.fecha || row.created_at || "",
+    fechaContacto: "",
+    fechaValoracion: "",
+    hora: "",
+    planner: row.dominio_desc?.trim() || "—",
+    owner: ownerLabel,
+  };
+}
+
 export default function LeadsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
-  const [leads, setLeads] = useState<Lead[]>(MOCK_LEADS);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [loadingLeads, setLoadingLeads] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [searchTerm, setSearchTerm] = useState("");
+
+  useEffect(() => {
+    async function fetchLeads() {
+      setLoadingLeads(true);
+
+      const { data, error } = await supabase
+        .from("crm_leads_view")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Supabase leads error:", error);
+        setLoadingLeads(false);
+        return;
+      }
+
+      const mapped = (data ?? []).map((row) => mapCrmLeadToLead(row as CrmLeadRow));
+      setLeads(mapped);
+      setLoadingLeads(false);
+    }
+
+    fetchLeads();
+  }, []);
 
   function handleSort(key: SortKey) {
     if (sortKey === key) {
@@ -274,6 +382,12 @@ export default function LeadsPage() {
               <Trash2 className="h-3.5 w-3.5" />
               Eliminar seleccionados
             </Button>
+          </div>
+        )}
+
+        {loadingLeads && (
+          <div className="shrink-0 border-b border-border bg-muted/40 px-6 py-2 text-xs text-muted-foreground">
+            Cargando leads desde Supabase...
           </div>
         )}
 
