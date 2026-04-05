@@ -4,7 +4,14 @@ import { useMemo, useState } from "react";
 import { Topbar } from "@/components/crm/topbar";
 import { UserCog, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Empty } from "@/components/ui/empty";
+import {
+  Empty,
+  EmptyContent,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+  EmptyDescription,
+} from "@/components/ui/empty";
 import {
   InviteUserModal,
   type UserRole,
@@ -25,7 +32,7 @@ type CrmUser = {
 function initials(nombre: string, apellido: string) {
   const a = (nombre.trim()[0] ?? "").toUpperCase();
   const b = (apellido.trim()[0] ?? "").toUpperCase();
-  return (a + b) || "U";
+  return a + b || "U";
 }
 
 const STATUS_BADGE: Record<UserStatus, { className: string }> = {
@@ -77,11 +84,20 @@ export default function UsuariosPage() {
 
         {users.length <= 1 ? (
           <div className="flex flex-1 items-center justify-center">
-            <Empty
-              icon={<UserCog className="h-8 w-8 text-muted-foreground/40" />}
-              title="Sin usuarios adicionales"
-              description="Invita a los agentes de tu equipo para colaborar en el pipeline."
-            />
+            <Empty>
+              <EmptyContent>
+                <EmptyHeader>
+                  <EmptyMedia>
+                    <UserCog className="h-8 w-8 text-muted-foreground/40" />
+                  </EmptyMedia>
+                  <EmptyTitle>Sin usuarios adicionales</EmptyTitle>
+                  <EmptyDescription>
+                    Invita a los agentes de tu equipo para colaborar en el
+                    pipeline.
+                  </EmptyDescription>
+                </EmptyHeader>
+              </EmptyContent>
+            </Empty>
           </div>
         ) : (
           <div className="flex-1 overflow-auto">

@@ -266,7 +266,7 @@ export function buildLeadFromMapped(
     createdAt: fechaNoticia || now,
     assignedUser: owner,
     propertyAddress: address,
-    notes: mapped.notes?.trim() || "",
+    notes: "",
     observaciones: [],
   };
 }

@@ -444,11 +444,28 @@ export default function LeadsPage() {
 
     if (!targetPhase || activeLead.phase === targetPhase) return;
 
+    // Actualizamos UI inmediatamente (optimistic update)
     setLeads((prev) =>
       prev.map((lead) =>
         lead.id === activeLeadId ? { ...lead, phase: targetPhase! } : lead
       )
     );
+
+    // Persistimos en Supabase
+    const { error } = await supabase
+      .from("opportunities")
+      .update({ fase_id: PHASE_ID_MAP[targetPhase] })
+      .eq("id", Number(activeLeadId));
+
+    if (error) {
+      console.error("Error actualizando fase en Supabase:", error);
+      // Revertimos el cambio en UI si falla
+      setLeads((prev) =>
+        prev.map((lead) =>
+          lead.id === activeLeadId ? { ...lead, phase: activeLead.phase } : lead
+        )
+      );
+    }
   }
 
   async function loadLeadsFromSupabase() {
@@ -543,10 +560,7 @@ export default function LeadsPage() {
   }
 
   async function handleSaveLead(next: Lead) {
-    console.log("handleSaveLead fired", next);
-    alert(`handleSaveLead fired: ${next.phase}`);
-  
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from("opportunities")
       .update({
         propietario: next.ownerName || null,
@@ -560,18 +574,13 @@ export default function LeadsPage() {
         memo: next.notes || null,
         fase_id: PHASE_ID_MAP[next.phase] ?? 1,
       })
-      .eq("id", Number(next.id))
-      .select();
-  
+      .eq("id", Number(next.id));
+
     if (error) {
-      console.error("Error updating lead in Supabase:", error);
-      alert(`Error updating lead: ${error.message}`);
+      console.error("Error actualizando lead:", error);
       return;
     }
-  
-    console.log("Lead updated in Supabase", data);
-    alert("Lead updated in Supabase");
-  
+
     await loadLeadsFromSupabase();
     setSelectedLead((prev) =>
       prev && prev.id === next.id ? { ...prev, ...next } : prev

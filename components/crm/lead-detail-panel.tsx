@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
+import { supabase, type LeadObservation } from "@/lib/supabase";
 import {
   X,
   Phone,
   MapPin,
-  Calendar,
   User,
   Tag,
   Circle,
@@ -13,7 +13,6 @@ import {
   MessageSquare,
   Send,
   Clock,
-  Hash,
   Euro,
   LocateFixed,
   Loader2,
@@ -51,18 +50,37 @@ import {
 } from "@/lib/crm-data";
 
 const STATUS_CONFIG = {
-  identificar: { label: "Identificar", className: "bg-violet-50 text-violet-700 border-violet-200" },
-  seguimiento: { label: "Seguimiento", className: "bg-blue-50 text-blue-700 border-blue-200" },
-  caliente: { label: "Caliente", className: "bg-orange-50 text-orange-700 border-orange-200" },
-  desestimada: { label: "Desestimada", className: "bg-muted text-muted-foreground border-border" },
+  identificar: {
+    label: "Identificar",
+    className: "bg-violet-50 text-violet-700 border-violet-200",
+  },
+  seguimiento: {
+    label: "Seguimiento",
+    className: "bg-blue-50 text-blue-700 border-blue-200",
+  },
+  caliente: {
+    label: "Caliente",
+    className: "bg-orange-50 text-orange-700 border-orange-200",
+  },
+  desestimada: {
+    label: "Desestimada",
+    className: "bg-muted text-muted-foreground border-border",
+  },
 } as const;
 
 interface LeadDetailPanelProps {
   lead: Lead | null;
   onClose: () => void;
+  onSaveLead: (next: Lead) => Promise<void>;
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function Row({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="flex flex-col gap-0.5">
       <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -73,7 +91,13 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-function IconRow({ icon: Icon, children }: { icon: React.ElementType; children: React.ReactNode }) {
+function IconRow({
+  icon: Icon,
+  children,
+}: {
+  icon: React.ElementType;
+  children: React.ReactNode;
+}) {
   return (
     <div className="flex items-start gap-2.5">
       <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -113,7 +137,7 @@ type LeadHistoryEvent = {
   field?: keyof Lead;
   prevValue?: string;
   newValue?: string;
-  createdAt: string; // ISO
+  createdAt: string;
   createdBy: string;
   noteText?: string;
 };
@@ -160,11 +184,10 @@ function formatFieldValue(field: keyof Lead, value: string) {
   if (!value) return "—";
   if (field === "status") return statusLabel(value);
   if (field === "phase") return phaseLabel(value);
-  if (field === "fechaNoticia" || field === "fechaValoracion") return fmtShort(value);
+  if (field === "fechaNoticia" || field === "fechaValoracion")
+    return fmtShort(value);
   return value;
 }
-
-// ─── CP lookup via API ────────────────────────────────────────────────────────
 
 interface PostalCodeResult {
   cp: string;
@@ -183,19 +206,23 @@ async function fetchPostalCode(cp: string): Promise<PostalCodeResult | null> {
   }
 }
 
-// ─── Edit Modal ──────────────────────────────────────────────────────────────
-
 interface EditLeadModalProps {
   lead: Lead;
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  onSave: (next: Lead) => void;
+  onSave: (next: Lead) => Promise<void>;
 }
 
-function EditLeadModal({ lead, open, onOpenChange, onSave }: EditLeadModalProps) {
+function EditLeadModal({
+  lead,
+  open,
+  onOpenChange,
+  onSave,
+}: EditLeadModalProps) {
   const [form, setForm] = useState({ ...lead });
   const [cpLoading, setCpLoading] = useState(false);
   const [cpAutoFilled, setCpAutoFilled] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setForm({ ...lead });
@@ -229,26 +256,31 @@ function EditLeadModal({ lead, open, onOpenChange, onSave }: EditLeadModalProps)
 
   function handleDistritoChange(value: string) {
     set("distrito", value);
-    // Keep cpAutoFilled true — user can still edit distrito freely
   }
 
-  function handleSave() {
-    onSave(form);
-    onOpenChange(false);
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await onSave(form);
+      onOpenChange(false);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-base font-semibold">Editar lead</DialogTitle>
+          <DialogTitle className="text-base font-semibold">
+            Editar lead
+          </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            Actualiza la información del lead. Los cambios se guardarán automáticamente.
+            Actualiza la información del lead.
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid grid-cols-2 gap-x-4 gap-y-4 py-2">
-          {/* Propietario */}
           <div className="col-span-2 flex flex-col gap-1.5">
             <Label className="text-xs font-medium">Propietario</Label>
             <Input
@@ -258,7 +290,6 @@ function EditLeadModal({ lead, open, onOpenChange, onSave }: EditLeadModalProps)
             />
           </div>
 
-          {/* Domicilio */}
           <div className="col-span-2 flex flex-col gap-1.5">
             <Label className="text-xs font-medium">Domicilio</Label>
             <Input
@@ -268,7 +299,6 @@ function EditLeadModal({ lead, open, onOpenChange, onSave }: EditLeadModalProps)
             />
           </div>
 
-          {/* CP */}
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs font-medium">CP</Label>
             <div className="relative">
@@ -287,7 +317,6 @@ function EditLeadModal({ lead, open, onOpenChange, onSave }: EditLeadModalProps)
             </div>
           </div>
 
-          {/* Municipio */}
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs font-medium flex items-center gap-1.5">
               Municipio
@@ -301,12 +330,13 @@ function EditLeadModal({ lead, open, onOpenChange, onSave }: EditLeadModalProps)
             <Input
               value={form.municipio}
               onChange={(e) => set("municipio", e.target.value)}
-              className={cn("h-8 text-sm", cpAutoFilled && "border-primary/40 bg-primary/5")}
-              placeholder="Ej. Madrid"
+              className={cn(
+                "h-8 text-sm",
+                cpAutoFilled && "border-primary/40 bg-primary/5"
+              )}
             />
           </div>
 
-          {/* Distrito */}
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs font-medium flex items-center gap-1.5">
               Distrito
@@ -320,12 +350,13 @@ function EditLeadModal({ lead, open, onOpenChange, onSave }: EditLeadModalProps)
             <Input
               value={form.distrito}
               onChange={(e) => handleDistritoChange(e.target.value)}
-              className={cn("h-8 text-sm", cpAutoFilled && "border-primary/40 bg-primary/5")}
-              placeholder="Ej. Salamanca"
+              className={cn(
+                "h-8 text-sm",
+                cpAutoFilled && "border-primary/40 bg-primary/5"
+              )}
             />
           </div>
 
-          {/* Provincia */}
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs font-medium flex items-center gap-1.5">
               Provincia
@@ -339,23 +370,22 @@ function EditLeadModal({ lead, open, onOpenChange, onSave }: EditLeadModalProps)
             <Input
               value={form.provincia}
               onChange={(e) => set("provincia", e.target.value)}
-              className={cn("h-8 text-sm", cpAutoFilled && "border-primary/40 bg-primary/5")}
-              placeholder="Ej. Madrid"
+              className={cn(
+                "h-8 text-sm",
+                cpAutoFilled && "border-primary/40 bg-primary/5"
+              )}
             />
           </div>
 
-          {/* Valor */}
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs font-medium">Valor estimado</Label>
             <Input
               value={form.valor}
               onChange={(e) => set("valor", e.target.value)}
               className="h-8 text-sm"
-              placeholder="ej. 350.000 €"
             />
           </div>
 
-          {/* Teléfono */}
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs font-medium">Teléfono</Label>
             <Input
@@ -365,7 +395,6 @@ function EditLeadModal({ lead, open, onOpenChange, onSave }: EditLeadModalProps)
             />
           </div>
 
-          {/* Fase */}
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs font-medium">Fase</Label>
             <Select value={form.phase} onValueChange={(v) => set("phase", v)}>
@@ -382,7 +411,6 @@ function EditLeadModal({ lead, open, onOpenChange, onSave }: EditLeadModalProps)
             </Select>
           </div>
 
-          {/* Estado */}
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs font-medium">Estado</Label>
             <Select value={form.status} onValueChange={(v) => set("status", v)}>
@@ -399,7 +427,6 @@ function EditLeadModal({ lead, open, onOpenChange, onSave }: EditLeadModalProps)
             </Select>
           </div>
 
-          {/* Origen */}
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs font-medium">Origen</Label>
             <Select value={form.source} onValueChange={(v) => set("source", v)}>
@@ -416,7 +443,6 @@ function EditLeadModal({ lead, open, onOpenChange, onSave }: EditLeadModalProps)
             </Select>
           </div>
 
-          {/* Owner */}
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs font-medium">Owner</Label>
             <Select value={form.owner} onValueChange={(v) => set("owner", v)}>
@@ -433,7 +459,6 @@ function EditLeadModal({ lead, open, onOpenChange, onSave }: EditLeadModalProps)
             </Select>
           </div>
 
-          {/* Fecha Noticia */}
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs font-medium">Fecha noticia</Label>
             <Input
@@ -444,7 +469,6 @@ function EditLeadModal({ lead, open, onOpenChange, onSave }: EditLeadModalProps)
             />
           </div>
 
-          {/* Fecha Contacto */}
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs font-medium">Fecha contacto</Label>
             <Input
@@ -455,7 +479,6 @@ function EditLeadModal({ lead, open, onOpenChange, onSave }: EditLeadModalProps)
             />
           </div>
 
-          {/* Fecha Valoración */}
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs font-medium">Fecha valoración</Label>
             <Input
@@ -466,7 +489,6 @@ function EditLeadModal({ lead, open, onOpenChange, onSave }: EditLeadModalProps)
             />
           </div>
 
-          {/* Hora */}
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs font-medium">Hora visita</Label>
             <Input
@@ -477,7 +499,6 @@ function EditLeadModal({ lead, open, onOpenChange, onSave }: EditLeadModalProps)
             />
           </div>
 
-          {/* Planner */}
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs font-medium">Planner</Label>
             <Input
@@ -488,7 +509,6 @@ function EditLeadModal({ lead, open, onOpenChange, onSave }: EditLeadModalProps)
             />
           </div>
 
-          {/* Notas */}
           <div className="col-span-2 flex flex-col gap-1.5">
             <Label className="text-xs font-medium">Notas</Label>
             <Textarea
@@ -501,11 +521,16 @@ function EditLeadModal({ lead, open, onOpenChange, onSave }: EditLeadModalProps)
         </div>
 
         <DialogFooter>
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onOpenChange(false)}
+            disabled={saving}
+          >
             Cancelar
           </Button>
-          <Button size="sm" onClick={handleSave}>
-            Guardar cambios
+          <Button size="sm" onClick={handleSave} disabled={saving}>
+            {saving ? "Guardando..." : "Guardar cambios"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -513,20 +538,22 @@ function EditLeadModal({ lead, open, onOpenChange, onSave }: EditLeadModalProps)
   );
 }
 
-// ─── Main Panel ───────────────────────────────────────────────────────────────
-
-export function LeadDetailPanel({ lead, onClose }: LeadDetailPanelProps) {
+export function LeadDetailPanel({
+  lead,
+  onClose,
+  onSaveLead,
+}: LeadDetailPanelProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [obsText, setObsText] = useState("");
-  const [localObsByLead, setLocalObsByLead] = useState<Record<string, Observacion[]>>(
-    {}
-  );
-  const [historyByLead, setHistoryByLead] = useState<Record<string, LeadHistoryEvent[]>>(
-    {}
-  );
-  const [overridesByLead, setOverridesByLead] = useState<Record<string, Partial<Lead>>>(
-    {}
-  );
+  const [localObsByLead, setLocalObsByLead] = useState<
+    Record<string, Observacion[]>
+  >({});
+  const [historyByLead, setHistoryByLead] = useState<
+    Record<string, LeadHistoryEvent[]>
+  >({});
+  const [overridesByLead, setOverridesByLead] = useState<
+    Record<string, Partial<Lead>>
+  >({});
 
   const effectiveLead = useMemo(() => {
     if (!lead) return null;
@@ -534,7 +561,6 @@ export function LeadDetailPanel({ lead, onClose }: LeadDetailPanelProps) {
     return override ? ({ ...lead, ...override } as Lead) : lead;
   }, [lead, overridesByLead]);
 
-  // Merge mock observaciones + locally added ones
   const allObs: Observacion[] = useMemo(() => {
     if (!effectiveLead) return [];
     const local = localObsByLead[effectiveLead.id] ?? [];
@@ -559,19 +585,46 @@ export function LeadDetailPanel({ lead, onClose }: LeadDetailPanelProps) {
     );
   }, [effectiveLead, allObs, historyByLead]);
 
-  function addObservacion() {
+  async function addObservacion() {
     const trimmed = obsText.trim();
-    if (!trimmed) return;
-    const newObs: Observacion = {
-      id: `local-${Date.now()}`,
-      date: new Date().toISOString().slice(0, 10),
-      text: trimmed,
-    };
-    if (!effectiveLead) return;
-    setLocalObsByLead((prev) => ({
-      ...prev,
-      [effectiveLead.id]: [newObs, ...(prev[effectiveLead.id] ?? [])],
-    }));
+    if (!trimmed || !effectiveLead) return;
+
+    // Intentamos persistir en Supabase
+    const { data, error } = await supabase
+      .from("lead_observations")
+      .insert({
+        opportunity_id: Number(effectiveLead.id),
+        text: trimmed,
+        created_by: CURRENT_USER,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error guardando observación:", error);
+      // Si falla Supabase, igual guardamos local para no perder el texto
+      const newObs: Observacion = {
+        id: `local-${Date.now()}`,
+        date: new Date().toISOString().slice(0, 10),
+        text: trimmed,
+      };
+      setLocalObsByLead((prev) => ({
+        ...prev,
+        [effectiveLead.id]: [newObs, ...(prev[effectiveLead.id] ?? [])],
+      }));
+    } else {
+      // Éxito: guardamos la observación que vino de Supabase
+      const saved: Observacion = {
+        id: String((data as LeadObservation).id),
+        date: (data as LeadObservation).created_at.slice(0, 10),
+        text: (data as LeadObservation).text,
+      };
+      setLocalObsByLead((prev) => ({
+        ...prev,
+        [effectiveLead.id]: [saved, ...(prev[effectiveLead.id] ?? [])],
+      }));
+    }
+
     setObsText("");
   }
 
@@ -592,6 +645,7 @@ export function LeadDetailPanel({ lead, onClose }: LeadDetailPanelProps) {
       const before = normalizeValue(prev[field]);
       const after = normalizeValue(next[field]);
       if (before === after) continue;
+
       changes.push({
         id: crypto.randomUUID(),
         leadId: prev.id,
@@ -614,7 +668,6 @@ export function LeadDetailPanel({ lead, onClose }: LeadDetailPanelProps) {
 
   return (
     <>
-      {/* Backdrop */}
       <div
         className={cn(
           "fixed inset-0 z-40 bg-foreground/10 transition-opacity duration-200",
@@ -624,7 +677,6 @@ export function LeadDetailPanel({ lead, onClose }: LeadDetailPanelProps) {
         aria-hidden="true"
       />
 
-      {/* Panel */}
       <aside
         className={cn(
           "fixed right-0 top-0 z-50 flex h-full w-[420px] flex-col border-l border-border bg-card shadow-xl transition-transform duration-200 ease-in-out",
@@ -634,13 +686,14 @@ export function LeadDetailPanel({ lead, onClose }: LeadDetailPanelProps) {
       >
         {effectiveLead && (
           <>
-            {/* Header */}
             <div className="flex items-start justify-between border-b border-border px-5 py-4">
               <div className="flex flex-col gap-0.5 flex-1 min-w-0 pr-3">
                 <h2 className="text-sm font-semibold text-foreground leading-tight truncate">
                   {effectiveLead.ownerName}
                 </h2>
-                <p className="text-xs text-muted-foreground truncate">{effectiveLead.address}</p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {effectiveLead.address}
+                </p>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
                 <Button
@@ -664,11 +717,13 @@ export function LeadDetailPanel({ lead, onClose }: LeadDetailPanelProps) {
               </div>
             </div>
 
-            {/* Status badges */}
             <div className="flex flex-wrap gap-1.5 border-b border-border px-5 py-3">
               <Badge
                 variant="outline"
-                className={cn("text-xs font-medium", STATUS_CONFIG[effectiveLead.status].className)}
+                className={cn(
+                  "text-xs font-medium",
+                  STATUS_CONFIG[effectiveLead.status].className
+                )}
               >
                 <Circle className="mr-1 h-1.5 w-1.5 fill-current" />
                 {STATUS_CONFIG[effectiveLead.status].label}
@@ -683,21 +738,24 @@ export function LeadDetailPanel({ lead, onClose }: LeadDetailPanelProps) {
               >
                 {PHASE_LABELS[effectiveLead.phase]}
               </Badge>
-              <Badge variant="outline" className="text-xs font-medium text-muted-foreground">
+              <Badge
+                variant="outline"
+                className="text-xs font-medium text-muted-foreground"
+              >
                 {effectiveLead.source}
               </Badge>
             </div>
 
-            {/* Scrollable body */}
             <div className="flex flex-1 flex-col gap-0 overflow-y-auto divide-y divide-border">
-              {/* Core fields */}
               <div className="flex flex-col gap-3.5 px-5 py-5">
                 <IconRow icon={Phone}>
                   <Row label="Teléfono">{effectiveLead.phone}</Row>
                 </IconRow>
                 <IconRow icon={MapPin}>
                   <Row label="Domicilio">
-                    {effectiveLead.address}{effectiveLead.distrito ? `, ${effectiveLead.distrito}` : ""}{effectiveLead.cp ? ` (${effectiveLead.cp})` : ""}
+                    {effectiveLead.address}
+                    {effectiveLead.distrito ? `, ${effectiveLead.distrito}` : ""}
+                    {effectiveLead.cp ? ` (${effectiveLead.cp})` : ""}
                   </Row>
                 </IconRow>
                 <IconRow icon={Euro}>
@@ -711,27 +769,41 @@ export function LeadDetailPanel({ lead, onClose }: LeadDetailPanelProps) {
                 </IconRow>
               </div>
 
-              {/* Dates */}
               <div className="grid grid-cols-2 gap-3 px-5 py-5">
                 <div className="flex flex-col gap-0.5">
-                  <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">F. Noticia</span>
-                  <span className="text-xs text-foreground">{fmtDate(effectiveLead.fechaNoticia)}</span>
+                  <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    F. Noticia
+                  </span>
+                  <span className="text-xs text-foreground">
+                    {fmtDate(effectiveLead.fechaNoticia)}
+                  </span>
                 </div>
                 <div className="flex flex-col gap-0.5">
-                  <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">F. Contacto</span>
-                  <span className="text-xs text-foreground">{fmtDate(effectiveLead.fechaContacto)}</span>
+                  <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    F. Contacto
+                  </span>
+                  <span className="text-xs text-foreground">
+                    {fmtDate(effectiveLead.fechaContacto)}
+                  </span>
                 </div>
                 <div className="flex flex-col gap-0.5">
-                  <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">F. Valoración</span>
-                  <span className="text-xs text-foreground">{fmtDate(effectiveLead.fechaValoracion)}</span>
+                  <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    F. Valoración
+                  </span>
+                  <span className="text-xs text-foreground">
+                    {fmtDate(effectiveLead.fechaValoracion)}
+                  </span>
                 </div>
                 <div className="flex flex-col gap-0.5">
-                  <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Hora visita</span>
-                  <span className="text-xs text-foreground">{effectiveLead.hora || "—"}</span>
+                  <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Hora visita
+                  </span>
+                  <span className="text-xs text-foreground">
+                    {effectiveLead.hora || "—"}
+                  </span>
                 </div>
               </div>
 
-              {/* Notas */}
               {effectiveLead.notes && (
                 <div className="flex flex-col gap-1.5 px-5 py-5">
                   <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -743,7 +815,6 @@ export function LeadDetailPanel({ lead, onClose }: LeadDetailPanelProps) {
                 </div>
               )}
 
-              {/* ── Observaciones ── */}
               <div className="flex flex-col gap-4 px-5 py-5">
                 <div className="flex items-center gap-2">
                   <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
@@ -757,7 +828,6 @@ export function LeadDetailPanel({ lead, onClose }: LeadDetailPanelProps) {
                   )}
                 </div>
 
-                {/* New observation input */}
                 <div className="flex flex-col gap-2">
                   <Textarea
                     value={obsText}
@@ -775,21 +845,21 @@ export function LeadDetailPanel({ lead, onClose }: LeadDetailPanelProps) {
                     size="sm"
                     className="self-end h-7 gap-1.5 text-xs"
                     disabled={!obsText.trim()}
-                    onClick={addObservacion}
+                    onClick={() => void addObservacion()}
                   >
                     <Send className="h-3 w-3" />
                     Añadir
                   </Button>
                 </div>
 
-                {/* Timeline */}
                 {allHistory.length > 0 ? (
                   <div className="flex flex-col gap-0 relative">
-                    {/* Vertical line */}
-                    <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border" aria-hidden="true" />
+                    <div
+                      className="absolute left-[7px] top-2 bottom-2 w-px bg-border"
+                      aria-hidden="true"
+                    />
                     {allHistory.map((ev) => (
                       <div key={ev.id} className="relative flex gap-3 pb-4 last:pb-0">
-                        {/* Dot */}
                         <div
                           className={cn(
                             "relative z-10 mt-1 h-3.5 w-3.5 shrink-0 rounded-full border-2 bg-card",
@@ -844,7 +914,6 @@ export function LeadDetailPanel({ lead, onClose }: LeadDetailPanelProps) {
               </div>
             </div>
 
-            {/* Footer */}
             <div className="border-t border-border px-5 py-3">
               <Button
                 variant="outline"
@@ -864,8 +933,9 @@ export function LeadDetailPanel({ lead, onClose }: LeadDetailPanelProps) {
           lead={effectiveLead}
           open={editOpen}
           onOpenChange={setEditOpen}
-          onSave={(next) => {
+          onSave={async (next) => {
             appendFieldChangeEvents(effectiveLead, next);
+            await onSaveLead(next);
             setOverridesByLead((prev) => ({ ...prev, [next.id]: { ...next } }));
           }}
         />
