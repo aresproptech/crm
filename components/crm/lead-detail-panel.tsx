@@ -551,9 +551,40 @@ export function LeadDetailPanel({
   const [historyByLead, setHistoryByLead] = useState<
     Record<string, LeadHistoryEvent[]>
   >({});
-  const [overridesByLead, setOverridesByLead] = useState<
-    Record<string, Partial<Lead>>
-  >({});
+  const [overridesByLead, setOverridesByLead] = useState<Record<string, Partial<Lead>>>({});
+
+// Carga observaciones desde Supabase cuando cambia el lead
+useEffect(() => {
+  if (!lead) return;
+
+  async function fetchObservations() {
+    if (!lead) return;
+    const { data, error } = await supabase
+      .from("lead_observations")
+      .select("*")
+      .eq("opportunity_id", Number(lead.id))
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error cargando observaciones:", error);
+      return;
+    }
+
+    const mapped = (data ?? []).map((row) => ({
+      id: String((row as LeadObservation).id),
+      date: (row as LeadObservation).created_at.slice(0, 10),
+      text: (row as LeadObservation).text,
+    }));
+
+    // Reemplazamos las observaciones locales con las de Supabase
+    setLocalObsByLead((prev) => ({
+      ...prev,
+      [lead.id]: mapped,
+    }));
+  }
+
+  void fetchObservations();
+}, [lead?.id]);
 
   const effectiveLead = useMemo(() => {
     if (!lead) return null;
