@@ -9,89 +9,73 @@ export type UserWithRole = {
   crmUser: CrmUser;
 };
 
+async function fetchCrmUser(userId: string): Promise<CrmUser | null> {
+  const { data, error } = await supabase
+    .from("users")
+    .select("*")
+    .eq("auth_id", userId)
+    .single();
+
+  if (error || !data) return null;
+  return data as CrmUser;
+}
+
 export function useUser() {
   const [userWithRole, setUserWithRole] = useState<UserWithRole | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadUser() {
-      // Obtenemos la sesión actual
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+    let mounted = true;
 
-      if (!session) {
+    async function init() {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (session && mounted) {
+        const crmUser = await fetchCrmUser(session.user.id);
+        if (crmUser && mounted) {
+          setUserWithRole({ authUser: session.user, crmUser });
+        }
         setLoading(false);
         return;
       }
 
-      // Buscamos el usuario en la tabla users por auth_id
-      const { data, error } = await supabase
-        .from("users")
-        .select("*")
-        .eq("auth_id", session.user.id)
-        .single();
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(
+        async (event, session) => {
+          if (!session || !mounted) {
+            setUserWithRole(null);
+            setLoading(false);
+            return;
+          }
 
-      if (error || !data) {
-        console.error("Error cargando usuario CRM:", error);
-        setLoading(false);
-        return;
-      }
+          const crmUser = await fetchCrmUser(session.user.id);
+          if (crmUser && mounted) {
+            setUserWithRole({ authUser: session.user, crmUser });
+          }
+          setLoading(false);
+        }
+      );
 
-      setUserWithRole({
-        authUser: session.user,
-        crmUser: data as CrmUser,
-      });
-
-      setLoading(false);
+      return () => subscription.unsubscribe();
     }
 
-    loadUser();
-
-    // Escuchamos cambios de sesión
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (!session) {
-          setUserWithRole(null);
-          return;
-        }
-
-        const { data } = await supabase
-          .from("users")
-          .select("*")
-          .eq("auth_id", session.user.id)
-          .single();
-
-        if (data) {
-          setUserWithRole({
-            authUser: session.user,
-            crmUser: data as CrmUser,
-          });
-        }
-      }
-    );
+    void init();
 
     return () => {
-      listener.subscription.unsubscribe();
+      mounted = false;
     };
   }, []);
 
   return { userWithRole, loading };
 }
 
-// Helper para saber si un usuario puede ver todos los leads
 export function canViewAllLeads(crmUser: CrmUser): boolean {
-  if (
+  return (
     crmUser.rol === "Admin" ||
     crmUser.rol === "Coordinador" ||
     crmUser.rol === "Manager"
-  ) {
-    return true;
-  }
-  return false;
+  );
 }
 
-// Helper para saber si un usuario puede editar leads
 export function canEditLeads(crmUser: CrmUser): boolean {
   return crmUser.rol === "Admin" || crmUser.rol === "Comercial";
 }
