@@ -568,7 +568,7 @@ export default function LeadsPage() {
         telefono: next.phone || null,
         tasacion: next.valor || null,
         estado: next.status || null,
-        fecha: next.fechaNoticia || null,
+        fecha: next.fechaNoticia ? next.fechaNoticia.slice(0, 10) : null,
         comercial_user_desc: next.owner || null,
         dominio_desc: next.planner || null,
         memo: next.notes || null,

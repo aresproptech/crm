@@ -15,21 +15,90 @@ import {
   Eye,
   CalendarDays,
 } from "lucide-react";
+import { useUser } from "@/lib/hooks/useUser";
+import type { CrmUser } from "@/lib/supabase";
 
-const navItems = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Leads", href: "/leads", icon: Users },
-  { label: "Valoraciones", href: "/valoraciones", icon: ClipboardCheck },
-  { label: "Encargos", href: "/encargos", icon: FileText },
-  { label: "R.G.", href: "/rg", icon: Handshake },
-  { label: "Visitas", href: "/visitas", icon: Eye },
-  { label: "Planning", href: "/planning", icon: CalendarDays },
-  { label: "Usuarios", href: "/usuarios", icon: UserCog },
-  { label: "Ajustes", href: "/ajustes", icon: Settings },
+type NavItem = {
+  label: string;
+  href: string;
+  icon: React.ElementType;
+  roles: CrmUser["rol"][];
+};
+
+const navItems: NavItem[] = [
+  {
+    label: "Dashboard",
+    href: "/dashboard",
+    icon: LayoutDashboard,
+    roles: ["Admin", "Coordinador", "Comercial"],
+  },
+  {
+    label: "Leads",
+    href: "/leads",
+    icon: Users,
+    roles: ["Admin", "Coordinador", "Comercial"],
+  },
+  {
+    label: "Valoraciones",
+    href: "/valoraciones",
+    icon: ClipboardCheck,
+    roles: ["Admin", "Coordinador", "Comercial"],
+  },
+  {
+    label: "Encargos",
+    href: "/encargos",
+    icon: FileText,
+    roles: ["Admin", "Coordinador", "Comercial"],
+  },
+  {
+    label: "R.G.",
+    href: "/rg",
+    icon: Handshake,
+    roles: ["Admin", "Coordinador", "Comercial"],
+  },
+  {
+    label: "Visitas",
+    href: "/visitas",
+    icon: Eye,
+    roles: ["Admin", "Coordinador", "Comercial"],
+  },
+  {
+    label: "Planning",
+    href: "/planning",
+    icon: CalendarDays,
+    roles: ["Admin", "Coordinador", "Comercial"],
+  },
+  {
+    label: "Usuarios",
+    href: "/usuarios",
+    icon: UserCog,
+    roles: ["Admin"],
+  },
+  {
+    label: "Ajustes",
+    href: "/ajustes",
+    icon: Settings,
+    roles: ["Admin"],
+  },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { userWithRole } = useUser();
+
+  const rol = userWithRole?.crmUser.rol;
+  const nombre = userWithRole?.crmUser.name ?? "Usuario";
+
+  const initials = nombre
+    .split(" ")
+    .slice(0, 2)
+    .map((n: string) => n[0])
+    .join("")
+    .toUpperCase();
+
+  const visibleItems = rol
+    ? navItems.filter((item) => item.roles.includes(rol))
+    : [];
 
   return (
     <aside className="fixed inset-y-0 left-0 z-20 flex w-56 flex-col bg-sidebar border-r border-sidebar-border">
@@ -43,7 +112,7 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
-        {navItems.map(({ label, href, icon: Icon }) => {
+        {visibleItems.map(({ label, href, icon: Icon }) => {
           const isActive =
             pathname === href || pathname.startsWith(href + "/");
           return (
@@ -74,14 +143,16 @@ export function Sidebar() {
       <div className="shrink-0 border-t border-sidebar-border px-4 py-3">
         <div className="flex items-center gap-2.5">
           <div className="h-7 w-7 rounded-full bg-primary/20 flex items-center justify-center">
-            <span className="text-xs font-semibold text-primary">AM</span>
+            <span className="text-xs font-semibold text-primary">
+              {initials}
+            </span>
           </div>
           <div className="min-w-0">
             <p className="truncate text-xs font-medium text-sidebar-foreground">
-              Ana Martínez
+              {nombre}
             </p>
             <p className="truncate text-[11px] text-sidebar-foreground/50">
-              Agente
+              {rol ?? "—"}
             </p>
           </div>
         </div>
