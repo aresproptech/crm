@@ -579,6 +579,7 @@ export default function LeadsPage() {
         tasacion: next.valor || null,
         estado: next.status || null,
         fecha: next.fechaNoticia ? next.fechaNoticia.slice(0, 10) : null,
+        source_desc: next.source || null,
         comercial_user_desc: next.owner || null,
         dominio_desc: next.planner || null,
         memo: next.notes || null,
@@ -586,11 +587,10 @@ export default function LeadsPage() {
       })
       .eq("id", Number(next.id));
 
-      if (error) {
-        console.error("Error actualizando lead:", error);
-        return;
-      }
-      console.log("Lead actualizado correctamente, id:", Number(next.id), "fase_id:", PHASE_ID_MAP[next.phase]);
+    if (error) {
+      console.error("Error actualizando lead:", error);
+      return;
+    }
 
     await loadLeadsFromSupabase();
     setSelectedLead((prev) =>

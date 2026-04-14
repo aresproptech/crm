@@ -60,13 +60,20 @@ export const PHASE_COLORS: Record<LeadPhase, string> = {
 };
 
 export const SOURCE_OPTIONS = [
+  "Idealista",
+  "Papelito",
   "Referido",
-  "Web",
-  "Portales",
-  "LinkedIn",
-  "Llamada entrante",
-  "Otro",
-];
+  "Personal",
+  "Tasar-Online",
+  "TasaTuCasa",
+  "Tasar-BUE",
+  "Venta-Online",
+  "Venta-Alquilada",
+  "Visita",
+  "Zona",
+  "Oficina",
+  "Portero",
+];  
 
 export const PHASE_OPTIONS: { value: LeadPhase; label: string }[] = [
   { value: "noticia", label: "Noticia" },
@@ -85,10 +92,17 @@ export const STATUS_OPTIONS: { value: LeadStatus; label: string }[] = [
 ];
 
 export const AGENT_OPTIONS = [
-  "Ana García",
-  "Pedro Ruiz",
-  "Laura Soto",
-  "Marcos Vidal",
+  "Abdel",
+  "Katy",
+  "Katdel",
+  "Adri",
+  "Beto",
+  "Gonza",
+  "Guille",
+  "Inma",
+  "Jorge S.",
+  "Juanje",
+  "Sergio",
 ];
 
 export const MOCK_LEADS: Lead[] = [
