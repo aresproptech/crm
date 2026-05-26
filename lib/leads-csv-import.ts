@@ -57,20 +57,22 @@ function norm(s: string) {
 // Default mapping for common exports (e.g. Kommo).
 // Note: we intentionally do NOT auto-assign estado, owner, fechaContacto, fechaValoracion, hora, planner.
 export const DEFAULT_MAPPING: Partial<Record<ImportTargetField, string>> = {
-  ownerName: "Nombre completo",
+  ownerName: "Contacto principal",
   address: "Domicilio",
   cp: "Código Postal",
-  valor: "Presupuesto €",
+  valor: "Presupuesto",
   source: "Origen",
   phase: "Embudo de ventas",
   fechaNoticia: "Fecha de Creación",
 };
 
 const KOMMO_SUGGESTIONS: Array<{ csv: string; target: ImportTargetField }> = [
+  { csv: "Contacto principal", target: "ownerName" },
   { csv: "Nombre completo", target: "ownerName" },
   { csv: "Teléfono celular", target: "phone" },
   { csv: "Domicilio", target: "address" },
   { csv: "Código Postal", target: "cp" },
+  { csv: "Presupuesto", target: "valor" },
   { csv: "Presupuesto €", target: "valor" },
   { csv: "Origen", target: "source" },
   { csv: "Estatus del lead", target: "status" },
@@ -90,6 +92,12 @@ export function suggestMapping(headers: string[]): ColumnMapping {
   >) {
     const match = headerNorm.get(norm(desiredHeader));
     if (match) mapping[target] = match;
+  }
+
+  // Prefer the real contact person over the generic lead title when both exist.
+  const contactoPrincipal = headerNorm.get(norm("Contacto principal"));
+  if (contactoPrincipal) {
+    mapping.ownerName = contactoPrincipal;
   }
 
   // Phone fallback: oficina -> celular -> teléfono
@@ -224,8 +232,7 @@ export function buildLeadFromMapped(
   mapped: Partial<Record<ImportTargetField, string>>
 ): Lead {
   const now = new Date().toISOString().slice(0, 10);
-  const currentUser = "Ana Martínez";
-  const owner = mapped.owner?.trim() || currentUser;
+  const owner = mapped.owner?.trim() || "";
 
   const address = mapped.address?.trim() || "";
   const distrito = mapped.distrito?.trim() || "";
@@ -270,4 +277,3 @@ export function buildLeadFromMapped(
     observaciones: [],
   };
 }
-

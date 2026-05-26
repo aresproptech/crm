@@ -1,6 +1,11 @@
 // Shared mock data and types for the CRM
 
-export type LeadStatus = "identificar" | "seguimiento" | "caliente" | "desestimada";
+export type LeadStatus =
+  | "identificar"
+  | "cualificada"
+  | "seguimiento"
+  | "caliente"
+  | "desestimada";
 export type LeadPhase =
   | "noticia"
   | "concertada"
@@ -26,6 +31,8 @@ export interface Lead {
   valor: string;
   phone: string;
   source: string;
+  medio?: string;
+  enVenta?: string;
   phase: LeadPhase;
   status: LeadStatus;
   fechaNoticia: string;
@@ -85,7 +92,8 @@ export const PHASE_OPTIONS: { value: LeadPhase; label: string }[] = [
 ];
 
 export const STATUS_OPTIONS: { value: LeadStatus; label: string }[] = [
-  { value: "identificar", label: "Identificar" },
+  { value: "identificar", label: "Identificada" },
+  { value: "cualificada", label: "Cualificada" },
   { value: "seguimiento", label: "Seguimiento" },
   { value: "caliente", label: "Caliente" },
   { value: "desestimada", label: "Desestimada" },

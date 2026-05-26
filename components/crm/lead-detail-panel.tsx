@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { supabase, type LeadObservation } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
+import { useUser } from "@/lib/hooks/useUser";
 import {
   X,
   Phone,
@@ -42,7 +43,6 @@ import {
   type Lead,
   type Observacion,
   PHASE_LABELS,
-  PHASE_COLORS,
   PHASE_OPTIONS,
   STATUS_OPTIONS,
   SOURCE_OPTIONS,
@@ -51,20 +51,36 @@ import {
 
 const STATUS_CONFIG = {
   identificar: {
-    label: "Identificar",
-    className: "bg-violet-50 text-violet-700 border-violet-200",
+    label: "Identificada",
+    badgeStyle: {
+      backgroundColor: "#EEF2FF",
+      color: "#4338CA",
+      borderColor: "#C7D2FE",
+    },
   },
-  seguimiento: {
-    label: "Seguimiento",
-    className: "bg-blue-50 text-blue-700 border-blue-200",
+  cualificada: {
+    label: "Cualificada",
+    badgeStyle: {
+      backgroundColor: "#D4EDBC",
+      color: "#288158",
+      borderColor: "#B7D99C",
+    },
   },
   caliente: {
     label: "Caliente",
-    className: "bg-orange-50 text-orange-700 border-orange-200",
+    badgeStyle: {
+      backgroundColor: "#FFE5D0",
+      color: "#C2410C",
+      borderColor: "#FDBA74",
+    },
   },
   desestimada: {
     label: "Desestimada",
-    className: "bg-muted text-muted-foreground border-border",
+    badgeStyle: {
+      backgroundColor: "#F1F5F9",
+      color: "#64748B",
+      borderColor: "#CBD5E1",
+    },
   },
 } as const;
 
@@ -142,7 +158,68 @@ type LeadHistoryEvent = {
   noteText?: string;
 };
 
-const CURRENT_USER = "Ana Martínez";
+type OpportunityContactRow = {
+  id: number | string;
+  created_at?: string | null;
+  fecha?: string | null;
+  memo?: string | null;
+  resultado?: boolean | null;
+};
+
+const LEAD_DETAIL_PHASE_OPTIONS = PHASE_OPTIONS.filter((opt) =>
+  ["Noticia", "Concertada", "Valorada", "Encargo"].includes(opt.label)
+);
+
+const LEAD_DETAIL_STATUS_OPTIONS = [
+  { value: "identificar", label: "Identificada" },
+  { value: "cualificada", label: "Cualificada" },
+  { value: "caliente", label: "Caliente" },
+  { value: "desestimada", label: "Desestimada" },
+];
+
+const LEAD_DETAIL_MEDIO_OPTIONS = [
+  "Presencial",
+  "Videollamada",
+  "Teléfono",
+];
+
+const LEAD_DETAIL_EN_VENTA_OPTIONS = ["SI", "NO", "No Sabe"];
+
+const PHASE_BADGE_STYLES: Record<
+  string,
+  { backgroundColor: string; color: string; borderColor: string }
+> = {
+  noticia: {
+    backgroundColor: "#D4EDBC",
+    color: "#298259",
+    borderColor: "#B7D99C",
+  },
+  concertada: {
+    backgroundColor: "#94EC89",
+    color: "#060905",
+    borderColor: "#6FD864",
+  },
+  valorada: {
+    backgroundColor: "#14C02C",
+    color: "#FFFFFF",
+    borderColor: "#14C02C",
+  },
+  encargo: {
+    backgroundColor: "#109671",
+    color: "#FFFFFF",
+    borderColor: "#109671",
+  },
+};
+
+function getStatusConfig(status: string) {
+  if (status === "seguimiento") return STATUS_CONFIG.cualificada;
+
+  return (
+    STATUS_CONFIG[status as keyof typeof STATUS_CONFIG] ??
+    STATUS_CONFIG.identificar
+  );
+}
+
 
 function normalizeValue(v: unknown): string {
   if (v === null || v === undefined) return "";
@@ -150,7 +227,22 @@ function normalizeValue(v: unknown): string {
 }
 
 function statusLabel(value: string) {
-  return STATUS_OPTIONS.find((o) => o.value === value)?.label ?? value;
+  return (
+    LEAD_DETAIL_STATUS_OPTIONS.find((o) => o.value === value)?.label ??
+    STATUS_OPTIONS.find((o) => o.value === value)?.label ??
+    value
+  );
+}
+
+function formatEuroValue(raw: string | null | undefined): string {
+  const digits = raw?.replace(/\D/g, "") ?? "";
+  if (!digits) return "";
+
+  const formatted = new Intl.NumberFormat("es-ES", {
+    maximumFractionDigits: 0,
+  }).format(Number(digits));
+
+  return `${formatted} €`;
 }
 
 function phaseLabel(value: string) {
@@ -175,6 +267,10 @@ function fieldDisplayName(field: keyof Lead): string {
       return "Planner";
     case "owner":
       return "Owner";
+    case "medio":
+      return "Medio";
+    case "enVenta":
+      return "En Venta";
     default:
       return String(field);
   }
@@ -219,18 +315,28 @@ function EditLeadModal({
   onOpenChange,
   onSave,
 }: EditLeadModalProps) {
-  const [form, setForm] = useState({ ...lead });
+  const [form, setForm] = useState({
+    ...lead,
+    valor: formatEuroValue(lead.valor),
+  });
   const [cpLoading, setCpLoading] = useState(false);
   const [cpAutoFilled, setCpAutoFilled] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    setForm({ ...lead });
+    setForm({
+      ...lead,
+      valor: formatEuroValue(lead.valor),
+    });
     setCpAutoFilled(false);
   }, [lead]);
 
   function set(field: keyof Lead, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  function handleValorChange(value: string) {
+    set("valor", formatEuroValue(value));
   }
 
   const handleCpChange = useCallback(async (value: string) => {
@@ -270,7 +376,7 @@ function EditLeadModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[min(1100px,calc(100vw-2rem))] max-w-none max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-base font-semibold">
             Editar lead
@@ -280,8 +386,8 @@ function EditLeadModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-2 gap-x-4 gap-y-4 py-2">
-          <div className="col-span-2 flex flex-col gap-1.5">
+        <div className="grid grid-cols-1 gap-x-5 gap-y-4 py-2 md:grid-cols-3">
+          <div className="flex flex-col gap-1.5 md:col-span-3">
             <Label className="text-xs font-medium">Propietario</Label>
             <Input
               value={form.ownerName}
@@ -290,7 +396,7 @@ function EditLeadModal({
             />
           </div>
 
-          <div className="col-span-2 flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5 md:col-span-3">
             <Label className="text-xs font-medium">Domicilio</Label>
             <Input
               value={form.address}
@@ -378,11 +484,13 @@ function EditLeadModal({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label className="text-xs font-medium">Valor estimado</Label>
+            <Label className="text-xs font-medium">Valor</Label>
             <Input
               value={form.valor}
-              onChange={(e) => set("valor", e.target.value)}
+              onChange={(e) => handleValorChange(e.target.value)}
               className="h-8 text-sm"
+              placeholder="Ej. 450.000 €"
+              inputMode="numeric"
             />
           </div>
 
@@ -396,13 +504,71 @@ function EditLeadModal({
           </div>
 
           <div className="flex flex-col gap-1.5">
+            <Label className="text-xs font-medium">Origen</Label>
+            <Select value={form.source} onValueChange={(v) => set("source", v)}>
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SOURCE_OPTIONS.map((o) => (
+                  <SelectItem key={o} value={o} className="text-sm">
+                    {o}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs font-medium">Hora</Label>
+            <Input
+              type="time"
+              value={form.hora}
+              onChange={(e) => set("hora", e.target.value)}
+              className="h-8 text-sm"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs font-medium">Medio</Label>
+            <Select value={form.medio ?? ""} onValueChange={(v) => set("medio", v)}>
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue placeholder="Seleccionar medio" />
+              </SelectTrigger>
+              <SelectContent>
+                {LEAD_DETAIL_MEDIO_OPTIONS.map((option) => (
+                  <SelectItem key={option} value={option} className="text-sm">
+                    {option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs font-medium">En Venta</Label>
+            <Select value={form.enVenta ?? "No Sabe"} onValueChange={(v) => set("enVenta", v)}>
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue placeholder="Seleccionar" />
+              </SelectTrigger>
+              <SelectContent>
+                {LEAD_DETAIL_EN_VENTA_OPTIONS.map((option) => (
+                  <SelectItem key={option} value={option} className="text-sm">
+                    {option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
             <Label className="text-xs font-medium">Fase</Label>
             <Select value={form.phase} onValueChange={(v) => set("phase", v)}>
               <SelectTrigger className="h-8 text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {PHASE_OPTIONS.map((o) => (
+                {LEAD_DETAIL_PHASE_OPTIONS.map((o) => (
                   <SelectItem key={o.value} value={o.value} className="text-sm">
                     {o.label}
                   </SelectItem>
@@ -418,7 +584,7 @@ function EditLeadModal({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {STATUS_OPTIONS.map((o) => (
+                {LEAD_DETAIL_STATUS_OPTIONS.map((o) => (
                   <SelectItem key={o.value} value={o.value} className="text-sm">
                     {o.label}
                   </SelectItem>
@@ -428,15 +594,15 @@ function EditLeadModal({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label className="text-xs font-medium">Origen</Label>
-            <Select value={form.source} onValueChange={(v) => set("source", v)}>
-              <SelectTrigger className="h-8 text-sm">
-                <SelectValue />
+            <Label htmlFor="planner" className="text-xs font-medium">Planner</Label>
+            <Select value={form.planner ?? ""} onValueChange={(v) => set("planner", v)}>
+              <SelectTrigger id="planner" className="h-8 text-sm">
+                <SelectValue placeholder="Seleccionar planner" />
               </SelectTrigger>
               <SelectContent>
-                {SOURCE_OPTIONS.map((o) => (
-                  <SelectItem key={o} value={o} className="text-sm">
-                    {o}
+                {AGENT_OPTIONS.map((agent) => (
+                  <SelectItem key={agent} value={agent} className="text-sm">
+                    {agent}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -490,7 +656,7 @@ function EditLeadModal({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label className="text-xs font-medium">Hora visita</Label>
+            <Label className="text-xs font-medium">Hora</Label>
             <Input
               type="time"
               value={form.hora}
@@ -499,17 +665,7 @@ function EditLeadModal({
             />
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <Label className="text-xs font-medium">Planner</Label>
-            <Input
-              value={form.planner ?? ""}
-              onChange={(e) => set("planner", e.target.value)}
-              className="h-8 text-sm"
-              placeholder="—"
-            />
-          </div>
-
-          <div className="col-span-2 flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5 md:col-span-3">
             <Label className="text-xs font-medium">Notas</Label>
             <Textarea
               value={form.notes ?? ""}
@@ -543,8 +699,25 @@ export function LeadDetailPanel({
   onClose,
   onSaveLead,
 }: LeadDetailPanelProps) {
+  const { userWithRole } = useUser();
+  const currentUserName = useMemo(() => {
+    const userRecord = userWithRole as unknown as {
+      name?: string | null;
+      user?: string | null;
+      email?: string | null;
+    } | null;
+
+    return (
+      userRecord?.name?.trim() ||
+      userRecord?.user?.trim() ||
+      userRecord?.email?.trim() ||
+      "Usuario"
+    );
+  }, [userWithRole]);
   const [editOpen, setEditOpen] = useState(false);
   const [obsText, setObsText] = useState("");
+  const [obsError, setObsError] = useState<string | null>(null);
+  const [obsSaving, setObsSaving] = useState(false);
   const [localObsByLead, setLocalObsByLead] = useState<
     Record<string, Observacion[]>
   >({});
@@ -553,16 +726,17 @@ export function LeadDetailPanel({
   >({});
   const [overridesByLead, setOverridesByLead] = useState<Record<string, Partial<Lead>>>({});
 
-// Carga observaciones desde Supabase cuando cambia el lead
+// Carga observaciones/gestiones desde opportunity_contacts cuando cambia el lead
 useEffect(() => {
   if (!lead) return;
 
   async function fetchObservations() {
     if (!lead) return;
     const { data, error } = await supabase
-      .from("lead_observations")
-      .select("*")
-      .eq("opportunity_id", Number(lead.id))
+      .from("opportunity_contacts")
+      .select("id, created_at, fecha, memo, resultado")
+      .eq("oportunity_id", Number(lead.id))
+      .order("fecha", { ascending: false })
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -570,10 +744,13 @@ useEffect(() => {
       return;
     }
 
-    const mapped = (data ?? []).map((row) => ({
-      id: String((row as LeadObservation).id),
-      date: (row as LeadObservation).created_at.slice(0, 10),
-      text: (row as LeadObservation).text,
+    const mapped = ((data ?? []) as OpportunityContactRow[]).map((row) => ({
+      id: String(row.id),
+      date:
+        row.fecha ??
+        row.created_at?.slice(0, 10) ??
+        new Date().toISOString().slice(0, 10),
+      text: row.memo?.trim() || "Sin detalle",
     }));
 
     // Reemplazamos las observaciones locales con las de Supabase
@@ -607,56 +784,59 @@ useEffect(() => {
       leadId: effectiveLead.id,
       type: "note",
       createdAt: `${o.date || new Date().toISOString().slice(0, 10)}T00:00:00.000Z`,
-      createdBy: CURRENT_USER,
+      createdBy: currentUserName,
       noteText: o.text,
     }));
     const fieldEvents = historyByLead[effectiveLead.id] ?? [];
     return [...fieldEvents, ...noteEvents].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
-  }, [effectiveLead, allObs, historyByLead]);
+  }, [effectiveLead, allObs, historyByLead, currentUserName]);
 
   async function addObservacion() {
     const trimmed = obsText.trim();
-    if (!trimmed || !effectiveLead) return;
+    if (!trimmed || !effectiveLead || obsSaving) return;
 
-    // Intentamos persistir en Supabase
-    const { data, error } = await supabase
-      .from("lead_observations")
-      .insert({
-        opportunity_id: Number(effectiveLead.id),
-        text: trimmed,
-        created_by: CURRENT_USER,
-      })
-      .select()
-      .single();
+    setObsSaving(true);
+    setObsError(null);
 
-    if (error) {
-      console.error("Error guardando observación:", error);
-      // Si falla Supabase, igual guardamos local para no perder el texto
-      const newObs: Observacion = {
-        id: `local-${Date.now()}`,
-        date: new Date().toISOString().slice(0, 10),
-        text: trimmed,
-      };
-      setLocalObsByLead((prev) => ({
-        ...prev,
-        [effectiveLead.id]: [newObs, ...(prev[effectiveLead.id] ?? [])],
-      }));
-    } else {
-      // Éxito: guardamos la observación que vino de Supabase
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const { data, error } = await supabase
+        .from("opportunity_contacts")
+        .insert({
+          oportunity_id: Number(effectiveLead.id),
+          fecha: today,
+          memo: trimmed,
+        })
+        .select("id, created_at, fecha, memo, resultado")
+        .single();
+
+      if (error) {
+        console.error("Error guardando observación en opportunity_contacts:", error);
+        setObsError("No se pudo guardar la observación. Inténtalo de nuevo.");
+        return;
+      }
+
+      const savedRow = data as OpportunityContactRow;
       const saved: Observacion = {
-        id: String((data as LeadObservation).id),
-        date: (data as LeadObservation).created_at.slice(0, 10),
-        text: (data as LeadObservation).text,
+        id: String(savedRow.id),
+        date:
+          savedRow.fecha ??
+          savedRow.created_at?.slice(0, 10) ??
+          new Date().toISOString().slice(0, 10),
+        text: savedRow.memo?.trim() || trimmed,
       };
+
       setLocalObsByLead((prev) => ({
         ...prev,
         [effectiveLead.id]: [saved, ...(prev[effectiveLead.id] ?? [])],
       }));
-    }
 
-    setObsText("");
+      setObsText("");
+    } finally {
+      setObsSaving(false);
+    }
   }
 
   function appendFieldChangeEvents(prev: Lead, next: Lead) {
@@ -669,6 +849,8 @@ useEffect(() => {
       "hora",
       "planner",
       "owner",
+      "medio",
+      "enVenta",
     ];
 
     const changes: LeadHistoryEvent[] = [];
@@ -685,7 +867,7 @@ useEffect(() => {
         prevValue: before,
         newValue: after,
         createdAt: new Date().toISOString(),
-        createdBy: CURRENT_USER,
+        createdBy: currentUserName,
       });
     }
 
@@ -710,7 +892,7 @@ useEffect(() => {
 
       <aside
         className={cn(
-          "fixed right-0 top-0 z-50 flex h-full w-[420px] flex-col border-l border-border bg-card shadow-xl transition-transform duration-200 ease-in-out",
+          "fixed right-0 top-0 z-50 flex h-full w-[520px] max-w-[calc(100vw-1rem)] flex-col border-l border-border bg-card shadow-xl transition-transform duration-200 ease-in-out",
           lead ? "translate-x-0" : "translate-x-full"
         )}
         aria-label="Detalle del lead"
@@ -719,7 +901,7 @@ useEffect(() => {
           <>
             <div className="flex items-start justify-between border-b border-border px-5 py-4">
               <div className="flex flex-col gap-0.5 flex-1 min-w-0 pr-3">
-                <h2 className="text-sm font-semibold text-foreground leading-tight truncate">
+                <h2 className="truncate text-base font-semibold leading-tight text-foreground">
                   {effectiveLead.ownerName}
                 </h2>
                 <p className="text-xs text-muted-foreground truncate">
@@ -751,57 +933,75 @@ useEffect(() => {
             <div className="flex flex-wrap gap-1.5 border-b border-border px-5 py-3">
               <Badge
                 variant="outline"
-                className={cn(
-                  "text-xs font-medium",
-                  STATUS_CONFIG[effectiveLead.status].className
-                )}
+                className="h-7 gap-1.5 rounded-md px-3 text-sm font-semibold"
+                style={getStatusConfig(effectiveLead.status).badgeStyle}
               >
-                <Circle className="mr-1 h-1.5 w-1.5 fill-current" />
-                {STATUS_CONFIG[effectiveLead.status].label}
+                <Circle className="h-2 w-2 fill-current" />
+                {getStatusConfig(effectiveLead.status).label}
               </Badge>
               <Badge
                 variant="outline"
-                className="text-xs font-medium"
-                style={{
-                  borderColor: PHASE_COLORS[effectiveLead.phase] + "55",
-                  color: PHASE_COLORS[effectiveLead.phase],
-                }}
+                className="h-7 rounded-md px-3 text-sm font-semibold"
+                style={
+                  PHASE_BADGE_STYLES[effectiveLead.phase] ?? {
+                    backgroundColor: "#F1F5F9",
+                    color: "#475569",
+                    borderColor: "#CBD5E1",
+                  }
+                }
               >
                 {PHASE_LABELS[effectiveLead.phase]}
               </Badge>
               <Badge
                 variant="outline"
-                className="text-xs font-medium text-muted-foreground"
+                className="h-7 rounded-md px-3 text-sm font-semibold text-muted-foreground"
               >
                 {effectiveLead.source}
               </Badge>
             </div>
 
             <div className="flex flex-1 flex-col gap-0 overflow-y-auto divide-y divide-border">
-              <div className="flex flex-col gap-3.5 px-5 py-5">
-                <IconRow icon={Phone}>
-                  <Row label="Teléfono">{effectiveLead.phone}</Row>
-                </IconRow>
-                <IconRow icon={MapPin}>
-                  <Row label="Domicilio">
-                    {effectiveLead.address}
-                    {effectiveLead.distrito ? `, ${effectiveLead.distrito}` : ""}
-                    {effectiveLead.cp ? ` (${effectiveLead.cp})` : ""}
-                  </Row>
-                </IconRow>
-                <IconRow icon={Euro}>
-                  <Row label="Valor estimado">{effectiveLead.valor || "—"}</Row>
-                </IconRow>
-                <IconRow icon={User}>
-                  <Row label="Owner / Agente">{effectiveLead.owner}</Row>
-                </IconRow>
-                <IconRow icon={Tag}>
-                  <Row label="Origen">{effectiveLead.source}</Row>
-                </IconRow>
+              <div className="px-5 py-5">
+                <div className="grid grid-cols-2 gap-x-5 gap-y-4">
+                  <div className="col-span-2 rounded-lg border border-border bg-background/60 p-3">
+                    <IconRow icon={MapPin}>
+                      <Row label="Domicilio">
+                        {effectiveLead.address}
+                        {effectiveLead.distrito ? `, ${effectiveLead.distrito}` : ""}
+                        {effectiveLead.cp ? ` (${effectiveLead.cp})` : ""}
+                      </Row>
+                    </IconRow>
+                  </div>
+
+                  <IconRow icon={Phone}>
+                    <Row label="Teléfono">{effectiveLead.phone || "—"}</Row>
+                  </IconRow>
+
+                  <IconRow icon={Euro}>
+                    <Row label="Valor">{formatEuroValue(effectiveLead.valor) || "—"}</Row>
+                  </IconRow>
+
+                  <IconRow icon={User}>
+                    <Row label="Owner / Agente">{effectiveLead.owner || "—"}</Row>
+                  </IconRow>
+
+                  <IconRow icon={User}>
+                    <Row label="Planner">{effectiveLead.planner || "—"}</Row>
+                  </IconRow>
+
+                  <IconRow icon={Tag}>
+                    <Row label="Origen">{effectiveLead.source || "—"}</Row>
+                  </IconRow>
+
+
+                  <IconRow icon={Tag}>
+                    <Row label="En Venta">{effectiveLead.enVenta || "No Sabe"}</Row>
+                  </IconRow>
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 px-5 py-5">
-                <div className="flex flex-col gap-0.5">
+              <div className="grid grid-cols-2 gap-4 px-5 py-5">
+                <div className="flex flex-col gap-1 rounded-lg border border-border bg-background/60 p-3">
                   <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                     F. Noticia
                   </span>
@@ -809,7 +1009,7 @@ useEffect(() => {
                     {fmtDate(effectiveLead.fechaNoticia)}
                   </span>
                 </div>
-                <div className="flex flex-col gap-0.5">
+                <div className="flex flex-col gap-1 rounded-lg border border-border bg-background/60 p-3">
                   <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                     F. Contacto
                   </span>
@@ -817,7 +1017,7 @@ useEffect(() => {
                     {fmtDate(effectiveLead.fechaContacto)}
                   </span>
                 </div>
-                <div className="flex flex-col gap-0.5">
+                <div className="flex flex-col gap-1 rounded-lg border border-border bg-background/60 p-3">
                   <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                     F. Valoración
                   </span>
@@ -825,22 +1025,30 @@ useEffect(() => {
                     {fmtDate(effectiveLead.fechaValoracion)}
                   </span>
                 </div>
-                <div className="flex flex-col gap-0.5">
+                <div className="flex flex-col gap-1 rounded-lg border border-border bg-background/60 p-3">
                   <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                    Hora visita
+                    Hora
                   </span>
                   <span className="text-xs text-foreground">
                     {effectiveLead.hora || "—"}
                   </span>
                 </div>
+                <div className="flex flex-col gap-1 rounded-lg border border-border bg-background/60 p-3">
+                  <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Medio
+                  </span>
+                  <span className="text-xs text-foreground">
+                    {effectiveLead.medio || "—"}
+                  </span>
+                </div>
               </div>
 
               {effectiveLead.notes && (
-                <div className="flex flex-col gap-1.5 px-5 py-5">
+                <div className="flex flex-col gap-2 px-5 py-5">
                   <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                     Notas
                   </span>
-                  <p className="rounded-md border border-border bg-muted/40 px-3 py-2.5 text-sm text-foreground leading-relaxed">
+                  <p className="rounded-lg border border-border bg-background/60 px-3 py-3 text-sm leading-relaxed text-foreground">
                     {effectiveLead.notes}
                   </p>
                 </div>
@@ -862,24 +1070,36 @@ useEffect(() => {
                 <div className="flex flex-col gap-2">
                   <Textarea
                     value={obsText}
-                    onChange={(e) => setObsText(e.target.value)}
+                    onChange={(e) => {
+                      setObsText(e.target.value);
+                      if (obsError) setObsError(null);
+                    }}
                     placeholder="Escribe una observación..."
-                    className="text-sm min-h-[68px] resize-none bg-background"
+                    className="min-h-[88px] resize-none bg-background text-sm"
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                         e.preventDefault();
-                        addObservacion();
+                        void addObservacion();
                       }
                     }}
                   />
+
+                  {obsError && (
+                    <p className="text-xs text-destructive">{obsError}</p>
+                  )}
+
                   <Button
                     size="sm"
                     className="self-end h-7 gap-1.5 text-xs"
-                    disabled={!obsText.trim()}
+                    disabled={!obsText.trim() || obsSaving}
                     onClick={() => void addObservacion()}
                   >
-                    <Send className="h-3 w-3" />
-                    Añadir
+                    {obsSaving ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Send className="h-3 w-3" />
+                    )}
+                    {obsSaving ? "Guardando..." : "Añadir"}
                   </Button>
                 </div>
 

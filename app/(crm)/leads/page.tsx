@@ -8,6 +8,7 @@ import {
 } from "@/components/crm/new-lead-modal";
 import { LeadDetailPanel } from "@/components/crm/lead-detail-panel";
 import { ImportLeadsCsvModal } from "@/components/crm/import-leads-csv-modal";
+import { KanbanBoard } from "@/components/crm/kanban-board";
 import {
   Plus,
   Circle,
@@ -18,27 +19,12 @@ import {
   Search,
   LayoutGrid,
   Table2,
-  Phone,
-  MapPin,
+  RefreshCw,
+  Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
-import {
-  DndContext,
-  type DragEndEvent,
-  PointerSensor,
-  closestCorners,
-  useDroppable,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { type Lead, PHASE_LABELS, PHASE_COLORS } from "@/lib/crm-data";
 import {
   Dialog,
@@ -49,14 +35,27 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-type SortKey = keyof Lead;
+type LeadTableRow = Lead & {
+  medio: string;
+  month: string;
+  dominio: string;
+  enVenta: string;
+};
+
+type SortKey = keyof LeadTableRow;
 type SortDir = "asc" | "desc";
 type LeadsViewMode = "table" | "kanban";
+
+const LEADS_PAGE_SIZE = 100;
 
 type CrmLeadRow = {
   id: number;
   created_at: string | null;
   fecha: string | null;
+  fecha_contacto: string | null;
+  fecha_valoracion: string | null;
+  hora: string | null;
+  is_favorite?: boolean | null;
   propietario: string | null;
   telefono: string | null;
   domicilio: string | null;
@@ -64,6 +63,7 @@ type CrmLeadRow = {
   estado: string | null;
   memo: string | null;
   en_venta: string | null;
+  medio: string | null;
   fase_id: number | null;
   fase_name: string | null;
   source_id: number | null;
@@ -80,22 +80,18 @@ type CrmLeadRow = {
   dominio_desc: string | null;
 };
 
-const KANBAN_PHASES: Lead["phase"][] = [
+const VALID_PHASES: Lead["phase"][] = [
   "noticia",
   "concertada",
   "valorada",
-  "cualificada",
   "encargo",
-  "vender",
 ];
 
-const PHASE_ID_MAP: Record<Lead["phase"], number> = {
+const PHASE_ID_MAP: Partial<Record<Lead["phase"], number>> = {
   noticia: 1,
   concertada: 2,
   valorada: 3,
-  cualificada: 4,
   encargo: 5,
-  vender: 6,
 };
 
 function SortIcon({
@@ -120,7 +116,7 @@ function SortIcon({
   );
 }
 
-function getValue(lead: Lead, key: SortKey): string | number {
+function getValue(lead: LeadTableRow, key: SortKey): string | number {
   const v = lead[key];
   if (v === undefined || v === null || v === "") return "";
 
@@ -140,12 +136,185 @@ function getValue(lead: Lead, key: SortKey): string | number {
   return String(v).toLowerCase();
 }
 
-const STATUS_CONFIG = {
-  identificar: { label: "Identificar", dot: "bg-violet-500" },
-  seguimiento: { label: "Seguimiento", dot: "bg-blue-500" },
+const STATUS_CONFIG: Record<string, { label: string; dot: string }> = {
+  identificar: { label: "Identificada", dot: "bg-violet-500" },
+  cualificada: { label: "Cualificada", dot: "bg-emerald-500" },
+  seguimiento: { label: "Cualificada", dot: "bg-emerald-500" },
   caliente: { label: "Caliente", dot: "bg-orange-500" },
   desestimada: { label: "Desestimada", dot: "bg-muted-foreground" },
-} as const;
+};
+
+const SOURCE_BADGE_STYLES: Record<
+  string,
+  { backgroundColor: string; color: string; borderColor: string }
+> = {
+  idealista: {
+    backgroundColor: "#E5E7EB",
+    color: "#111827",
+    borderColor: "#D1D5DB",
+  },
+  papelito: {
+    backgroundColor: "#E5E7EB",
+    color: "#111827",
+    borderColor: "#D1D5DB",
+  },
+  referido: {
+    backgroundColor: "#E5E7EB",
+    color: "#111827",
+    borderColor: "#D1D5DB",
+  },
+  personal: {
+    backgroundColor: "#E5E7EB",
+    color: "#111827",
+    borderColor: "#D1D5DB",
+  },
+  "tasar-online": {
+    backgroundColor: "#E6CFF2",
+    color: "#6F3FA0",
+    borderColor: "#D7B8EA",
+  },
+  tasaronline: {
+    backgroundColor: "#E6CFF2",
+    color: "#6F3FA0",
+    borderColor: "#D7B8EA",
+  },
+  tasatucasa: {
+    backgroundColor: "#FECE15",
+    color: "#111827",
+    borderColor: "#EAB308",
+  },
+  "tasar-bue": {
+    backgroundColor: "#0B5CAB",
+    color: "#FFFFFF",
+    borderColor: "#0B5CAB",
+  },
+  "venta-online": {
+    backgroundColor: "#C00000",
+    color: "#FFFFFF",
+    borderColor: "#C00000",
+  },
+  "venta-alquilada": {
+    backgroundColor: "#7030A0",
+    color: "#FFFFFF",
+    borderColor: "#7030A0",
+  },
+  visita: {
+    backgroundColor: "#E5E7EB",
+    color: "#111827",
+    borderColor: "#D1D5DB",
+  },
+  zona: {
+    backgroundColor: "#E5E7EB",
+    color: "#111827",
+    borderColor: "#D1D5DB",
+  },
+  oficina: {
+    backgroundColor: "#E5E7EB",
+    color: "#111827",
+    borderColor: "#D1D5DB",
+  },
+  portero: {
+    backgroundColor: "#E5E7EB",
+    color: "#111827",
+    borderColor: "#D1D5DB",
+  },
+};
+
+function normalizeSourceKey(source: string | null | undefined) {
+  return (source || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "-");
+}
+
+function getSourceBadgeStyle(source: string | null | undefined) {
+  const key = normalizeSourceKey(source);
+
+  return (
+    SOURCE_BADGE_STYLES[key] ?? {
+      backgroundColor: "#F1F5F9",
+      color: "#475569",
+      borderColor: "#CBD5E1",
+    }
+  );
+}
+
+const MEDIO_BADGE_STYLES: Record<
+  string,
+  { backgroundColor: string; color: string; borderColor: string }
+> = {
+  presencial: {
+    backgroundColor: "#0F7A45",
+    color: "#FFFFFF",
+    borderColor: "#0F7A45",
+  },
+  videollamada: {
+    backgroundColor: "#D4EDBC",
+    color: "#118047",
+    borderColor: "#B7D99C",
+  },
+  telefono: {
+    backgroundColor: "#E5E7EB",
+    color: "#374151",
+    borderColor: "#D1D5DB",
+  },
+};
+
+const EN_VENTA_BADGE_STYLES: Record<
+  string,
+  { backgroundColor: string; color: string; borderColor: string }
+> = {
+  si: {
+    backgroundColor: "#F3B6B6",
+    color: "#FFFFFF",
+    borderColor: "#F3B6B6",
+  },
+  no: {
+    backgroundColor: "#D4EDBC",
+    color: "#288158",
+    borderColor: "#B7D99C",
+  },
+  "no-sabe": {
+    backgroundColor: "#E5E7EB",
+    color: "#374151",
+    borderColor: "#D1D5DB",
+  },
+};
+
+function normalizeBadgeKey(value: string | null | undefined) {
+  return (value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "-");
+}
+
+function getMedioBadgeStyle(value: string | null | undefined) {
+  const key = normalizeBadgeKey(value);
+
+  return (
+    MEDIO_BADGE_STYLES[key] ?? {
+      backgroundColor: "#F1F5F9",
+      color: "#475569",
+      borderColor: "#CBD5E1",
+    }
+  );
+}
+
+function getEnVentaBadgeStyle(value: string | null | undefined) {
+  const key = normalizeBadgeKey(value);
+
+  return (
+    EN_VENTA_BADGE_STYLES[key] ?? {
+      backgroundColor: "#F1F5F9",
+      color: "#475569",
+      borderColor: "#CBD5E1",
+    }
+  );
+}
 
 function fmt(d: string) {
   if (!d) return "—";
@@ -158,15 +327,32 @@ function fmt(d: string) {
   });
 }
 
+function fmtMonth(d: string) {
+  if (!d) return "—";
+  const parsed = new Date(d);
+  if (isNaN(parsed.getTime())) return "—";
+
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+
+  return `${year}-${month}`;
+}
+
 function normalizePhase(raw: string | null | undefined): Lead["phase"] {
   const value = (raw || "").toLowerCase().trim();
 
   if (value.includes("noticia")) return "noticia";
   if (value.includes("concertada")) return "concertada";
   if (value.includes("valorada")) return "valorada";
-  if (value.includes("cualificada")) return "cualificada";
   if (value.includes("encargo")) return "encargo";
-  if (value.includes("vendida") || value.includes("vender")) return "vender";
+
+  /**
+   * Legacy:
+   * - "Cualificada" ya no es fase V1, es Estado.
+   * - "Vender/Vendida" no se muestra como columna Kanban V1.
+   */
+  if (value.includes("cualificada")) return "noticia";
+  if (value.includes("vendida") || value.includes("vender")) return "encargo";
 
   return "noticia";
 }
@@ -174,12 +360,27 @@ function normalizePhase(raw: string | null | undefined): Lead["phase"] {
 function normalizeStatus(raw: string | null | undefined): Lead["status"] {
   const value = (raw || "").toLowerCase().trim();
 
-  if (value === "identificar" || value === "identificada") return "identificar";
-  if (value === "seguimiento") return "seguimiento";
-  if (value === "caliente") return "caliente";
-  if (value === "desestimada") return "desestimada";
+  if (value === "identificar" || value === "identificada") {
+    return "identificar" as Lead["status"];
+  }
 
-  return "seguimiento";
+  if (value === "cualificada") {
+    return "cualificada" as Lead["status"];
+  }
+
+  if (value === "seguimiento") {
+    return "cualificada" as Lead["status"];
+  }
+
+  if (value === "caliente") {
+    return "caliente" as Lead["status"];
+  }
+
+  if (value === "desestimada") {
+    return "desestimada" as Lead["status"];
+  }
+
+  return "identificar" as Lead["status"];
 }
 
 function normalizeValor(raw: string | null | undefined) {
@@ -189,24 +390,40 @@ function normalizeValor(raw: string | null | undefined) {
 
 function normalizeDate(raw: string | null | undefined): string {
   if (!raw) return "";
-  // Si ya está en formato yyyy-MM-dd lo devolvemos tal cual
+
   if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
-  // Intentamos parsear formatos como "11-Sep-25" o "2025-09-11T..."
+
   const parsed = new Date(raw);
   if (isNaN(parsed.getTime())) return "";
   return parsed.toISOString().slice(0, 10);
 }
 
-function mapCrmLeadToLead(row: CrmLeadRow): Lead {
+function normalizePostalId(cp: string | null | undefined): number | null {
+  const value = cp?.trim();
+  if (!value || !/^\d{5}$/.test(value)) return null;
+  return Number(value);
+}
+
+function cleanNullable(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+
+  const placeholders = new Set(["—", "-", "N/A", "Sin origen", "Sin asignar"]);
+  if (placeholders.has(trimmed)) return null;
+
+  return trimmed;
+}
+
+function mapCrmLeadToLead(row: CrmLeadRow): LeadTableRow {
   const ownerLabel =
-    row.comercial_name?.trim() ||
-    row.contact_name?.trim() ||
-    "Sin asignar";
+    row.comercial_name?.trim() || row.contact_name?.trim() || "Sin asignar";
 
   const domicilio = row.domicilio?.trim() || "—";
   const distrito = row.distrito?.trim() || "—";
   const provincia = row.provincia?.trim() || "—";
   const cp = row.cp ? String(row.cp) : "—";
+
+  const fechaNoticia = normalizeDate(row.fecha || row.created_at || "");
 
   return {
     id: String(row.id),
@@ -221,10 +438,10 @@ function mapCrmLeadToLead(row: CrmLeadRow): Lead {
     source: row.source_name?.trim() || "Sin origen",
     phase: normalizePhase(row.fase_name),
     status: normalizeStatus(row.estado),
-    fechaNoticia: normalizeDate(row.fecha || row.created_at || ""),
-    fechaContacto: "",
-    fechaValoracion: "",
-    hora: "",
+    fechaNoticia,
+    fechaContacto: normalizeDate(row.fecha_contacto),
+    fechaValoracion: normalizeDate(row.fecha_valoracion),
+    hora: row.hora ? row.hora.slice(0, 5) : "",
     planner: row.dominio_desc?.trim() || "—",
     owner: ownerLabel,
     createdAt: row.created_at || "",
@@ -235,181 +452,23 @@ function mapCrmLeadToLead(row: CrmLeadRow): Lead {
         : "—",
     notes: row.memo?.trim() || "",
     observaciones: [],
+    medio: row.medio?.trim() || "—",
+    month: fmtMonth(fechaNoticia),
+    dominio: row.dominio_desc?.trim() || "—",
+    enVenta: row.en_venta?.trim() || "No Sabe",
   };
-}
-
-function KanbanLeadCard({
-  lead,
-  onClick,
-}: {
-  lead: Lead;
-  onClick: () => void;
-}) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({
-    id: lead.id,
-    data: {
-      type: "lead",
-      leadId: lead.id,
-      phase: lead.phase,
-    },
-  });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
-  return (
-    <button
-      ref={setNodeRef}
-      type="button"
-      style={style}
-      {...attributes}
-      {...listeners}
-      onClick={onClick}
-      className={cn(
-        "w-full rounded-xl border border-border bg-card p-3 text-left shadow-sm transition hover:border-primary/30 hover:bg-accent/40",
-        isDragging && "opacity-60"
-      )}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-foreground">
-            {lead.ownerName}
-          </div>
-          <div className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
-            <MapPin className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">{lead.address}</span>
-          </div>
-        </div>
-
-        <span
-          className="inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
-          style={{
-            backgroundColor: PHASE_COLORS[lead.phase] + "1a",
-            color: PHASE_COLORS[lead.phase],
-          }}
-        >
-          {PHASE_LABELS[lead.phase]}
-        </span>
-      </div>
-
-      <div className="mt-3 grid gap-2 text-[11px] text-muted-foreground">
-        <div className="flex items-center justify-between gap-3">
-          <span className="truncate">Origen</span>
-          <span className="truncate font-medium text-foreground">{lead.source}</span>
-        </div>
-
-        <div className="flex items-center justify-between gap-3">
-          <span>Estado</span>
-          <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
-            <span
-              className={cn(
-                "h-1.5 w-1.5 rounded-full",
-                STATUS_CONFIG[lead.status].dot
-              )}
-            />
-            {STATUS_CONFIG[lead.status].label}
-          </span>
-        </div>
-
-        <div className="flex items-center justify-between gap-3">
-          <span>Valor</span>
-          <span className="font-medium text-foreground">{lead.valor}</span>
-        </div>
-
-        <div className="flex items-center justify-between gap-3">
-          <span>Fecha</span>
-          <span className="font-medium text-foreground">{fmt(lead.fechaNoticia)}</span>
-        </div>
-      </div>
-
-      <div className="mt-3 flex items-center justify-between gap-3 border-t border-border pt-3 text-[11px]">
-        <div className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
-          <Phone className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">{lead.phone}</span>
-        </div>
-        <span className="truncate text-muted-foreground">{lead.owner}</span>
-      </div>
-    </button>
-  );
-}
-
-function KanbanColumn({
-  phase,
-  leads,
-  onOpenLead,
-}: {
-  phase: Lead["phase"];
-  leads: Lead[];
-  onOpenLead: (lead: Lead) => void;
-}) {
-  const { setNodeRef, isOver } = useDroppable({
-    id: phase,
-  });
-
-  return (
-    <div className="flex min-h-[500px] w-[320px] shrink-0 flex-col rounded-2xl border border-border bg-muted/30">
-      <div className="sticky top-0 z-10 rounded-t-2xl border-b border-border bg-background/95 px-4 py-3 backdrop-blur">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <span
-              className="h-2.5 w-2.5 shrink-0 rounded-full"
-              style={{ backgroundColor: PHASE_COLORS[phase] }}
-            />
-            <span className="truncate text-sm font-semibold text-foreground">
-              {PHASE_LABELS[phase]}
-            </span>
-          </div>
-          <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-muted px-2 text-xs font-semibold text-foreground">
-            {leads.length}
-          </span>
-        </div>
-      </div>
-
-      <SortableContext
-        items={leads.map((lead) => lead.id)}
-        strategy={verticalListSortingStrategy}
-      >
-        <div
-          ref={setNodeRef}
-          className={cn(
-            "flex-1 space-y-3 overflow-y-auto p-3 transition-colors",
-            isOver && "rounded-b-2xl bg-primary/5"
-          )}
-        >
-          {leads.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-border bg-background px-3 py-6 text-center text-xs text-muted-foreground">
-              Sin leads en esta fase
-            </div>
-          ) : (
-            leads.map((lead) => (
-              <KanbanLeadCard
-                key={lead.id}
-                lead={lead}
-                onClick={() => onOpenLead(lead)}
-              />
-            ))
-          )}
-        </div>
-      </SortableContext>
-    </div>
-  );
 }
 
 export default function LeadsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
-  const [leads, setLeads] = useState<Lead[]>([]);
+  const [leads, setLeads] = useState<LeadTableRow[]>([]);
   const [loadingLeads, setLoadingLeads] = useState(true);
+  const [loadingMoreLeads, setLoadingMoreLeads] = useState(false);
+  const [totalLeadsCount, setTotalLeadsCount] = useState<number | null>(null);
+  const [hasMoreLeads, setHasMoreLeads] = useState(false);
+  const [pageError, setPageError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -417,104 +476,78 @@ export default function LeadsPage() {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState<LeadsViewMode>("table");
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    })
-  );
+  async function loadLeadsFromSupabase(options?: { append?: boolean }) {
+    const append = options?.append ?? false;
+    const from = append ? leads.length : 0;
+    const to = from + LEADS_PAGE_SIZE - 1;
 
-  async function handleKanbanDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over) return;
+    setPageError(null);
 
-    const activeLeadId = String(active.id);
-    const overId = String(over.id);
-
-    const activeLead = leads.find((lead) => lead.id === activeLeadId);
-    if (!activeLead) return;
-
-    let targetPhase: Lead["phase"] | null = null;
-
-    if (
-      overId === "noticia" ||
-      overId === "concertada" ||
-      overId === "valorada" ||
-      overId === "cualificada" ||
-      overId === "encargo" ||
-      overId === "vender"
-    ) {
-      targetPhase = overId;
+    if (append) {
+      setLoadingMoreLeads(true);
     } else {
-      const targetLead = leads.find((lead) => lead.id === overId);
-      if (targetLead) targetPhase = targetLead.phase;
+      setLoadingLeads(true);
     }
 
-    if (!targetPhase || activeLead.phase === targetPhase) return;
-
-    // Actualizamos UI inmediatamente (optimistic update)
-    setLeads((prev) =>
-      prev.map((lead) =>
-        lead.id === activeLeadId ? { ...lead, phase: targetPhase! } : lead
-      )
-    );
-
-    // Persistimos en Supabase
-    const { error } = await supabase
-      .from("opportunities")
-      .update({ fase_id: PHASE_ID_MAP[targetPhase] })
-      .eq("id", Number(activeLeadId));
-
-    if (error) {
-      console.error("Error actualizando fase en Supabase:", error);
-      // Revertimos el cambio en UI si falla
-      setLeads((prev) =>
-        prev.map((lead) =>
-          lead.id === activeLeadId ? { ...lead, phase: activeLead.phase } : lead
-        )
-      );
-    }
-  }
-
-  async function loadLeadsFromSupabase() {
-    setLoadingLeads(true);
-
-    const { data, error } = await supabase
+    const { data, error, count } = await supabase
       .from("crm_leads_view")
-      .select("*")
-      .order("created_at", { ascending: false });
+      .select("*", { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(from, to);
 
     if (error) {
       console.error("Supabase leads error:", error);
+      setPageError("No se pudieron cargar los leads. Intentá actualizar la página.");
       setLoadingLeads(false);
+      setLoadingMoreLeads(false);
       return;
     }
 
-    const mapped = (data ?? []).map((row) => mapCrmLeadToLead(row as CrmLeadRow));
-    setLeads(mapped);
+    const rows = (data ?? []) as CrmLeadRow[];
+    const mapped = rows.map((row) => mapCrmLeadToLead(row));
+    const nextTotal = count ?? (append ? leads.length + mapped.length : mapped.length);
+    const nextLoadedCount = from + mapped.length;
+    const nextFavorites = new Set(
+      rows.filter((row) => row.is_favorite).map((row) => String(row.id))
+    );
+
+    setLeads((prev) => (append ? [...prev, ...mapped] : mapped));
+    setFavoriteIds((prev) => {
+      if (!append) return nextFavorites;
+
+      const merged = new Set(prev);
+      for (const id of nextFavorites) merged.add(id);
+      return merged;
+    });
+    setTotalLeadsCount(nextTotal);
+    setHasMoreLeads(nextLoadedCount < nextTotal);
     setLoadingLeads(false);
+    setLoadingMoreLeads(false);
   }
 
   async function handleImportCsv(importedLeads: Lead[]) {
+    setPageError(null);
     if (importedLeads.length === 0) return;
 
     const rowsToInsert = importedLeads.map((lead) => ({
-      propietario: lead.ownerName || null,
-      domicilio: lead.address || null,
-      telefono: lead.phone || null,
-      tasacion: lead.valor || null,
-      estado: lead.status || null,
-      fecha: lead.fechaNoticia || null,
-      source_desc: lead.source || null,
-      comercial_user_desc: lead.owner || null,
-      dominio_desc: lead.planner || null,
-      postal_id: null,
-      fase_id: null,
+      propietario: cleanNullable(lead.ownerName),
+      domicilio: cleanNullable(lead.address),
+      telefono: cleanNullable(lead.phone),
+      tasacion: cleanNullable(lead.valor),
+      estado: cleanNullable(lead.status),
+      fecha: cleanNullable(lead.fechaNoticia),
+      source_desc: cleanNullable(lead.source),
+      comercial_user_desc: cleanNullable(lead.owner),
+      dominio_desc: cleanNullable(lead.planner),
+      postal_id: normalizePostalId(lead.cp),
+      fase_id: PHASE_ID_MAP[lead.phase] ?? 1,
       created_at: new Date().toISOString(),
-      memo: lead.notes || null,
+      memo: cleanNullable(lead.notes),
       en_venta: null,
+      medio: cleanNullable(lead.medio),
       contact_user_desc: null,
       source_id: null,
       comercial_user_id: null,
@@ -527,29 +560,36 @@ export default function LeadsPage() {
 
     if (error) {
       console.error("Error importing CSV to Supabase:", error);
+      setPageError("No se pudieron importar los leads. Revisá el archivo e intentá nuevamente.");
       return;
     }
 
-    await loadLeadsFromSupabase();
+    await loadLeadsFromSupabase({ append: false });
   }
 
   async function handleCreateLead(form: NewLeadFormData) {
+    setPageError(null);
+
     const rowsToInsert = [
       {
-        propietario: form.ownerName || null,
-        domicilio: form.address || null,
-        telefono: form.phone || null,
-        tasacion: form.valor || null,
-        estado: form.status || null,
-        fecha: form.fechaNoticia || null,
-        source_desc: form.source || null,
-        comercial_user_desc: form.owner || null,
-        dominio_desc: form.distrito || null,
-        postal_id: form.cp && !isNaN(Number(form.cp)) ? Number(form.cp) : null,
+        propietario: cleanNullable(form.ownerName),
+        domicilio: cleanNullable(form.address),
+        telefono: cleanNullable(form.phone),
+        tasacion: cleanNullable(form.valor),
+        estado: cleanNullable(form.status),
+        fecha: cleanNullable(form.fechaNoticia),
+        fecha_contacto: cleanNullable(form.fechaContacto),
+        fecha_valoracion: cleanNullable(form.fechaValoracion),
+        hora: cleanNullable(form.hora),
+        source_desc: cleanNullable(form.source),
+        comercial_user_desc: cleanNullable(form.owner),
+        dominio_desc: cleanNullable(form.planner),
+        postal_id: normalizePostalId(form.cp),
         fase_id: PHASE_ID_MAP[form.phase as Lead["phase"]] ?? 1,
         created_at: new Date().toISOString(),
-        memo: form.notes || null,
-        en_venta: null,
+        memo: cleanNullable(form.notes),
+        en_venta: cleanNullable(form.enVenta),
+        medio: cleanNullable(form.medio),
         contact_user_desc: null,
         source_id: null,
         comercial_user_id: null,
@@ -563,44 +603,84 @@ export default function LeadsPage() {
 
     if (error) {
       console.error("Error creating lead in Supabase:", error);
+      setPageError("No se pudo crear el lead. Revisá los datos e intentá nuevamente.");
       return;
     }
 
-    await loadLeadsFromSupabase();
+    await loadLeadsFromSupabase({ append: false });
   }
 
   async function handleSaveLead(next: Lead) {
+    setPageError(null);
+
     const { error } = await supabase
       .from("opportunities")
       .update({
-        propietario: next.ownerName || null,
-        domicilio: next.address || null,
-        telefono: next.phone || null,
-        tasacion: next.valor || null,
-        estado: next.status || null,
+        propietario: cleanNullable(next.ownerName),
+        domicilio: cleanNullable(next.address),
+        telefono: cleanNullable(next.phone),
+        tasacion: cleanNullable(next.valor),
+        estado: cleanNullable(next.status),
         fecha: next.fechaNoticia ? next.fechaNoticia.slice(0, 10) : null,
-        source_desc: next.source || null,
-        comercial_user_desc: next.owner || null,
-        dominio_desc: next.planner || null,
-        memo: next.notes || null,
+        fecha_contacto: next.fechaContacto ? next.fechaContacto.slice(0, 10) : null,
+        fecha_valoracion: next.fechaValoracion
+          ? next.fechaValoracion.slice(0, 10)
+          : null,
+        hora: cleanNullable(next.hora),
+        source_desc: cleanNullable(next.source),
+        comercial_user_desc: cleanNullable(next.owner),
+        dominio_desc: cleanNullable(next.planner),
+        memo: cleanNullable(next.notes),
+        medio: cleanNullable(next.medio),
+        en_venta: cleanNullable(next.enVenta),
         fase_id: PHASE_ID_MAP[next.phase] ?? 1,
-        postal_id: next.cp && !isNaN(Number(next.cp)) ? Number(next.cp) : null,
+        postal_id: normalizePostalId(next.cp),
       })
       .eq("id", Number(next.id));
 
     if (error) {
       console.error("Error actualizando lead:", error);
+      setPageError("No se pudo guardar el lead. Revisá los datos e intentá nuevamente.");
       return;
     }
 
-    await loadLeadsFromSupabase();
+    await loadLeadsFromSupabase({ append: false });
     setSelectedLead((prev) =>
       prev && prev.id === next.id ? { ...prev, ...next } : prev
     );
   }
 
+  async function handleToggleFavorite(leadId: string) {
+    setPageError(null);
+    const nextFavorite = !favoriteIds.has(leadId);
+
+    setFavoriteIds((prev) => {
+      const next = new Set(prev);
+      if (nextFavorite) next.add(leadId);
+      else next.delete(leadId);
+      return next;
+    });
+
+    const { error } = await supabase
+      .from("opportunities")
+      .update({ is_favorite: nextFavorite })
+      .eq("id", Number(leadId));
+
+    if (error) {
+      console.error("Error actualizando favorito:", error);
+      setPageError("No se pudo actualizar el favorito. Intentá nuevamente.");
+
+      setFavoriteIds((prev) => {
+        const next = new Set(prev);
+        if (nextFavorite) next.delete(leadId);
+        else next.add(leadId);
+        return next;
+      });
+    }
+  }
+
   useEffect(() => {
-    loadLeadsFromSupabase();
+    void loadLeadsFromSupabase({ append: false });
   }, []);
 
   function handleSort(key: SortKey) {
@@ -613,10 +693,14 @@ export default function LeadsPage() {
   }
 
   const filteredLeads = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
-    if (!q) return leads;
+    const baseLeads = showFavoritesOnly
+      ? leads.filter((lead) => favoriteIds.has(lead.id))
+      : leads;
 
-    return leads.filter((lead) =>
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return baseLeads;
+
+    return baseLeads.filter((lead) =>
       [
         lead.ownerName,
         lead.address,
@@ -624,9 +708,13 @@ export default function LeadsPage() {
         lead.cp,
         lead.phone,
         lead.source,
+        lead.medio,
+        lead.enVenta,
+        lead.month,
+        lead.dominio,
         lead.owner,
         PHASE_LABELS[lead.phase],
-        STATUS_CONFIG[lead.status].label,
+        (STATUS_CONFIG[lead.status] ?? STATUS_CONFIG.identificar).label,
         lead.valor,
         lead.hora ?? "",
         lead.fechaNoticia ?? "",
@@ -637,7 +725,7 @@ export default function LeadsPage() {
         .toLowerCase()
         .includes(q)
     );
-  }, [leads, searchTerm]);
+  }, [leads, searchTerm, showFavoritesOnly, favoriteIds]);
 
   const sortedLeads = useMemo(() => {
     if (!sortKey) return filteredLeads;
@@ -654,20 +742,15 @@ export default function LeadsPage() {
     });
   }, [filteredLeads, sortKey, sortDir]);
 
-  const kanbanGroups = useMemo(() => {
-    return KANBAN_PHASES.map((phase) => ({
-      phase,
-      leads: filteredLeads.filter((lead) => lead.phase === phase),
-    }));
-  }, [filteredLeads]);
+  const visibleTableLeads = sortedLeads;
 
   const visibleSelectedCount = useMemo(
-    () => sortedLeads.filter((l) => selectedIds.has(l.id)).length,
-    [sortedLeads, selectedIds]
+    () => visibleTableLeads.filter((l) => selectedIds.has(l.id)).length,
+    [visibleTableLeads, selectedIds]
   );
 
   const allVisibleSelected =
-    sortedLeads.length > 0 && visibleSelectedCount === sortedLeads.length;
+    visibleTableLeads.length > 0 && visibleSelectedCount === visibleTableLeads.length;
 
   function toggleRowSelection(id: string) {
     setSelectedIds((prev) => {
@@ -682,15 +765,16 @@ export default function LeadsPage() {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (checked) {
-        for (const lead of sortedLeads) next.add(lead.id);
+        for (const lead of visibleTableLeads) next.add(lead.id);
       } else {
-        for (const lead of sortedLeads) next.delete(lead.id);
+        for (const lead of visibleTableLeads) next.delete(lead.id);
       }
       return next;
     });
   }
 
   async function handleConfirmDelete() {
+    setPageError(null);
     const idsToDelete = Array.from(selectedIds).map((id) => Number(id));
 
     const { error } = await supabase
@@ -700,6 +784,7 @@ export default function LeadsPage() {
 
     if (error) {
       console.error("Error soft deleting leads:", error);
+      setPageError("No se pudieron eliminar los leads seleccionados. Intentá nuevamente.");
       return;
     }
 
@@ -721,7 +806,8 @@ export default function LeadsPage() {
         <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border bg-card px-6 py-2.5">
           <div className="flex items-center gap-4">
             <span className="text-xs text-muted-foreground">
-              {viewMode === "table" ? sortedLeads.length : filteredLeads.length} leads en total
+              {visibleTableLeads.length} visibles de {totalLeadsCount ?? leads.length} leads
+              {hasMoreLeads ? ` · ${leads.length} cargados` : ""}
             </span>
 
             <div className="relative">
@@ -737,6 +823,33 @@ export default function LeadsPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 w-7 p-0"
+              onClick={() => void loadLeadsFromSupabase({ append: false })}
+              disabled={loadingLeads}
+              title="Refrescar tabla"
+              aria-label="Refrescar tabla"
+            >
+              <RefreshCw
+                className={cn("h-3.5 w-3.5", loadingLeads && "animate-spin")}
+              />
+            </Button>
+
+            <Button
+              size="sm"
+              variant={showFavoritesOnly ? "default" : "outline"}
+              className="h-7 w-7 p-0"
+              onClick={() => setShowFavoritesOnly((prev) => !prev)}
+              title="Filtrar favoritos"
+              aria-label="Filtrar favoritos"
+            >
+              <Star
+                className={cn("h-3.5 w-3.5", showFavoritesOnly && "fill-current")}
+              />
+            </Button>
+
             <div className="inline-flex items-center rounded-lg border border-border bg-background p-1">
               <button
                 type="button"
@@ -808,10 +921,17 @@ export default function LeadsPage() {
           </div>
         </div>
 
+        {pageError && (
+          <div className="mx-6 mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+            {pageError}
+          </div>
+        )}
+
         {viewMode === "table" && selectionMode && selectedIds.size > 0 && (
           <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-muted/60 px-6 py-2 text-[11px]">
             <span className="text-muted-foreground">
-              {selectedIds.size} lead{selectedIds.size !== 1 ? "s" : ""} seleccionados
+              {selectedIds.size} lead{selectedIds.size !== 1 ? "s" : ""}{" "}
+              seleccionados
             </span>
 
             <Button
@@ -834,7 +954,33 @@ export default function LeadsPage() {
 
         {viewMode === "table" ? (
           <div className="relative flex-1 overflow-auto">
-            <table className="w-full border-collapse text-sm" style={{ minWidth: 1500 }}>
+            <table
+              className="border-collapse text-sm"
+              style={{ width: 2700, tableLayout: "fixed" }}
+            >
+              <colgroup>
+                {selectionMode && <col style={{ width: 44 }} />}
+                <col style={{ width: 48 }} />
+                <col style={{ width: 115 }} />
+                <col style={{ width: 135 }} />
+                <col style={{ width: 120 }} />
+                <col style={{ width: 120 }} />
+                <col style={{ width: 130 }} />
+                <col style={{ width: 85 }} />
+                <col style={{ width: 135 }} />
+                <col style={{ width: 105 }} />
+                <col style={{ width: 155 }} />
+                <col style={{ width: 155 }} />
+                <col style={{ width: 165 }} />
+                <col style={{ width: 150 }} />
+                <col style={{ width: 175 }} />
+                <col style={{ width: 95 }} />
+                <col style={{ width: 130 }} />
+                <col style={{ width: 310 }} />
+                <col style={{ width: 230 }} />
+                <col style={{ width: 170 }} />
+                <col style={{ width: 130 }} />
+              </colgroup>
               <thead className="sticky top-0 z-20 bg-card">
                 <tr className="border-b border-border bg-card/95 text-left backdrop-blur">
                   {selectionMode && (
@@ -849,23 +995,31 @@ export default function LeadsPage() {
                     </th>
                   )}
 
+                  <th className="w-9 px-3 py-2.5">
+                    <span className="sr-only">Favorito</span>
+                  </th>
+
                   {(
                     [
-                      { label: "Propietario", key: "ownerName" },
-                      { label: "Domicilio", key: "address" },
-                      { label: "Distrito", key: "distrito" },
-                      { label: "CP", key: "cp" },
-                      { label: "Valor", key: "valor" },
-                      { label: "Teléfono", key: "phone" },
-                      { label: "Origen", key: "source" },
                       { label: "Fase", key: "phase" },
                       { label: "Estado", key: "status" },
                       { label: "F. Noticia", key: "fechaNoticia" },
                       { label: "F. Contacto", key: "fechaContacto" },
                       { label: "F. Valoración", key: "fechaValoracion" },
                       { label: "Hora", key: "hora" },
+                      { label: "Medio", key: "medio" },
+                      { label: "Month", key: "month" },
+                      { label: "Dominio", key: "dominio" },
                       { label: "Planner", key: "planner" },
                       { label: "Owner", key: "owner" },
+                      { label: "Origen", key: "source" },
+                      { label: "Distrito", key: "distrito" },
+                      { label: "CP", key: "cp" },
+                      { label: "Valor", key: "valor" },
+                      { label: "Domicilio", key: "address" },
+                      { label: "Propietario", key: "ownerName" },
+                      { label: "Teléfono", key: "phone" },
+                      { label: "En Venta", key: "enVenta" },
                     ] as { label: string; key: SortKey }[]
                   ).map(({ label, key }) => (
                     <th
@@ -883,7 +1037,7 @@ export default function LeadsPage() {
               </thead>
 
               <tbody className="bg-background">
-                {sortedLeads.map((lead, i) => (
+                {visibleTableLeads.map((lead, i) => (
                   <tr
                     key={lead.id}
                     onClick={() => setSelectedLead(lead)}
@@ -910,47 +1064,44 @@ export default function LeadsPage() {
                     )}
 
                     <td className="px-3 py-2.5">
-                      <span className="whitespace-nowrap font-medium text-foreground">
-                        {lead.ownerName}
-                      </span>
-                    </td>
-
-                    <td className="max-w-[180px] truncate whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
-                      {lead.address}
-                    </td>
-
-                    <td className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
-                      {lead.distrito}
-                    </td>
-
-                    <td className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
-                      {lead.cp}
-                    </td>
-
-                    <td className="whitespace-nowrap px-3 py-2.5 text-xs font-medium text-foreground">
-                      {lead.valor}
-                    </td>
-
-                    <td className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
-                      {lead.phone}
-                    </td>
-
-                    <td className="px-3 py-2.5">
-                      <span className="inline-flex items-center rounded-full border border-border bg-muted/60 px-2 py-0.5 text-[11px] whitespace-nowrap text-muted-foreground">
-                        {lead.source}
-                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleToggleFavorite(lead.id);
+                        }}
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                        aria-label={
+                          favoriteIds.has(lead.id)
+                            ? "Quitar de favoritos"
+                            : "Marcar como favorito"
+                        }
+                        title={
+                          favoriteIds.has(lead.id)
+                            ? "Quitar de favoritos"
+                            : "Marcar como favorito"
+                        }
+                      >
+                        <Star
+                          className={cn(
+                            "h-3.5 w-3.5",
+                            favoriteIds.has(lead.id) && "fill-current text-amber-500"
+                          )}
+                        />
+                      </button>
                     </td>
 
                     <td className="px-3 py-2.5">
                       <span
                         className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium whitespace-nowrap"
                         style={{
-                          backgroundColor: PHASE_COLORS[lead.phase] + "1a",
-                          color: PHASE_COLORS[lead.phase],
+                          backgroundColor:
+                            (PHASE_COLORS[lead.phase] ?? "#94a3b8") + "1a",
+                          color: PHASE_COLORS[lead.phase] ?? "#64748b",
                         }}
                       >
                         <Circle className="h-1.5 w-1.5 fill-current" />
-                        {PHASE_LABELS[lead.phase]}
+                        {PHASE_LABELS[lead.phase] ?? lead.phase}
                       </span>
                     </td>
 
@@ -959,10 +1110,10 @@ export default function LeadsPage() {
                         <span
                           className={cn(
                             "h-1.5 w-1.5 rounded-full shrink-0",
-                            STATUS_CONFIG[lead.status].dot
+                            (STATUS_CONFIG[lead.status] ?? STATUS_CONFIG.identificar).dot
                           )}
                         />
-                        {STATUS_CONFIG[lead.status].label}
+                        {(STATUS_CONFIG[lead.status] ?? STATUS_CONFIG.identificar).label}
                       </span>
                     </td>
 
@@ -982,7 +1133,28 @@ export default function LeadsPage() {
                       {lead.hora || "—"}
                     </td>
 
+                    <td className="px-3 py-2.5">
+                      {lead.medio && lead.medio !== "—" ? (
+                        <span
+                          className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap"
+                          style={getMedioBadgeStyle(lead.medio)}
+                        >
+                          {lead.medio}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </td>
+
                     <td className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
+                      {lead.month}
+                    </td>
+
+                    <td className="max-w-[110px] truncate whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
+                      {lead.dominio}
+                    </td>
+
+                    <td className="max-w-[110px] truncate whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
                       {lead.planner ?? "—"}
                     </td>
 
@@ -995,35 +1167,94 @@ export default function LeadsPage() {
                             .map((n) => n[0])
                             .join("")}
                         </span>
-                        <span className="text-xs text-muted-foreground">
+                        <span className="max-w-[125px] truncate text-xs text-muted-foreground">
                           {lead.owner}
                         </span>
                       </div>
                     </td>
+
+                    <td className="px-3 py-2.5">
+                      <span
+                        className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap"
+                        style={getSourceBadgeStyle(lead.source)}
+                      >
+                        {lead.source}
+                      </span>
+                    </td>
+
+                    <td className="truncate whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
+                      {lead.distrito}
+                    </td>
+
+                    <td className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
+                      {lead.cp}
+                    </td>
+
+                    <td className="whitespace-nowrap px-3 py-2.5 text-xs font-medium text-foreground">
+                      {lead.valor}
+                    </td>
+
+                    <td className="truncate whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
+                      {lead.address}
+                    </td>
+
+                    <td className="truncate whitespace-nowrap px-3 py-2.5">
+                      <span className="font-medium text-foreground">
+                        {lead.ownerName}
+                      </span>
+                    </td>
+
+                    <td className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
+                      {lead.phone}
+                    </td>
+
+                    <td className="px-3 py-2.5">
+                      <span
+                        className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap"
+                        style={getEnVentaBadgeStyle(lead.enVenta)}
+                      >
+                        {lead.enVenta}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
+              {visibleTableLeads.length === 0 && (
+                <tbody>
+                  <tr>
+                    <td
+                      colSpan={selectionMode ? 21 : 20}
+                      className="px-6 py-10 text-center text-sm text-muted-foreground"
+                    >
+                      No hay leads que coincidan con la búsqueda.
+                    </td>
+                  </tr>
+                </tbody>
+              )}
             </table>
+
+            {hasMoreLeads && (
+              <div className="flex justify-center border-t border-border bg-background px-6 py-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void loadLeadsFromSupabase({ append: true })}
+                  disabled={loadingMoreLeads}
+                  className="h-8 text-xs font-semibold"
+                >
+                  {loadingMoreLeads ? "Cargando..." : "Ver más"}
+                </Button>
+              </div>
+            )}
           </div>
         ) : (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCorners}
-            onDragEnd={handleKanbanDragEnd}
-          >
-            <div className="flex-1 overflow-x-auto overflow-y-hidden px-6 py-5">
-              <div className="flex h-full gap-4">
-                {kanbanGroups.map(({ phase, leads }) => (
-                  <KanbanColumn
-                    key={phase}
-                    phase={phase}
-                    leads={leads}
-                    onOpenLead={setSelectedLead}
-                  />
-                ))}
-              </div>
-            </div>
-          </DndContext>
+          <div className="flex-1 overflow-x-auto overflow-y-hidden px-6 py-5">
+            <KanbanBoard
+              leads={filteredLeads.filter((lead) => VALID_PHASES.includes(lead.phase))}
+              onOpenLead={(lead) => setSelectedLead(lead)}
+            />
+          </div>
         )}
       </main>
 
