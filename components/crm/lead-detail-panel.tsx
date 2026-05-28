@@ -144,6 +144,38 @@ function fmtShort(d: string) {
   });
 }
 
+function fmtDateTimeShort(d: string) {
+  if (!d) return "—";
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return "—";
+  return dt.toLocaleString("es-ES", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function toHistoryCreatedAt(value: string) {
+  if (!value) return new Date().toISOString();
+
+  const parsed = new Date(value);
+  if (!isNaN(parsed.getTime())) return parsed.toISOString();
+
+  return `${value}T00:00:00.000Z`;
+}
+
+function stringFromUnknown(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function cleanUserDisplayName(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  return trimmed.includes("@") ? trimmed.split("@")[0] : trimmed;
+}
+
 type HistoryEventType = "note" | "field_change";
 
 type LeadHistoryEvent = {
@@ -177,11 +209,7 @@ const LEAD_DETAIL_STATUS_OPTIONS = [
   { value: "desestimada", label: "Desestimada" },
 ];
 
-const LEAD_DETAIL_MEDIO_OPTIONS = [
-  "Presencial",
-  "Videollamada",
-  "Teléfono",
-];
+const LEAD_DETAIL_MEDIO_OPTIONS = ["Presencial", "Videollamada", "Teléfono"];
 
 const LEAD_DETAIL_EN_VENTA_OPTIONS = ["SI", "NO", "No Sabe"];
 
@@ -219,7 +247,6 @@ function getStatusConfig(status: string) {
     STATUS_CONFIG.identificar
   );
 }
-
 
 function normalizeValue(v: unknown): string {
   if (v === null || v === undefined) return "";
@@ -547,7 +574,10 @@ function EditLeadModal({
 
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs font-medium">En Venta</Label>
-            <Select value={form.enVenta ?? "No Sabe"} onValueChange={(v) => set("enVenta", v)}>
+            <Select
+              value={form.enVenta ?? "No Sabe"}
+              onValueChange={(v) => set("enVenta", v)}
+            >
               <SelectTrigger className="h-8 text-sm">
                 <SelectValue placeholder="Seleccionar" />
               </SelectTrigger>
@@ -594,8 +624,13 @@ function EditLeadModal({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="planner" className="text-xs font-medium">Planner</Label>
-            <Select value={form.planner ?? ""} onValueChange={(v) => set("planner", v)}>
+            <Label htmlFor="planner" className="text-xs font-medium">
+              Planner
+            </Label>
+            <Select
+              value={form.planner ?? ""}
+              onValueChange={(v) => set("planner", v)}
+            >
               <SelectTrigger id="planner" className="h-8 text-sm">
                 <SelectValue placeholder="Seleccionar planner" />
               </SelectTrigger>
@@ -700,20 +735,68 @@ export function LeadDetailPanel({
   onSaveLead,
 }: LeadDetailPanelProps) {
   const { userWithRole } = useUser();
+  const [authUserName, setAuthUserName] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadAuthUserName() {
+      const { data } = await supabase.auth.getUser();
+      const authUser = data.user;
+      const metadata = (authUser?.user_metadata ?? {}) as Record<string, unknown>;
+
+      const candidate =
+        stringFromUnknown(metadata.full_name) ||
+        stringFromUnknown(metadata.display_name) ||
+        stringFromUnknown(metadata.name) ||
+        stringFromUnknown(metadata.nombre) ||
+        stringFromUnknown(authUser?.email);
+
+      if (mounted) {
+        setAuthUserName(cleanUserDisplayName(candidate));
+      }
+    }
+
+    void loadAuthUserName();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const currentUserName = useMemo(() => {
     const userRecord = userWithRole as unknown as {
       name?: string | null;
+      full_name?: string | null;
+      display_name?: string | null;
+      nombre?: string | null;
+      username?: string | null;
       user?: string | null;
       email?: string | null;
+      user_metadata?: {
+        name?: string | null;
+        full_name?: string | null;
+        display_name?: string | null;
+      } | null;
     } | null;
 
-    return (
+    const candidate =
+      userRecord?.full_name?.trim() ||
+      userRecord?.display_name?.trim() ||
+      userRecord?.nombre?.trim() ||
       userRecord?.name?.trim() ||
+      userRecord?.user_metadata?.full_name?.trim() ||
+      userRecord?.user_metadata?.display_name?.trim() ||
+      userRecord?.user_metadata?.name?.trim() ||
+      userRecord?.username?.trim() ||
       userRecord?.user?.trim() ||
       userRecord?.email?.trim() ||
-      "Usuario"
-    );
-  }, [userWithRole]);
+      authUserName ||
+      "Usuario";
+
+    return cleanUserDisplayName(candidate);
+  }, [userWithRole, authUserName]);
+
   const [editOpen, setEditOpen] = useState(false);
   const [obsText, setObsText] = useState("");
   const [obsError, setObsError] = useState<string | null>(null);
@@ -724,44 +807,42 @@ export function LeadDetailPanel({
   const [historyByLead, setHistoryByLead] = useState<
     Record<string, LeadHistoryEvent[]>
   >({});
-  const [overridesByLead, setOverridesByLead] = useState<Record<string, Partial<Lead>>>({});
+  const [overridesByLead, setOverridesByLead] = useState<
+    Record<string, Partial<Lead>>
+  >({});
 
-// Carga observaciones/gestiones desde opportunity_contacts cuando cambia el lead
-useEffect(() => {
-  if (!lead) return;
-
-  async function fetchObservations() {
+  useEffect(() => {
     if (!lead) return;
-    const { data, error } = await supabase
-      .from("opportunity_contacts")
-      .select("id, created_at, fecha, memo, resultado")
-      .eq("oportunity_id", Number(lead.id))
-      .order("fecha", { ascending: false })
-      .order("created_at", { ascending: false });
 
-    if (error) {
-      console.error("Error cargando observaciones:", error);
-      return;
+    async function fetchObservations() {
+      if (!lead) return;
+
+      const { data, error } = await supabase
+        .from("opportunity_contacts")
+        .select("id, created_at, fecha, memo, resultado")
+        .eq("oportunity_id", Number(lead.id))
+        .order("fecha", { ascending: false })
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Error cargando observaciones:", error);
+        return;
+      }
+
+      const mapped = ((data ?? []) as OpportunityContactRow[]).map((row) => ({
+        id: String(row.id),
+        date: row.created_at ?? row.fecha ?? new Date().toISOString(),
+        text: row.memo?.trim() || "Sin detalle",
+      }));
+
+      setLocalObsByLead((prev) => ({
+        ...prev,
+        [lead.id]: mapped,
+      }));
     }
 
-    const mapped = ((data ?? []) as OpportunityContactRow[]).map((row) => ({
-      id: String(row.id),
-      date:
-        row.fecha ??
-        row.created_at?.slice(0, 10) ??
-        new Date().toISOString().slice(0, 10),
-      text: row.memo?.trim() || "Sin detalle",
-    }));
-
-    // Reemplazamos las observaciones locales con las de Supabase
-    setLocalObsByLead((prev) => ({
-      ...prev,
-      [lead.id]: mapped,
-    }));
-  }
-
-  void fetchObservations();
-}, [lead?.id]);
+    void fetchObservations();
+  }, [lead?.id]);
 
   const effectiveLead = useMemo(() => {
     if (!lead) return null;
@@ -779,15 +860,18 @@ useEffect(() => {
 
   const allHistory: LeadHistoryEvent[] = useMemo(() => {
     if (!effectiveLead) return [];
+
     const noteEvents: LeadHistoryEvent[] = allObs.map((o) => ({
       id: `note-${o.id}`,
       leadId: effectiveLead.id,
       type: "note",
-      createdAt: `${o.date || new Date().toISOString().slice(0, 10)}T00:00:00.000Z`,
+      createdAt: toHistoryCreatedAt(o.date),
       createdBy: currentUserName,
       noteText: o.text,
     }));
+
     const fieldEvents = historyByLead[effectiveLead.id] ?? [];
+
     return [...fieldEvents, ...noteEvents].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
@@ -821,10 +905,7 @@ useEffect(() => {
       const savedRow = data as OpportunityContactRow;
       const saved: Observacion = {
         id: String(savedRow.id),
-        date:
-          savedRow.fecha ??
-          savedRow.created_at?.slice(0, 10) ??
-          new Date().toISOString().slice(0, 10),
+        date: savedRow.created_at ?? savedRow.fecha ?? new Date().toISOString(),
         text: savedRow.memo?.trim() || trimmed,
       };
 
@@ -967,7 +1048,9 @@ useEffect(() => {
                     <IconRow icon={MapPin}>
                       <Row label="Domicilio">
                         {effectiveLead.address}
-                        {effectiveLead.distrito ? `, ${effectiveLead.distrito}` : ""}
+                        {effectiveLead.distrito
+                          ? `, ${effectiveLead.distrito}`
+                          : ""}
                         {effectiveLead.cp ? ` (${effectiveLead.cp})` : ""}
                       </Row>
                     </IconRow>
@@ -978,11 +1061,15 @@ useEffect(() => {
                   </IconRow>
 
                   <IconRow icon={Euro}>
-                    <Row label="Valor">{formatEuroValue(effectiveLead.valor) || "—"}</Row>
+                    <Row label="Valor">
+                      {formatEuroValue(effectiveLead.valor) || "—"}
+                    </Row>
                   </IconRow>
 
                   <IconRow icon={User}>
-                    <Row label="Owner / Agente">{effectiveLead.owner || "—"}</Row>
+                    <Row label="Owner / Agente">
+                      {effectiveLead.owner || "—"}
+                    </Row>
                   </IconRow>
 
                   <IconRow icon={User}>
@@ -993,9 +1080,10 @@ useEffect(() => {
                     <Row label="Origen">{effectiveLead.source || "—"}</Row>
                   </IconRow>
 
-
                   <IconRow icon={Tag}>
-                    <Row label="En Venta">{effectiveLead.enVenta || "No Sabe"}</Row>
+                    <Row label="En Venta">
+                      {effectiveLead.enVenta || "No Sabe"}
+                    </Row>
                   </IconRow>
                 </div>
               </div>
@@ -1009,6 +1097,7 @@ useEffect(() => {
                     {fmtDate(effectiveLead.fechaNoticia)}
                   </span>
                 </div>
+
                 <div className="flex flex-col gap-1 rounded-lg border border-border bg-background/60 p-3">
                   <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                     F. Contacto
@@ -1017,6 +1106,7 @@ useEffect(() => {
                     {fmtDate(effectiveLead.fechaContacto)}
                   </span>
                 </div>
+
                 <div className="flex flex-col gap-1 rounded-lg border border-border bg-background/60 p-3">
                   <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                     F. Valoración
@@ -1025,6 +1115,7 @@ useEffect(() => {
                     {fmtDate(effectiveLead.fechaValoracion)}
                   </span>
                 </div>
+
                 <div className="flex flex-col gap-1 rounded-lg border border-border bg-background/60 p-3">
                   <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                     Hora
@@ -1033,6 +1124,7 @@ useEffect(() => {
                     {effectiveLead.hora || "—"}
                   </span>
                 </div>
+
                 <div className="flex flex-col gap-1 rounded-lg border border-border bg-background/60 p-3">
                   <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                     Medio
@@ -1110,7 +1202,10 @@ useEffect(() => {
                       aria-hidden="true"
                     />
                     {allHistory.map((ev) => (
-                      <div key={ev.id} className="relative flex gap-3 pb-4 last:pb-0">
+                      <div
+                        key={ev.id}
+                        className="relative flex gap-3 pb-4 last:pb-0"
+                      >
                         <div
                           className={cn(
                             "relative z-10 mt-1 h-3.5 w-3.5 shrink-0 rounded-full border-2 bg-card",
@@ -1120,12 +1215,16 @@ useEffect(() => {
                           )}
                         />
                         <div className="flex flex-col gap-1 flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <Clock className="h-3 w-3 shrink-0 text-muted-foreground" />
-                            <time className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">
-                              {fmtShort(ev.createdAt)}
-                            </time>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground whitespace-nowrap">
+                              <Clock className="h-3 w-3 shrink-0 text-muted-foreground" />
+                              <time>{fmtDateTimeShort(ev.createdAt)}</time>
+                            </span>
+                            <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">
+                              por {ev.createdBy || "Usuario"}
+                            </span>
                           </div>
+
                           {ev.type === "note" ? (
                             <p className="text-sm text-foreground leading-relaxed rounded-md border border-border bg-muted/30 px-3 py-2">
                               {ev.noteText}

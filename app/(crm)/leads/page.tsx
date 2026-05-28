@@ -136,13 +136,56 @@ function getValue(lead: LeadTableRow, key: SortKey): string | number {
   return String(v).toLowerCase();
 }
 
-const STATUS_CONFIG: Record<string, { label: string; dot: string }> = {
-  identificar: { label: "Identificada", dot: "bg-violet-500" },
-  cualificada: { label: "Cualificada", dot: "bg-emerald-500" },
-  seguimiento: { label: "Cualificada", dot: "bg-emerald-500" },
-  caliente: { label: "Caliente", dot: "bg-orange-500" },
-  desestimada: { label: "Desestimada", dot: "bg-muted-foreground" },
+const STATUS_CONFIG: Record<
+  string,
+  {
+    label: string;
+    dot: string;
+    backgroundColor: string;
+    color: string;
+    borderColor: string;
+  }
+> = {
+  identificar: {
+    label: "Identificada",
+    dot: "bg-violet-500",
+    backgroundColor: "#E5E7EB",
+    color: "#374151",
+    borderColor: "#D1D5DB",
+  },
+  cualificada: {
+    label: "Cualificada",
+    dot: "bg-emerald-500",
+    backgroundColor: "#D4EDBC",
+    color: "#288158",
+    borderColor: "#B7D99C",
+  },
+  seguimiento: {
+    label: "Cualificada",
+    dot: "bg-emerald-500",
+    backgroundColor: "#D4EDBC",
+    color: "#288158",
+    borderColor: "#B7D99C",
+  },
+  caliente: {
+    label: "Caliente",
+    dot: "bg-orange-500",
+    backgroundColor: "#B32400",
+    color: "#FFFFFF",
+    borderColor: "#B32400",
+  },
+  desestimada: {
+    label: "Desestimada",
+    dot: "bg-muted-foreground",
+    backgroundColor: "#4B3820",
+    color: "#FDE68A",
+    borderColor: "#4B3820",
+  },
 };
+
+function getStatusConfig(status: string | null | undefined) {
+  return STATUS_CONFIG[status || "identificar"] ?? STATUS_CONFIG.identificar;
+}
 
 const SOURCE_BADGE_STYLES: Record<
   string,
@@ -714,7 +757,7 @@ export default function LeadsPage() {
         lead.dominio,
         lead.owner,
         PHASE_LABELS[lead.phase],
-        (STATUS_CONFIG[lead.status] ?? STATUS_CONFIG.identificar).label,
+        getStatusConfig(lead.status).label,
         lead.valor,
         lead.hora ?? "",
         lead.fechaNoticia ?? "",
@@ -1106,15 +1149,23 @@ export default function LeadsPage() {
                     </td>
 
                     <td className="px-3 py-2.5">
-                      <span className="inline-flex items-center gap-1.5 text-[11px] font-medium whitespace-nowrap">
-                        <span
-                          className={cn(
-                            "h-1.5 w-1.5 rounded-full shrink-0",
-                            (STATUS_CONFIG[lead.status] ?? STATUS_CONFIG.identificar).dot
-                          )}
-                        />
-                        {(STATUS_CONFIG[lead.status] ?? STATUS_CONFIG.identificar).label}
-                      </span>
+                      {(() => {
+                        const statusConfig = getStatusConfig(lead.status);
+
+                        return (
+                          <span
+                            className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap"
+                            style={{
+                              backgroundColor: statusConfig.backgroundColor,
+                              color: statusConfig.color,
+                              borderColor: statusConfig.borderColor,
+                            }}
+                          >
+                            <Circle className="h-1.5 w-1.5 fill-current" />
+                            {statusConfig.label}
+                          </span>
+                        );
+                      })()}
                     </td>
 
                     <td className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">

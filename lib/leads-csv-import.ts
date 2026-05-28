@@ -198,6 +198,36 @@ function normalizeSource(value: string): string {
   return match ?? (value?.trim() ? value.trim() : "Otro");
 }
 
+function normalizeCsvDateToIsoDate(value: string | undefined | null): string {
+  const raw = (value || "").trim();
+  if (!raw) return "";
+
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  }
+
+  const dottedMatch = raw.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/);
+  if (dottedMatch) {
+    const day = dottedMatch[1].padStart(2, "0");
+    const month = dottedMatch[2].padStart(2, "0");
+    const year = dottedMatch[3].length === 2 ? `20${dottedMatch[3]}` : dottedMatch[3];
+
+    return `${year}-${month}-${day}`;
+  }
+
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, "0");
+    const day = String(parsed.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  }
+
+  return "";
+}
+
 export type RowValidationResult = {
   valid: boolean;
   missingRequired: ImportTargetField[];
@@ -238,9 +268,9 @@ export function buildLeadFromMapped(
   const distrito = mapped.distrito?.trim() || "";
   const cp = mapped.cp?.trim() || "";
 
-  const fechaNoticia = mapped.fechaNoticia?.trim() || now;
-  const fechaContacto = mapped.fechaContacto?.trim() || "";
-  const fechaValoracion = mapped.fechaValoracion?.trim() || "";
+  const fechaNoticia = normalizeCsvDateToIsoDate(mapped.fechaNoticia) || now;
+  const fechaContacto = normalizeCsvDateToIsoDate(mapped.fechaContacto);
+  const fechaValoracion = normalizeCsvDateToIsoDate(mapped.fechaValoracion);
 
   const phase = mapped.phase ? normalizePhase(mapped.phase) : "noticia";
   // If address is missing, force status to "Identificar" even if Estado isn't mapped.
