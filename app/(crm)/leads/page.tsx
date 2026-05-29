@@ -346,6 +346,49 @@ const MEDIO_BADGE_STYLES: Record<
   },
 };
 
+const DOMINIO_BADGE_STYLES: Record<
+  string,
+  { backgroundColor: string; color: string; borderColor: string }
+> = {
+  proptech: {
+    backgroundColor: "#DBEAFE",
+    color: "#1D4ED8",
+    borderColor: "#BFDBFE",
+  },
+  alcorcon: {
+    backgroundColor: "#EDE9FE",
+    color: "#6D28D9",
+    borderColor: "#DDD6FE",
+  },
+  chamartin: {
+    backgroundColor: "#D1FAE5",
+    color: "#047857",
+    borderColor: "#A7F3D0",
+  },
+  mostoles: {
+    backgroundColor: "#FEF3C7",
+    color: "#92400E",
+    borderColor: "#FDE68A",
+  },
+  investment: {
+    backgroundColor: "#FCE7F3",
+    color: "#BE185D",
+    borderColor: "#FBCFE8",
+  },
+};
+
+function getDominioBadgeStyle(value: string | null | undefined) {
+  const key = normalizeBadgeKey(value);
+
+  return (
+    DOMINIO_BADGE_STYLES[key] ?? {
+      backgroundColor: "#F1F5F9",
+      color: "#475569",
+      borderColor: "#CBD5E1",
+    }
+  );
+}
+
 const EN_VENTA_BADGE_STYLES: Record<
   string,
   { backgroundColor: string; color: string; borderColor: string }
@@ -531,8 +574,9 @@ function cleanNullable(value: string | null | undefined): string | null {
 }
 
 function mapCrmLeadToLead(row: CrmLeadRow): LeadTableRow {
-  const ownerLabel =
-    row.comercial_name?.trim() || row.contact_name?.trim() || "Sin asignar";
+  const ownerLabel = row.comercial_name?.trim() || "Sin comercial";
+  const plannerLabel = row.contact_name?.trim() || "—";
+  const dominioLabel = row.dominio_desc?.trim() || "—";
 
   const domicilio = row.domicilio?.trim() || "—";
   const distrito = row.distrito?.trim() || "—";
@@ -558,7 +602,7 @@ function mapCrmLeadToLead(row: CrmLeadRow): LeadTableRow {
     fechaContacto: normalizeDate(row.fecha_contacto),
     fechaValoracion: normalizeDate(row.fecha_valoracion),
     hora: row.hora ? row.hora.slice(0, 5) : "",
-    planner: row.dominio_desc?.trim() || "—",
+    planner: plannerLabel,
     owner: ownerLabel,
     createdAt: row.created_at || "",
     assignedUser: ownerLabel,
@@ -570,7 +614,7 @@ function mapCrmLeadToLead(row: CrmLeadRow): LeadTableRow {
     observaciones: [],
     medio: row.medio?.trim() || "—",
     month: fmtMonth(fechaNoticia),
-    dominio: row.dominio_desc?.trim() || "—",
+    dominio: dominioLabel,
     enVenta: row.en_venta?.trim() || "No Sabe",
   };
 }
@@ -711,14 +755,14 @@ export default function LeadsPage() {
       fecha: cleanNullable(lead.fechaNoticia),
       source_desc: cleanNullable(lead.source),
       comercial_user_desc: cleanNullable(lead.owner),
-      dominio_desc: cleanNullable(lead.planner),
+      contact_user_desc: cleanNullable(lead.planner),
+      dominio_desc: cleanNullable((lead as Lead & { dominio?: string | null }).dominio),
       postal_id: normalizePostalId(lead.cp),
       fase_id: phaseIdMap[lead.phase] ?? PHASE_ID_MAP[lead.phase] ?? 1,
       created_at: new Date().toISOString(),
       memo: cleanNullable(lead.notes),
       en_venta: null,
       medio: cleanNullable(lead.medio),
-      contact_user_desc: null,
       source_id: null,
       comercial_user_id: null,
       contact_user_id: null,
@@ -755,14 +799,14 @@ export default function LeadsPage() {
         hora: cleanNullable(form.hora),
         source_desc: cleanNullable(form.source),
         comercial_user_desc: cleanNullable(form.owner),
-        dominio_desc: cleanNullable(form.planner),
+        contact_user_desc: cleanNullable(form.planner),
+        dominio_desc: cleanNullable((form as NewLeadFormData & { dominio?: string | null }).dominio),
         postal_id: normalizePostalId(form.cp),
         fase_id: resolvedPhaseId,
         created_at: new Date().toISOString(),
         memo: cleanNullable(form.notes),
         en_venta: cleanNullable(form.enVenta),
         medio: cleanNullable(form.medio),
-        contact_user_desc: null,
         source_id: null,
         comercial_user_id: null,
         contact_user_id: null,
@@ -786,12 +830,7 @@ export default function LeadsPage() {
     setPageError(null);
 
     const resolvedPhaseId = await resolvePhaseId(next.phase);
-
-    console.log("Saving lead phase", {
-      leadId: next.id,
-      phase: next.phase,
-      resolvedPhaseId,
-    });
+    const nextWithDominio = next as Lead & { dominio?: string | null };
 
     const updatePayload = {
       propietario: cleanNullable(next.ownerName),
@@ -807,7 +846,8 @@ export default function LeadsPage() {
       hora: cleanNullable(next.hora),
       source_desc: cleanNullable(next.source),
       comercial_user_desc: cleanNullable(next.owner),
-      dominio_desc: cleanNullable(next.planner),
+      contact_user_desc: cleanNullable(next.planner),
+      dominio_desc: cleanNullable(nextWithDominio.dominio),
       memo: cleanNullable(next.notes),
       medio: cleanNullable(next.medio),
       en_venta: cleanNullable(next.enVenta),
@@ -819,48 +859,23 @@ export default function LeadsPage() {
       .from("opportunities")
       .update(updatePayload)
       .eq("id", Number(next.id))
-      .select("id, fase_id");
-
-    console.log("Updated opportunity", {
-      updatePayload,
-      updatedRows,
-      error,
-    });
+      .select("*");
 
     if (error) {
       console.error("Error actualizando lead:", error);
-      setPageError(
-        `No se pudo guardar el lead. Error Supabase: ${error.message}`
-      );
-      return;
+      const message = `No se pudo guardar el lead. Error Supabase: ${error.message}`;
+      setPageError(message);
+      throw new Error(message);
     }
 
     const updatedOpportunity = updatedRows?.[0];
 
     if (!updatedOpportunity) {
-      console.error("Supabase no devolvió fila actualizada", {
-        leadId: next.id,
-        updatePayload,
-        updatedRows,
-      });
-
-      setPageError(
-        "Supabase no devolvió la fila actualizada. Puede haber un problema de permisos/RLS o el ID no coincide."
-      );
-      return;
-    }
-
-    if (updatedOpportunity.fase_id !== resolvedPhaseId) {
-      console.error("La fase no quedó guardada correctamente", {
-        expected: resolvedPhaseId,
-        received: updatedOpportunity.fase_id,
-        updatedOpportunity,
-      });
-
-      setPageError(
-        `La fase no quedó guardada. Esperado: ${resolvedPhaseId}, recibido: ${updatedOpportunity.fase_id}`
-      );
-      return;
+      const message =
+        "Supabase no devolvió la fila actualizada. Puede haber un problema de permisos/RLS o el ID no coincide.";
+      console.error(message, { leadId: next.id, updatePayload, updatedRows });
+      setPageError(message);
+      throw new Error(message);
     }
 
     const { data: savedRows, error: readBackError } = await supabase
@@ -868,25 +883,18 @@ export default function LeadsPage() {
       .select("*")
       .eq("id", Number(next.id));
 
-    console.log("Read back crm_leads_view", {
-      savedRows,
-      readBackError,
-    });
-
     if (readBackError) {
       console.error("Error leyendo lead actualizado:", readBackError);
-
-      setPageError(
-        `El lead se guardó, pero no se pudo leer la vista actualizada: ${readBackError.message}`
-      );
-      return;
+      const message = `El lead se guardó, pero no se pudo leer la vista actualizada: ${readBackError.message}`;
+      setPageError(message);
+      throw new Error(message);
     }
 
     const savedRow = savedRows?.[0] as CrmLeadRow | undefined;
+    const mappedLead = savedRow ? mapCrmLeadToLead(savedRow) : next;
 
     await loadLeadsFromSupabase({ append: false });
-
-    setSelectedLead(savedRow ? mapCrmLeadToLead(savedRow) : next);
+    setSelectedLead(mappedLead);
   }
 
   async function handleToggleFavorite(leadId: string) {
@@ -1407,8 +1415,17 @@ export default function LeadsPage() {
                       {lead.month}
                     </td>
 
-                    <td className="max-w-[110px] truncate whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
-                      {lead.dominio}
+                    <td className="px-3 py-2.5">
+                      {lead.dominio && lead.dominio !== "—" ? (
+                        <span
+                          className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap"
+                          style={getDominioBadgeStyle(lead.dominio)}
+                        >
+                          {lead.dominio}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </td>
 
                     <td className="max-w-[110px] truncate whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
