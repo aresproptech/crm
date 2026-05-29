@@ -25,7 +25,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
-import { type Lead, PHASE_LABELS, PHASE_COLORS } from "@/lib/crm-data";
+import { type Lead, PHASE_LABELS } from "@/lib/crm-data";
 import {
   Dialog,
   DialogContent,
@@ -78,6 +78,11 @@ type CrmLeadRow = {
   distrito: string | null;
   team_id: number | null;
   dominio_desc: string | null;
+};
+
+type PhaseRow = {
+  id: number;
+  name: string | null;
 };
 
 const VALID_PHASES: Lead["phase"][] = [
@@ -185,6 +190,42 @@ const STATUS_CONFIG: Record<
 
 function getStatusConfig(status: string | null | undefined) {
   return STATUS_CONFIG[status || "identificar"] ?? STATUS_CONFIG.identificar;
+}
+
+const PHASE_BADGE_STYLES: Record<
+  string,
+  { backgroundColor: string; color: string; borderColor: string }
+> = {
+  noticia: {
+    backgroundColor: "#D4EDBC",
+    color: "#288158",
+    borderColor: "#B7D99C",
+  },
+  concertada: {
+    backgroundColor: "#94EC89",
+    color: "#14532D",
+    borderColor: "#6FD864",
+  },
+  valorada: {
+    backgroundColor: "#14C02C",
+    color: "#FFFFFF",
+    borderColor: "#14C02C",
+  },
+  encargo: {
+    backgroundColor: "#109671",
+    color: "#FFFFFF",
+    borderColor: "#109671",
+  },
+};
+
+function getPhaseBadgeStyle(phase: string | null | undefined) {
+  return (
+    PHASE_BADGE_STYLES[phase || "noticia"] ?? {
+      backgroundColor: "#F1F5F9",
+      color: "#475569",
+      borderColor: "#CBD5E1",
+    }
+  );
 }
 
 const SOURCE_BADGE_STYLES: Record<
@@ -381,21 +422,53 @@ function fmtMonth(d: string) {
   return `${year}-${month}`;
 }
 
-function normalizePhase(raw: string | null | undefined): Lead["phase"] {
-  const value = (raw || "").toLowerCase().trim();
+function normalizeLookupText(raw: string | null | undefined): string {
+  return (raw || "")
+    .toLowerCase()
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function phaseNameToKey(name: string | null | undefined): Lead["phase"] | null {
+  const value = normalizeLookupText(name);
 
   if (value.includes("noticia")) return "noticia";
   if (value.includes("concertada")) return "concertada";
   if (value.includes("valorada")) return "valorada";
   if (value.includes("encargo")) return "encargo";
 
-  /**
-   * Legacy:
-   * - "Cualificada" ya no es fase V1, es Estado.
-   * - "Vender/Vendida" no se muestra como columna Kanban V1.
-   */
+  return null;
+}
+
+function phaseIdToKey(id: number | null | undefined): Lead["phase"] | null {
+  if (id === null || id === undefined) return null;
+
+  for (const [key, value] of Object.entries(PHASE_ID_MAP) as Array<
+    [Lead["phase"], number]
+  >) {
+    if (value === id) return key;
+  }
+
+  return null;
+}
+
+function normalizePhase(
+  raw: string | null | undefined,
+  phaseId?: number | null
+): Lead["phase"] {
+  const value = normalizeLookupText(raw);
+
+  if (value.includes("noticia")) return "noticia";
+  if (value.includes("concertada")) return "concertada";
+  if (value.includes("valorada")) return "valorada";
+  if (value.includes("encargo")) return "encargo";
+
   if (value.includes("cualificada")) return "noticia";
   if (value.includes("vendida") || value.includes("vender")) return "encargo";
+
+  const byId = phaseIdToKey(phaseId);
+  if (byId) return byId;
 
   return "noticia";
 }
@@ -479,7 +552,7 @@ function mapCrmLeadToLead(row: CrmLeadRow): LeadTableRow {
     valor: normalizeValor(row.tasacion),
     phone: row.telefono?.trim() || "—",
     source: row.source_name?.trim() || "Sin origen",
-    phase: normalizePhase(row.fase_name),
+    phase: normalizePhase(row.fase_name, row.fase_id),
     status: normalizeStatus(row.estado),
     fechaNoticia,
     fechaContacto: normalizeDate(row.fecha_contacto),
@@ -503,6 +576,8 @@ function mapCrmLeadToLead(row: CrmLeadRow): LeadTableRow {
 }
 
 export default function LeadsPage() {
+  const [phaseIdMap, setPhaseIdMap] =
+    useState<Partial<Record<Lead["phase"], number>>>({});
   const [modalOpen, setModalOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
@@ -521,6 +596,58 @@ export default function LeadsPage() {
   const [viewMode, setViewMode] = useState<LeadsViewMode>("table");
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+
+  async function loadPhaseIdMap() {
+    const { data, error } = await supabase.from("phases").select("id, name");
+
+    if (error) {
+      console.error("Error cargando fases:", error);
+      return;
+    }
+
+    const nextMap: Partial<Record<Lead["phase"], number>> = {};
+
+    for (const row of (data ?? []) as PhaseRow[]) {
+      const key = phaseNameToKey(row.name);
+      if (!key) continue;
+      nextMap[key] = row.id;
+    }
+
+    setPhaseIdMap(nextMap);
+  }
+
+  async function resolvePhaseId(phase: Lead["phase"]) {
+    const cached = phaseIdMap[phase];
+    if (cached) return cached;
+
+    const label = PHASE_LABELS[phase];
+    const { data, error } = await supabase.from("phases").select("id, name");
+
+    if (error) {
+      console.error("Error resolviendo fase:", error);
+      return PHASE_ID_MAP[phase] ?? 1;
+    }
+
+    const nextMap: Partial<Record<Lead["phase"], number>> = {};
+
+    for (const row of (data ?? []) as PhaseRow[]) {
+      const key = phaseNameToKey(row.name);
+      if (!key) continue;
+      nextMap[key] = row.id;
+    }
+
+    setPhaseIdMap((prev) => ({ ...prev, ...nextMap }));
+
+    const resolved =
+      nextMap[phase] ??
+      ((data ?? []) as PhaseRow[]).find(
+        (row) =>
+          phaseNameToKey(row.name) === phase ||
+          normalizeLookupText(row.name) === normalizeLookupText(label)
+      )?.id;
+
+    return resolved ?? PHASE_ID_MAP[phase] ?? 1;
+  }
 
   async function loadLeadsFromSupabase(options?: { append?: boolean }) {
     const append = options?.append ?? false;
@@ -586,7 +713,7 @@ export default function LeadsPage() {
       comercial_user_desc: cleanNullable(lead.owner),
       dominio_desc: cleanNullable(lead.planner),
       postal_id: normalizePostalId(lead.cp),
-      fase_id: PHASE_ID_MAP[lead.phase] ?? 1,
+      fase_id: phaseIdMap[lead.phase] ?? PHASE_ID_MAP[lead.phase] ?? 1,
       created_at: new Date().toISOString(),
       memo: cleanNullable(lead.notes),
       en_venta: null,
@@ -613,6 +740,8 @@ export default function LeadsPage() {
   async function handleCreateLead(form: NewLeadFormData) {
     setPageError(null);
 
+    const resolvedPhaseId = await resolvePhaseId(form.phase as Lead["phase"]);
+
     const rowsToInsert = [
       {
         propietario: cleanNullable(form.ownerName),
@@ -628,7 +757,7 @@ export default function LeadsPage() {
         comercial_user_desc: cleanNullable(form.owner),
         dominio_desc: cleanNullable(form.planner),
         postal_id: normalizePostalId(form.cp),
-        fase_id: PHASE_ID_MAP[form.phase as Lead["phase"]] ?? 1,
+        fase_id: resolvedPhaseId,
         created_at: new Date().toISOString(),
         memo: cleanNullable(form.notes),
         en_venta: cleanNullable(form.enVenta),
@@ -656,41 +785,108 @@ export default function LeadsPage() {
   async function handleSaveLead(next: Lead) {
     setPageError(null);
 
-    const { error } = await supabase
+    const resolvedPhaseId = await resolvePhaseId(next.phase);
+
+    console.log("Saving lead phase", {
+      leadId: next.id,
+      phase: next.phase,
+      resolvedPhaseId,
+    });
+
+    const updatePayload = {
+      propietario: cleanNullable(next.ownerName),
+      domicilio: cleanNullable(next.address),
+      telefono: cleanNullable(next.phone),
+      tasacion: cleanNullable(next.valor),
+      estado: cleanNullable(next.status),
+      fecha: next.fechaNoticia ? next.fechaNoticia.slice(0, 10) : null,
+      fecha_contacto: next.fechaContacto ? next.fechaContacto.slice(0, 10) : null,
+      fecha_valoracion: next.fechaValoracion
+        ? next.fechaValoracion.slice(0, 10)
+        : null,
+      hora: cleanNullable(next.hora),
+      source_desc: cleanNullable(next.source),
+      comercial_user_desc: cleanNullable(next.owner),
+      dominio_desc: cleanNullable(next.planner),
+      memo: cleanNullable(next.notes),
+      medio: cleanNullable(next.medio),
+      en_venta: cleanNullable(next.enVenta),
+      fase_id: resolvedPhaseId,
+      postal_id: normalizePostalId(next.cp),
+    };
+
+    const { data: updatedRows, error } = await supabase
       .from("opportunities")
-      .update({
-        propietario: cleanNullable(next.ownerName),
-        domicilio: cleanNullable(next.address),
-        telefono: cleanNullable(next.phone),
-        tasacion: cleanNullable(next.valor),
-        estado: cleanNullable(next.status),
-        fecha: next.fechaNoticia ? next.fechaNoticia.slice(0, 10) : null,
-        fecha_contacto: next.fechaContacto ? next.fechaContacto.slice(0, 10) : null,
-        fecha_valoracion: next.fechaValoracion
-          ? next.fechaValoracion.slice(0, 10)
-          : null,
-        hora: cleanNullable(next.hora),
-        source_desc: cleanNullable(next.source),
-        comercial_user_desc: cleanNullable(next.owner),
-        dominio_desc: cleanNullable(next.planner),
-        memo: cleanNullable(next.notes),
-        medio: cleanNullable(next.medio),
-        en_venta: cleanNullable(next.enVenta),
-        fase_id: PHASE_ID_MAP[next.phase] ?? 1,
-        postal_id: normalizePostalId(next.cp),
-      })
-      .eq("id", Number(next.id));
+      .update(updatePayload)
+      .eq("id", Number(next.id))
+      .select("id, fase_id");
+
+    console.log("Updated opportunity", {
+      updatePayload,
+      updatedRows,
+      error,
+    });
 
     if (error) {
       console.error("Error actualizando lead:", error);
-      setPageError("No se pudo guardar el lead. Revisá los datos e intentá nuevamente.");
+      setPageError(
+        `No se pudo guardar el lead. Error Supabase: ${error.message}`
+      );
       return;
     }
 
+    const updatedOpportunity = updatedRows?.[0];
+
+    if (!updatedOpportunity) {
+      console.error("Supabase no devolvió fila actualizada", {
+        leadId: next.id,
+        updatePayload,
+        updatedRows,
+      });
+
+      setPageError(
+        "Supabase no devolvió la fila actualizada. Puede haber un problema de permisos/RLS o el ID no coincide."
+      );
+      return;
+    }
+
+    if (updatedOpportunity.fase_id !== resolvedPhaseId) {
+      console.error("La fase no quedó guardada correctamente", {
+        expected: resolvedPhaseId,
+        received: updatedOpportunity.fase_id,
+        updatedOpportunity,
+      });
+
+      setPageError(
+        `La fase no quedó guardada. Esperado: ${resolvedPhaseId}, recibido: ${updatedOpportunity.fase_id}`
+      );
+      return;
+    }
+
+    const { data: savedRows, error: readBackError } = await supabase
+      .from("crm_leads_view")
+      .select("*")
+      .eq("id", Number(next.id));
+
+    console.log("Read back crm_leads_view", {
+      savedRows,
+      readBackError,
+    });
+
+    if (readBackError) {
+      console.error("Error leyendo lead actualizado:", readBackError);
+
+      setPageError(
+        `El lead se guardó, pero no se pudo leer la vista actualizada: ${readBackError.message}`
+      );
+      return;
+    }
+
+    const savedRow = savedRows?.[0] as CrmLeadRow | undefined;
+
     await loadLeadsFromSupabase({ append: false });
-    setSelectedLead((prev) =>
-      prev && prev.id === next.id ? { ...prev, ...next } : prev
-    );
+
+    setSelectedLead(savedRow ? mapCrmLeadToLead(savedRow) : next);
   }
 
   async function handleToggleFavorite(leadId: string) {
@@ -723,6 +919,7 @@ export default function LeadsPage() {
   }
 
   useEffect(() => {
+    void loadPhaseIdMap();
     void loadLeadsFromSupabase({ append: false });
   }, []);
 
@@ -793,7 +990,8 @@ export default function LeadsPage() {
   );
 
   const allVisibleSelected =
-    visibleTableLeads.length > 0 && visibleSelectedCount === visibleTableLeads.length;
+    visibleTableLeads.length > 0 &&
+    visibleSelectedCount === visibleTableLeads.length;
 
   function toggleRowSelection(id: string) {
     setSelectedIds((prev) => {
@@ -849,7 +1047,8 @@ export default function LeadsPage() {
         <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border bg-card px-6 py-2.5">
           <div className="flex items-center gap-4">
             <span className="text-xs text-muted-foreground">
-              {visibleTableLeads.length} visibles de {totalLeadsCount ?? leads.length} leads
+              {visibleTableLeads.length} visibles de{" "}
+              {totalLeadsCount ?? leads.length} leads
               {hasMoreLeads ? ` · ${leads.length} cargados` : ""}
             </span>
 
@@ -889,7 +1088,10 @@ export default function LeadsPage() {
               aria-label="Filtrar favoritos"
             >
               <Star
-                className={cn("h-3.5 w-3.5", showFavoritesOnly && "fill-current")}
+                className={cn(
+                  "h-3.5 w-3.5",
+                  showFavoritesOnly && "fill-current"
+                )}
               />
             </Button>
 
@@ -1024,6 +1226,7 @@ export default function LeadsPage() {
                 <col style={{ width: 170 }} />
                 <col style={{ width: 130 }} />
               </colgroup>
+
               <thead className="sticky top-0 z-20 bg-card">
                 <tr className="border-b border-border bg-card/95 text-left backdrop-blur">
                   {selectionMode && (
@@ -1031,7 +1234,9 @@ export default function LeadsPage() {
                       <input
                         type="checkbox"
                         checked={allVisibleSelected}
-                        onChange={(e) => toggleSelectAllVisible(e.target.checked)}
+                        onChange={(e) =>
+                          toggleSelectAllVisible(e.target.checked)
+                        }
                         className="h-3.5 w-3.5 rounded border-border text-primary"
                         aria-label="Seleccionar todos"
                       />
@@ -1072,7 +1277,11 @@ export default function LeadsPage() {
                     >
                       <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors group-hover:text-foreground">
                         {label}
-                        <SortIcon col={key} sortKey={sortKey} sortDir={sortDir} />
+                        <SortIcon
+                          col={key}
+                          sortKey={sortKey}
+                          sortDir={sortDir}
+                        />
                       </span>
                     </th>
                   ))}
@@ -1128,7 +1337,8 @@ export default function LeadsPage() {
                         <Star
                           className={cn(
                             "h-3.5 w-3.5",
-                            favoriteIds.has(lead.id) && "fill-current text-amber-500"
+                            favoriteIds.has(lead.id) &&
+                              "fill-current text-amber-500"
                           )}
                         />
                       </button>
@@ -1136,12 +1346,8 @@ export default function LeadsPage() {
 
                     <td className="px-3 py-2.5">
                       <span
-                        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium whitespace-nowrap"
-                        style={{
-                          backgroundColor:
-                            (PHASE_COLORS[lead.phase] ?? "#94a3b8") + "1a",
-                          color: PHASE_COLORS[lead.phase] ?? "#64748b",
-                        }}
+                        className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap"
+                        style={getPhaseBadgeStyle(lead.phase)}
                       >
                         <Circle className="h-1.5 w-1.5 fill-current" />
                         {PHASE_LABELS[lead.phase] ?? lead.phase}
@@ -1270,6 +1476,7 @@ export default function LeadsPage() {
                   </tr>
                 ))}
               </tbody>
+
               {visibleTableLeads.length === 0 && (
                 <tbody>
                   <tr>
@@ -1302,7 +1509,9 @@ export default function LeadsPage() {
         ) : (
           <div className="flex-1 overflow-x-auto overflow-y-hidden px-6 py-5">
             <KanbanBoard
-              leads={filteredLeads.filter((lead) => VALID_PHASES.includes(lead.phase))}
+              leads={filteredLeads.filter((lead) =>
+                VALID_PHASES.includes(lead.phase)
+              )}
               onOpenLead={(lead) => setSelectedLead(lead)}
             />
           </div>

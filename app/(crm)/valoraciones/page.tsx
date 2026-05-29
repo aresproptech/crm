@@ -5,7 +5,7 @@ import { Topbar } from "@/components/crm/topbar";
 import { supabase } from "@/lib/supabase";
 import { Search, Circle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { PHASE_COLORS, PHASE_LABELS, type Lead } from "@/lib/crm-data";
+import { PHASE_LABELS, type Lead } from "@/lib/crm-data";
 
 type CrmLeadRow = {
   id: number;
@@ -40,6 +40,42 @@ const STATUS_CONFIG: Record<string, { label: string; dot: string }> = {
   caliente: { label: "Caliente", dot: "bg-orange-500" },
   desestimada: { label: "Desestimada", dot: "bg-muted-foreground" },
 };
+
+const PHASE_BADGE_STYLES: Record<
+  string,
+  { backgroundColor: string; color: string; borderColor: string }
+> = {
+  noticia: {
+    backgroundColor: "#D4EDBC",
+    color: "#288158",
+    borderColor: "#B7D99C",
+  },
+  concertada: {
+    backgroundColor: "#94EC89",
+    color: "#14532D",
+    borderColor: "#6FD864",
+  },
+  valorada: {
+    backgroundColor: "#14C02C",
+    color: "#FFFFFF",
+    borderColor: "#14C02C",
+  },
+  encargo: {
+    backgroundColor: "#109671",
+    color: "#FFFFFF",
+    borderColor: "#109671",
+  },
+};
+
+function getPhaseBadgeStyle(phase: string | null | undefined) {
+  return (
+    PHASE_BADGE_STYLES[phase || "noticia"] ?? {
+      backgroundColor: "#F1F5F9",
+      color: "#475569",
+      borderColor: "#CBD5E1",
+    }
+  );
+}
 
 const PLANNING_CONFIG: Record<
   "previas" | "hoy" | "proximas",
@@ -495,11 +531,8 @@ export default function ValoracionesPage() {
                   </td>
                   <td className="px-3 py-2.5">
                     <span
-                      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium whitespace-nowrap"
-                      style={{
-                        backgroundColor: (PHASE_COLORS[lead.phase] ?? "#94a3b8") + "1a",
-                        color: PHASE_COLORS[lead.phase] ?? "#64748b",
-                      }}
+                      className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap"
+                      style={getPhaseBadgeStyle(lead.phase)}
                     >
                       <Circle className="h-1.5 w-1.5 fill-current" />
                       {PHASE_LABELS[lead.phase] ?? lead.phase}
