@@ -33,6 +33,10 @@ type CrmLeadRow = {
   fecha_valoracion: string | null;
 };
 
+type ValoracionLead = Lead & {
+  dominio?: string | null;
+};
+
 const STATUS_CONFIG: Record<string, { label: string; dot: string }> = {
   identificar: { label: "Identificada", dot: "bg-violet-500" },
   cualificada: { label: "Cualificada", dot: "bg-emerald-500" },
@@ -236,6 +240,7 @@ function fmt(d: string) {
   });
 }
 
+
 function normalizeDate(raw: string | null | undefined): string {
   if (!raw) return "";
   if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
@@ -246,18 +251,19 @@ function normalizeDate(raw: string | null | undefined): string {
   return parsed.toISOString().slice(0, 10);
 }
 
+function localDateValue(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
 function getPlanningStatus(dateValue: string): "previas" | "hoy" | "proximas" {
   const normalized = normalizeDate(dateValue);
   if (!normalized) return "previas";
 
-  const today = new Date();
-  const todayValue = new Date(
-    today.getFullYear(),
-    today.getMonth(),
-    today.getDate()
-  )
-    .toISOString()
-    .slice(0, 10);
+  const todayValue = localDateValue(new Date());
 
   if (normalized < todayValue) return "previas";
   if (normalized > todayValue) return "proximas";
@@ -295,11 +301,10 @@ function normalizeValor(raw: string | null | undefined) {
   return raw;
 }
 
-function mapCrmLeadToLead(row: CrmLeadRow): Lead {
-  const ownerLabel =
-    row.comercial_name?.trim() ||
-    row.contact_name?.trim() ||
-    "Sin asignar";
+function mapCrmLeadToLead(row: CrmLeadRow): ValoracionLead {
+  const ownerLabel = row.comercial_name?.trim() || "Sin comercial";
+  const plannerLabel = row.contact_name?.trim() || "—";
+  const dominioLabel = row.dominio_desc?.trim() || "—";
 
   const domicilio = row.domicilio?.trim() || "—";
   const distrito = row.distrito?.trim() || "—";
@@ -324,7 +329,8 @@ function mapCrmLeadToLead(row: CrmLeadRow): Lead {
     fechaValoracion: normalizeDate(row.fecha_valoracion || row.fecha || row.created_at || ""),
     hora: row.hora ? row.hora.slice(0, 5) : "",
     medio: row.medio?.trim() || "—",
-    planner: row.dominio_desc?.trim() || "—",
+    planner: plannerLabel,
+    dominio: dominioLabel,
     owner: ownerLabel,
     createdAt: row.created_at || "",
     assignedUser: ownerLabel,
@@ -338,7 +344,7 @@ function mapCrmLeadToLead(row: CrmLeadRow): Lead {
 }
 
 export default function ValoracionesPage() {
-  const [items, setItems] = useState<Lead[]>([]);
+  const [items, setItems] = useState<ValoracionLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -382,6 +388,7 @@ export default function ValoracionesPage() {
         lead.medio ?? "",
         lead.owner,
         lead.planner ?? "",
+        lead.dominio ?? "",
         lead.valor,
         PHASE_LABELS[lead.phase],
         (STATUS_CONFIG[lead.status] ?? STATUS_CONFIG.identificar).label,
@@ -509,8 +516,17 @@ export default function ValoracionesPage() {
                       <span className="text-xs text-muted-foreground">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                    {lead.planner || "—"}
+                  <td className="px-3 py-2.5">
+                    {lead.dominio && lead.dominio !== "—" ? (
+                      <span
+                        className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap"
+                        style={getDominioBadgeStyle(lead.dominio)}
+                      >
+                        {lead.dominio}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
                   </td>
                   <td className="px-3 py-2.5">
                     <span
@@ -551,5 +567,47 @@ export default function ValoracionesPage() {
         </div>
       </main>
     </>
+  );
+}
+function getDominioBadgeStyle(value: string | null | undefined) {
+  const key = normalizeBadgeKey(value);
+
+  const styles: Record<
+    string,
+    { backgroundColor: string; color: string; borderColor: string }
+  > = {
+    alcorcon: {
+      backgroundColor: "#EDE9FE",
+      color: "#6D28D9",
+      borderColor: "#DDD6FE",
+    },
+    chamartin: {
+      backgroundColor: "#D1FAE5",
+      color: "#047857",
+      borderColor: "#A7F3D0",
+    },
+    investment: {
+      backgroundColor: "#FCE7F3",
+      color: "#BE185D",
+      borderColor: "#FBCFE8",
+    },
+    mostoles: {
+      backgroundColor: "#FEF3C7",
+      color: "#92400E",
+      borderColor: "#FDE68A",
+    },
+    proptech: {
+      backgroundColor: "#DBEAFE",
+      color: "#1D4ED8",
+      borderColor: "#BFDBFE",
+    },
+  };
+
+  return (
+    styles[key] ?? {
+      backgroundColor: "#F1F5F9",
+      color: "#475569",
+      borderColor: "#CBD5E1",
+    }
   );
 }

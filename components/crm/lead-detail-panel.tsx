@@ -17,6 +17,7 @@ import {
   Euro,
   LocateFixed,
   Loader2,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -53,9 +54,9 @@ const STATUS_CONFIG = {
   identificar: {
     label: "Identificada",
     badgeStyle: {
-      backgroundColor: "#EEF2FF",
-      color: "#4338CA",
-      borderColor: "#C7D2FE",
+      backgroundColor: "#E5E7EB",
+      color: "#374151",
+      borderColor: "#D1D5DB",
     },
   },
   cualificada: {
@@ -194,6 +195,33 @@ type LeadHistoryEvent = {
   noteText?: string;
 };
 
+
+type RgHistoryEvent = {
+  id: string;
+  numero: number;
+  fecha: string;
+  hora: string;
+  medio: string;
+  resultado: string;
+  dominio: string;
+  planner: string;
+  owner: string;
+  memo: string;
+};
+
+type ValuationHistoryEvent = {
+  id: string;
+  numero: number;
+  fecha: string;
+  hora: string;
+  medio: string;
+  planner: string;
+  owner: string;
+  dominio: string;
+  resultado: string;
+  memo: string;
+};
+
 type OpportunityContactRow = {
   id: number | string;
   created_at?: string | null;
@@ -201,6 +229,62 @@ type OpportunityContactRow = {
   memo?: string | null;
   resultado?: boolean | null;
 };
+
+type OpportunityOrderRow = {
+  id?: number | string;
+  opportunity_id?: number | string | null;
+  fecha_inicio?: string | null;
+  fecha_fin?: string | null;
+  pvp_inicial?: string | number | null;
+  pvp_actual?: string | number | null;
+  pvp_estimado?: string | number | null;
+  com_vendedor?: string | number | null;
+  com_comprador?: string | number | null;
+  rebajas?: string | number | null;
+  health?: string | null;
+  memo?: string | null;
+  created_at?: string | null;
+};
+
+type VisitRow = {
+  id?: number | string;
+  opportunity_id?: number | string | null;
+  estado?: string | null;
+  dominio?: string | null;
+  planner?: string | null;
+  owner?: string | null;
+  fecha_visita?: string | null;
+  hora?: string | null;
+  buyer?: string | null;
+  nombre_apellido?: string | null;
+  telefono?: string | null;
+  telefono_comprador?: string | null;
+  dni?: string | null;
+  vende?: boolean | string | null;
+  observaciones_visita?: string | null;
+  created_by?: string | null;
+  created_at?: string | null;
+};
+
+type LeadDetailTab = "resumen" | "valoracion" | "encargo" | "rg" | "visitas";
+
+type EditLeadTab = "resumen" | "inmueble" | "valoracion" | "asignacion" | "notas";
+
+const LEAD_DETAIL_TABS: Array<{ value: LeadDetailTab; label: string }> = [
+  { value: "resumen", label: "Resumen" },
+  { value: "valoracion", label: "Valoración" },
+  { value: "encargo", label: "Encargo" },
+  { value: "rg", label: "R.G." },
+  { value: "visitas", label: "Visitas" },
+];
+
+const EDIT_LEAD_TABS: Array<{ value: EditLeadTab; label: string }> = [
+  { value: "resumen", label: "Resumen" },
+  { value: "inmueble", label: "Inmueble" },
+  { value: "valoracion", label: "Valoración" },
+  { value: "asignacion", label: "Asignación" },
+  { value: "notas", label: "Notas" },
+];
 
 const LEAD_DETAIL_PHASE_OPTIONS = PHASE_OPTIONS.filter((opt) =>
   ["Noticia", "Concertada", "Valorada", "Encargo"].includes(opt.label)
@@ -280,6 +364,49 @@ const DOMINIO_BADGE_STYLES: Record<
     borderColor: "#FBCFE8",
   },
 };
+
+const SOURCE_BADGE_STYLES: Record<
+  string,
+  { backgroundColor: string; color: string; borderColor: string }
+> = {
+  tasatucasa: {
+    backgroundColor: "#FACC15",
+    color: "#111827",
+    borderColor: "#EAB308",
+  },
+  "tasar-online": {
+    backgroundColor: "#E9D5FF",
+    color: "#7E22CE",
+    borderColor: "#D8B4FE",
+  },
+  home: {
+    backgroundColor: "#F1F5F9",
+    color: "#475569",
+    borderColor: "#CBD5E1",
+  },
+  "venta-online": {
+    backgroundColor: "#DC2626",
+    color: "#FFFFFF",
+    borderColor: "#B91C1C",
+  },
+  "venta-alquilada": {
+    backgroundColor: "#7E22CE",
+    color: "#FFFFFF",
+    borderColor: "#6B21A8",
+  },
+};
+
+function getSourceBadgeStyle(value: string | null | undefined) {
+  const key = normalizeBadgeKey(value);
+
+  return (
+    SOURCE_BADGE_STYLES[key] ?? {
+      backgroundColor: "#F1F5F9",
+      color: "#475569",
+      borderColor: "#CBD5E1",
+    }
+  );
+}
 
 function normalizeBadgeKey(value: string | null | undefined) {
   return (value || "")
@@ -384,6 +511,119 @@ function formatFieldValue(field: keyof LeadWithDominio, value: string) {
   return value;
 }
 
+function displayValue(value: unknown) {
+  if (value === null || value === undefined || value === "") return "—";
+  return String(value);
+}
+
+function displayMoney(value: unknown) {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "number") return formatEuroValue(String(value));
+  return formatEuroValue(String(value)) || String(value);
+}
+
+
+function getPlanningLabel(dateValue: string | null | undefined) {
+  if (!dateValue) return "Sin fecha";
+
+  const normalized = dateValue.slice(0, 10);
+  const today = new Date();
+  const todayValue = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+  if (normalized < todayValue) return "Previas";
+  if (normalized > todayValue) return "Próximas";
+  return "Hoy";
+}
+
+function dateOnlyValue(value: string | null | undefined) {
+  if (!value) return "";
+  if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
+
+  const parsed = new Date(value);
+  if (isNaN(parsed.getTime())) return "";
+
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function localTodayValue() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function daysBetween(start: string | null | undefined, end: string | null | undefined) {
+  const startValue = dateOnlyValue(start);
+  const endValue = dateOnlyValue(end);
+
+  if (!startValue || !endValue) return "—";
+
+  const startDate = new Date(`${startValue}T00:00:00`);
+  const endDate = new Date(`${endValue}T00:00:00`);
+
+  if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return "—";
+
+  return String(
+    Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
+  );
+}
+
+function monthValue(value: string | null | undefined) {
+  const dateValue = dateOnlyValue(value);
+  return dateValue ? dateValue.slice(0, 7) : "—";
+}
+
+function percentageValue(value: unknown) {
+  if (value === null || value === undefined || value === "") return "—";
+  return `${String(value).replace("%", "")} %`;
+}
+
+function SmallDataCard({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-3">
+      <Row label={label}>{children}</Row>
+    </div>
+  );
+}
+
+function LeadDetailSection({
+  title,
+  count,
+  children,
+}: {
+  title: string;
+  count?: number | string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="mt-5 border-t border-border pt-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {title}
+        </h3>
+        {count !== undefined && (
+          <Badge variant="secondary" className="rounded-full text-[10px]">
+            {count}
+          </Badge>
+        )}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 interface PostalCodeResult {
   cp: string;
   municipio: string;
@@ -422,6 +662,7 @@ function EditLeadModal({
   const [cpAutoFilled, setCpAutoFilled] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [activeEditTab, setActiveEditTab] = useState<EditLeadTab>("resumen");
 
   useEffect(() => {
     setForm({
@@ -430,6 +671,7 @@ function EditLeadModal({
     });
     setCpAutoFilled(false);
     setSaveError(null);
+    setActiveEditTab("resumen");
   }, [lead]);
 
   function set(field: keyof LeadWithDominio, value: string) {
@@ -486,358 +728,402 @@ function EditLeadModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100vw-3rem)] max-w-none sm:max-w-[1180px] max-h-[92vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="text-base font-semibold">
-            Editar lead
-          </DialogTitle>
-          <DialogDescription className="text-xs text-muted-foreground">
-            Actualiza la información del lead.
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="w-[calc(100vw-3rem)] max-w-none sm:max-w-[1180px] max-h-[92vh] overflow-hidden p-0">
+        <div className="flex max-h-[92vh] flex-col">
+          <DialogHeader className="shrink-0 border-b border-border px-6 py-5">
+            <DialogTitle className="text-base font-semibold">
+              Editar lead
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Actualiza la información del lead.
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="space-y-6 py-2">
-          <section className="space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Estado del lead
-            </h3>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-              <div className="flex flex-col gap-1.5 md:col-span-2">
-                <Label className="text-xs font-medium">Fase</Label>
-                <Select value={form.phase} onValueChange={(v) => set("phase", v)}>
-                  <SelectTrigger className="h-9 text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {LEAD_DETAIL_PHASE_OPTIONS.map((o) => (
-                      <SelectItem key={o.value} value={o.value} className="text-sm">
-                        {o.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+          <div className="grid min-h-0 flex-1 grid-cols-[190px_minmax(0,1fr)] overflow-hidden">
+            <aside className="border-r border-border bg-muted/20 p-4">
+              <div className="mb-3 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Secciones
               </div>
+              <nav className="space-y-1">
+                {EDIT_LEAD_TABS.map((tab) => {
+                  const isActive = activeEditTab === tab.value;
 
-              <div className="flex flex-col gap-1.5 md:col-span-2">
-                <Label className="text-xs font-medium">Estado</Label>
-                <Select
-                  value={form.status}
-                  onValueChange={(v) => set("status", v)}
-                >
-                  <SelectTrigger className="h-9 text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {LEAD_DETAIL_STATUS_OPTIONS.map((o) => (
-                      <SelectItem key={o.value} value={o.value} className="text-sm">
-                        {o.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </section>
+                  return (
+                    <button
+                      key={tab.value}
+                      type="button"
+                      onClick={() => setActiveEditTab(tab.value)}
+                      className={cn(
+                        "flex h-10 w-full items-center rounded-lg px-3 text-left text-xs font-semibold uppercase tracking-wide transition",
+                        isActive
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:bg-background hover:text-foreground"
+                      )}
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </nav>
+            </aside>
 
-          <section className="space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Datos principales
-            </h3>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-              <div className="flex flex-col gap-1.5 md:col-span-2">
-                <Label className="text-xs font-medium">Propietario</Label>
-                <Input
-                  value={form.ownerName}
-                  onChange={(e) => set("ownerName", e.target.value)}
-                  className="h-9 text-sm"
-                />
-              </div>
+            <div className="min-h-0 overflow-y-auto px-6 py-5">
+              {activeEditTab === "resumen" && (
+                <div className="space-y-6">
+                  <section className="space-y-3">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Estado del lead
+                    </h3>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                      <div className="flex flex-col gap-1.5 md:col-span-2">
+                        <Label className="text-xs font-medium">Fase</Label>
+                        <Select value={form.phase} onValueChange={(v) => set("phase", v)}>
+                          <SelectTrigger className="h-9 text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {LEAD_DETAIL_PHASE_OPTIONS.map((o) => (
+                              <SelectItem key={o.value} value={o.value} className="text-sm">
+                                {o.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
 
-              <div className="flex flex-col gap-1.5 md:col-span-2">
-                <Label className="text-xs font-medium">Teléfono</Label>
-                <Input
-                  value={form.phone}
-                  onChange={(e) => set("phone", e.target.value)}
-                  className="h-9 text-sm"
-                />
-              </div>
+                      <div className="flex flex-col gap-1.5 md:col-span-2">
+                        <Label className="text-xs font-medium">Estado</Label>
+                        <Select
+                          value={form.status}
+                          onValueChange={(v) => set("status", v)}
+                        >
+                          <SelectTrigger className="h-9 text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {LEAD_DETAIL_STATUS_OPTIONS.map((o) => (
+                              <SelectItem key={o.value} value={o.value} className="text-sm">
+                                {o.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </section>
 
-              <div className="flex flex-col gap-1.5 md:col-span-2">
-                <Label className="text-xs font-medium">Valor</Label>
-                <Input
-                  value={form.valor}
-                  onChange={(e) => handleValorChange(e.target.value)}
-                  className="h-9 text-sm"
-                  placeholder="Ej. 450.000 €"
-                  inputMode="numeric"
-                />
-              </div>
+                  <section className="space-y-3 border-t border-border pt-4">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Datos principales
+                    </h3>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                      <div className="flex flex-col gap-1.5 md:col-span-2">
+                        <Label className="text-xs font-medium">Propietario</Label>
+                        <Input
+                          value={form.ownerName}
+                          onChange={(e) => set("ownerName", e.target.value)}
+                          className="h-9 text-sm"
+                        />
+                      </div>
 
-              <div className="flex flex-col gap-1.5 md:col-span-2">
-                <Label className="text-xs font-medium">En Venta</Label>
-                <Select
-                  value={form.enVenta ?? "No Sabe"}
-                  onValueChange={(v) => set("enVenta", v)}
-                >
-                  <SelectTrigger className="h-9 text-sm">
-                    <SelectValue placeholder="Seleccionar" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {LEAD_DETAIL_EN_VENTA_OPTIONS.map((option) => (
-                      <SelectItem key={option} value={option} className="text-sm">
-                        {option}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </section>
+                      <div className="flex flex-col gap-1.5 md:col-span-2">
+                        <Label className="text-xs font-medium">Teléfono</Label>
+                        <Input
+                          value={form.phone}
+                          onChange={(e) => set("phone", e.target.value)}
+                          className="h-9 text-sm"
+                        />
+                      </div>
 
-          <section className="space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Datos del inmueble
-            </h3>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-              <div className="flex flex-col gap-1.5 md:col-span-4">
-                <Label className="text-xs font-medium">Domicilio</Label>
-                <Input
-                  value={form.address}
-                  onChange={(e) => set("address", e.target.value)}
-                  className="h-9 text-sm"
-                />
-              </div>
+                      <div className="flex flex-col gap-1.5 md:col-span-2">
+                        <Label className="text-xs font-medium">Valor</Label>
+                        <Input
+                          value={form.valor}
+                          onChange={(e) => handleValorChange(e.target.value)}
+                          className="h-9 text-sm"
+                          placeholder="Ej. 450.000 €"
+                          inputMode="numeric"
+                        />
+                      </div>
 
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-medium">CP</Label>
-                <div className="relative">
-                  <Input
-                    value={form.cp}
-                    onChange={(e) => handleCpChange(e.target.value)}
-                    className="h-9 pr-8 text-sm font-mono"
-                    placeholder="5 dígitos"
-                    maxLength={5}
-                    inputMode="numeric"
-                    disabled={cpLoading}
-                  />
-                  {cpLoading && (
-                    <Loader2 className="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-primary" />
-                  )}
+                      <div className="flex flex-col gap-1.5 md:col-span-2">
+                        <Label className="text-xs font-medium">En Venta</Label>
+                        <Select
+                          value={form.enVenta ?? "No Sabe"}
+                          onValueChange={(v) => set("enVenta", v)}
+                        >
+                          <SelectTrigger className="h-9 text-sm">
+                            <SelectValue placeholder="Seleccionar" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {LEAD_DETAIL_EN_VENTA_OPTIONS.map((option) => (
+                              <SelectItem key={option} value={option} className="text-sm">
+                                {option}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </section>
                 </div>
-              </div>
+              )}
 
-              <div className="flex flex-col gap-1.5">
-                <Label className="flex items-center gap-1.5 text-xs font-medium">
-                  Municipio
-                  {cpAutoFilled && (
-                    <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium leading-none text-primary">
-                      <LocateFixed className="h-2.5 w-2.5" />
-                      auto
-                    </span>
-                  )}
-                </Label>
-                <Input
-                  value={form.municipio}
-                  onChange={(e) => set("municipio", e.target.value)}
-                  className={cn(
-                    "h-9 text-sm",
-                    cpAutoFilled && "border-primary/40 bg-primary/5"
-                  )}
-                />
-              </div>
+              {activeEditTab === "inmueble" && (
+                <section className="space-y-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Datos del inmueble
+                  </h3>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                    <div className="flex flex-col gap-1.5 md:col-span-4">
+                      <Label className="text-xs font-medium">Domicilio</Label>
+                      <Input
+                        value={form.address}
+                        onChange={(e) => set("address", e.target.value)}
+                        className="h-9 text-sm"
+                      />
+                    </div>
 
-              <div className="flex flex-col gap-1.5">
-                <Label className="flex items-center gap-1.5 text-xs font-medium">
-                  Distrito
-                  {cpAutoFilled && (
-                    <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium leading-none text-primary">
-                      <LocateFixed className="h-2.5 w-2.5" />
-                      auto
-                    </span>
-                  )}
-                </Label>
-                <Input
-                  value={form.distrito}
-                  onChange={(e) => handleDistritoChange(e.target.value)}
-                  className={cn(
-                    "h-9 text-sm",
-                    cpAutoFilled && "border-primary/40 bg-primary/5"
-                  )}
-                />
-              </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium">CP</Label>
+                      <div className="relative">
+                        <Input
+                          value={form.cp}
+                          onChange={(e) => handleCpChange(e.target.value)}
+                          className="h-9 pr-8 text-sm font-mono"
+                          placeholder="5 dígitos"
+                          maxLength={5}
+                          inputMode="numeric"
+                          disabled={cpLoading}
+                        />
+                        {cpLoading && (
+                          <Loader2 className="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-primary" />
+                        )}
+                      </div>
+                    </div>
 
-              <div className="flex flex-col gap-1.5">
-                <Label className="flex items-center gap-1.5 text-xs font-medium">
-                  Provincia
-                  {cpAutoFilled && (
-                    <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium leading-none text-primary">
-                      <LocateFixed className="h-2.5 w-2.5" />
-                      auto
-                    </span>
-                  )}
-                </Label>
-                <Input
-                  value={form.provincia}
-                  onChange={(e) => set("provincia", e.target.value)}
-                  className={cn(
-                    "h-9 text-sm",
-                    cpAutoFilled && "border-primary/40 bg-primary/5"
-                  )}
-                />
-              </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="flex items-center gap-1.5 text-xs font-medium">
+                        Municipio
+                        {cpAutoFilled && (
+                          <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium leading-none text-primary">
+                            <LocateFixed className="h-2.5 w-2.5" />
+                            auto
+                          </span>
+                        )}
+                      </Label>
+                      <Input
+                        value={form.municipio}
+                        onChange={(e) => set("municipio", e.target.value)}
+                        className={cn(
+                          "h-9 text-sm",
+                          cpAutoFilled && "border-primary/40 bg-primary/5"
+                        )}
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="flex items-center gap-1.5 text-xs font-medium">
+                        Distrito
+                        {cpAutoFilled && (
+                          <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium leading-none text-primary">
+                            <LocateFixed className="h-2.5 w-2.5" />
+                            auto
+                          </span>
+                        )}
+                      </Label>
+                      <Input
+                        value={form.distrito}
+                        onChange={(e) => handleDistritoChange(e.target.value)}
+                        className={cn(
+                          "h-9 text-sm",
+                          cpAutoFilled && "border-primary/40 bg-primary/5"
+                        )}
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="flex items-center gap-1.5 text-xs font-medium">
+                        Provincia
+                        {cpAutoFilled && (
+                          <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium leading-none text-primary">
+                            <LocateFixed className="h-2.5 w-2.5" />
+                            auto
+                          </span>
+                        )}
+                      </Label>
+                      <Input
+                        value={form.provincia}
+                        onChange={(e) => set("provincia", e.target.value)}
+                        className={cn(
+                          "h-9 text-sm",
+                          cpAutoFilled && "border-primary/40 bg-primary/5"
+                        )}
+                      />
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {activeEditTab === "valoracion" && (
+                <section className="space-y-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Seguimiento y valoración
+                  </h3>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium">Fecha contacto</Label>
+                      <Input
+                        type="date"
+                        value={form.fechaContacto}
+                        onChange={(e) => set("fechaContacto", e.target.value)}
+                        className="h-9 text-sm"
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium">Fecha valoración</Label>
+                      <Input
+                        type="date"
+                        value={form.fechaValoracion}
+                        onChange={(e) => set("fechaValoracion", e.target.value)}
+                        className="h-9 text-sm"
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium">Hora</Label>
+                      <Input
+                        type="time"
+                        value={form.hora}
+                        onChange={(e) => set("hora", e.target.value)}
+                        className="h-9 text-sm"
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium">Medio</Label>
+                      <Select
+                        value={form.medio ?? ""}
+                        onValueChange={(v) => set("medio", v)}
+                      >
+                        <SelectTrigger className="h-9 text-sm">
+                          <SelectValue placeholder="Seleccionar medio" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {LEAD_DETAIL_MEDIO_OPTIONS.map((option) => (
+                            <SelectItem key={option} value={option} className="text-sm">
+                              {option}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {activeEditTab === "asignacion" && (
+                <section className="space-y-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Asignación interna
+                  </h3>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="planner" className="text-xs font-medium">
+                        Planner
+                      </Label>
+                      <Select
+                        value={form.planner ?? ""}
+                        onValueChange={(v) => set("planner", v)}
+                      >
+                        <SelectTrigger id="planner" className="h-9 text-sm">
+                          <SelectValue placeholder="Seleccionar planner" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {AGENT_OPTIONS.map((agent) => (
+                            <SelectItem key={agent} value={agent} className="text-sm">
+                              {agent}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium">Dominio</Label>
+                      <Select
+                        value={form.dominio ?? ""}
+                        onValueChange={(v) => set("dominio", v)}
+                      >
+                        <SelectTrigger className="h-9 text-sm">
+                          <SelectValue placeholder="Seleccionar dominio" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {LEAD_DETAIL_DOMINIO_OPTIONS.map((option) => (
+                            <SelectItem key={option} value={option} className="text-sm">
+                              {option}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium">Owner</Label>
+                      <Select value={form.owner} onValueChange={(v) => set("owner", v)}>
+                        <SelectTrigger className="h-9 text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {AGENT_OPTIONS.map((a) => (
+                            <SelectItem key={a} value={a} className="text-sm">
+                              {a}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {activeEditTab === "notas" && (
+                <section className="space-y-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Notas
+                  </h3>
+                  <Textarea
+                    value={form.notes ?? ""}
+                    onChange={(e) => set("notes", e.target.value)}
+                    className="min-h-[160px] resize-none text-sm"
+                    placeholder="Observaciones generales..."
+                  />
+                </section>
+              )}
             </div>
-          </section>
-
-          <section className="space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Seguimiento y valoración
-            </h3>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-medium">Fecha contacto</Label>
-                <Input
-                  type="date"
-                  value={form.fechaContacto}
-                  onChange={(e) => set("fechaContacto", e.target.value)}
-                  className="h-9 text-sm"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-medium">Fecha valoración</Label>
-                <Input
-                  type="date"
-                  value={form.fechaValoracion}
-                  onChange={(e) => set("fechaValoracion", e.target.value)}
-                  className="h-9 text-sm"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-medium">Hora</Label>
-                <Input
-                  type="time"
-                  value={form.hora}
-                  onChange={(e) => set("hora", e.target.value)}
-                  className="h-9 text-sm"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-medium">Medio</Label>
-                <Select
-                  value={form.medio ?? ""}
-                  onValueChange={(v) => set("medio", v)}
-                >
-                  <SelectTrigger className="h-9 text-sm">
-                    <SelectValue placeholder="Seleccionar medio" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {LEAD_DETAIL_MEDIO_OPTIONS.map((option) => (
-                      <SelectItem key={option} value={option} className="text-sm">
-                        {option}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </section>
-
-          <section className="space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Asignación interna
-            </h3>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="planner" className="text-xs font-medium">
-                  Planner
-                </Label>
-                <Select
-                  value={form.planner ?? ""}
-                  onValueChange={(v) => set("planner", v)}
-                >
-                  <SelectTrigger id="planner" className="h-9 text-sm">
-                    <SelectValue placeholder="Seleccionar planner" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {AGENT_OPTIONS.map((agent) => (
-                      <SelectItem key={agent} value={agent} className="text-sm">
-                        {agent}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-medium">Dominio</Label>
-                <Select
-                  value={form.dominio ?? ""}
-                  onValueChange={(v) => set("dominio", v)}
-                >
-                  <SelectTrigger className="h-9 text-sm">
-                    <SelectValue placeholder="Seleccionar dominio" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {LEAD_DETAIL_DOMINIO_OPTIONS.map((option) => (
-                      <SelectItem key={option} value={option} className="text-sm">
-                        {option}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-medium">Owner</Label>
-                <Select value={form.owner} onValueChange={(v) => set("owner", v)}>
-                  <SelectTrigger className="h-9 text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {AGENT_OPTIONS.map((a) => (
-                      <SelectItem key={a} value={a} className="text-sm">
-                        {a}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </section>
-
-          <section className="space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Notas
-            </h3>
-            <Textarea
-              value={form.notes ?? ""}
-              onChange={(e) => set("notes", e.target.value)}
-              className="min-h-[84px] resize-none text-sm"
-              placeholder="Observaciones generales..."
-            />
-          </section>
-        </div>
-
-        {saveError && (
-          <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive">
-            {saveError}
           </div>
-        )}
-        <DialogFooter>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onOpenChange(false)}
-            disabled={saving}
-          >
-            Cancelar
-          </Button>
-          <Button size="sm" onClick={handleSave} disabled={saving}>
-            {saving ? "Guardando..." : "Guardar cambios"}
-          </Button>
-        </DialogFooter>
+        </div>
+        <div className="shrink-0 border-t border-border bg-background px-6 py-4">
+          {saveError && (
+            <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive">
+              {saveError}
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onOpenChange(false)}
+              disabled={saving}
+            >
+              Cancelar
+            </Button>
+            <Button size="sm" onClick={handleSave} disabled={saving}>
+              {saving ? "Guardando..." : "Guardar cambios"}
+            </Button>
+          </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -855,11 +1141,69 @@ export function LeadDetailPanel({
   const [noteError, setNoteError] = useState<string | null>(null);
   const [historyEvents, setHistoryEvents] = useState<LeadHistoryEvent[]>([]);
   const [localLead, setLocalLead] = useState<LeadWithDominio | null>(lead as LeadWithDominio | null);
+  const [orders, setOrders] = useState<OpportunityOrderRow[]>([]);
+  const [visits, setVisits] = useState<VisitRow[]>([]);
+  const [relatedLoading, setRelatedLoading] = useState(false);
+  const [relatedError, setRelatedError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<LeadDetailTab>("resumen");
+  const [openRgRowId, setOpenRgRowId] = useState<string | null>(null);
+  const [openOrderRowId, setOpenOrderRowId] = useState<string | null>(null);
+  const [openValuationRowId, setOpenValuationRowId] = useState<string | null>(null);
 
   useEffect(() => {
     setLocalLead(lead as LeadWithDominio | null);
     setNoteError(null);
   }, [lead]);
+
+  async function loadRelatedData(leadId: string) {
+    setRelatedLoading(true);
+    setRelatedError(null);
+
+    const numericLeadId = Number(leadId);
+
+    const [ordersResponse, visitsResponse] = await Promise.all([
+      supabase
+        .from("opportunity_orders")
+        .select("*")
+        .eq("opportunity_id", numericLeadId),
+      supabase
+        .from("visitas")
+        .select("*")
+        .eq("opportunity_id", numericLeadId)
+        .order("fecha_visita", { ascending: false }),
+    ]);
+
+    if (ordersResponse.error || visitsResponse.error) {
+      console.error("Error cargando relaciones del lead:", {
+        ordersError: ordersResponse.error,
+        visitsError: visitsResponse.error,
+      });
+      setRelatedError(
+        ordersResponse.error?.message ||
+          visitsResponse.error?.message ||
+          "No se pudieron cargar las relaciones del lead."
+      );
+      setOrders([]);
+      setVisits([]);
+      setRelatedLoading(false);
+      return;
+    }
+
+    setOrders((ordersResponse.data ?? []) as OpportunityOrderRow[]);
+    setVisits((visitsResponse.data ?? []) as VisitRow[]);
+    setRelatedLoading(false);
+  }
+
+  useEffect(() => {
+    if (!lead?.id) {
+      setOrders([]);
+      setVisits([]);
+      setRelatedError(null);
+      return;
+    }
+
+    void loadRelatedData(lead.id);
+  }, [lead?.id]);
 
   const effectiveLead = localLead;
 
@@ -1029,8 +1373,42 @@ export function LeadDetailPanel({
     effectiveLead.cp && effectiveLead.cp !== "—" ? `(${effectiveLead.cp})` : "",
   ].filter((part) => part && part !== "—");
 
+  const rgHistoryEvents: RgHistoryEvent[] = effectiveLead.fechaNoticia
+    ? [
+        {
+          id: `rg-${effectiveLead.id}-${effectiveLead.fechaNoticia}`,
+          numero: 1,
+          fecha: effectiveLead.fechaNoticia,
+          hora: effectiveLead.hora || "",
+          medio: effectiveLead.medio || "—",
+          resultado: statusLabel(effectiveLead.status),
+          dominio: getLeadDominio(effectiveLead) || "—",
+          planner: effectiveLead.planner || "—",
+          owner: effectiveLead.owner || "—",
+          memo: "R.G. derivada de la información actual del lead. Cuando se conecte opportunity_rg, este historial mostrará todas las gestiones reales.",
+        },
+      ]
+    : [];
+
+  const valuationHistoryEvents: ValuationHistoryEvent[] = effectiveLead.fechaValoracion
+    ? [
+        {
+          id: `valuation-${effectiveLead.id}-${effectiveLead.fechaValoracion}`,
+          numero: 1,
+          fecha: effectiveLead.fechaValoracion,
+          hora: effectiveLead.hora || "",
+          medio: effectiveLead.medio || "—",
+          planner: effectiveLead.planner || "—",
+          owner: effectiveLead.owner || "—",
+          dominio: getLeadDominio(effectiveLead) || "—",
+          resultado: statusLabel(effectiveLead.status),
+          memo: "Valoración derivada de la información actual del lead. Cuando se conecte una tabla de historial de valoraciones, esta sección mostrará todas las valoraciones reales.",
+        },
+      ]
+    : [];
+
   return (
-    <aside className="fixed right-0 top-0 z-40 flex h-screen w-[430px] flex-col border-l border-border bg-background shadow-2xl">
+    <aside className="fixed right-0 top-0 z-40 flex h-screen w-[1080px] max-w-[calc(100vw-1rem)] flex-col border-l border-border bg-background shadow-2xl">
       <div className="flex shrink-0 items-start justify-between border-b border-border px-5 py-4">
         <div className="min-w-0">
           <h2 className="truncate text-base font-semibold text-foreground">
@@ -1099,125 +1477,671 @@ export function LeadDetailPanel({
 
         <Badge
           variant="outline"
-          className="h-7 rounded-md px-3 text-sm font-semibold text-muted-foreground"
+          className="h-7 rounded-md px-3 text-sm font-semibold"
+          style={getSourceBadgeStyle(effectiveLead.source)}
         >
-          {effectiveLead.source}
+          {effectiveLead.source || "—"}
         </Badge>
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 py-4">
-        <div className="rounded-lg border border-border bg-card p-3">
-          <IconRow icon={MapPin}>
-            <Row label="Domicilio">
-              {domicilioParts.length > 0 ? domicilioParts.join(", ") : "—"}
-            </Row>
-          </IconRow>
-        </div>
-
-        <div className="mt-4 grid grid-cols-2 gap-4">
-          <IconRow icon={Phone}>
-            <Row label="Teléfono">{effectiveLead.phone || "—"}</Row>
-          </IconRow>
-          <IconRow icon={Euro}>
-            <Row label="Valor">{effectiveLead.valor || "—"}</Row>
-          </IconRow>
-          <IconRow icon={User}>
-            <Row label="Owner / Agente">{effectiveLead.owner || "—"}</Row>
-          </IconRow>
-          <IconRow icon={User}>
-            <Row label="Planner">{effectiveLead.planner || "—"}</Row>
-          </IconRow>
-          <IconRow icon={Tag}>
-            <Row label="Origen">{effectiveLead.source || "—"}</Row>
-          </IconRow>
-          <IconRow icon={Tag}>
-            <Row label="En Venta">{effectiveLead.enVenta || "—"}</Row>
-          </IconRow>
-        </div>
-
-        <div className="mt-5 grid grid-cols-2 gap-3 border-t border-border pt-4">
-          <div className="rounded-lg border border-border bg-card p-3">
-            <Row label="F. Noticia">{fmtDate(effectiveLead.fechaNoticia)}</Row>
-          </div>
-          <div className="rounded-lg border border-border bg-card p-3">
-            <Row label="F. Contacto">{fmtDate(effectiveLead.fechaContacto)}</Row>
-          </div>
-          <div className="rounded-lg border border-border bg-card p-3">
-            <Row label="F. Valoración">
-              {fmtDate(effectiveLead.fechaValoracion)}
-            </Row>
-          </div>
-          <div className="rounded-lg border border-border bg-card p-3">
-            <Row label="Hora">{effectiveLead.hora || "—"}</Row>
-          </div>
-          <div className="rounded-lg border border-border bg-card p-3">
-            <Row label="Medio">{effectiveLead.medio || "—"}</Row>
-          </div>
-        </div>
-
         <div className="mt-5 border-t border-border pt-4">
-          <div className="mb-3 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              <MessageSquare className="h-3.5 w-3.5" />
-              Observaciones
-            </div>
-            <Badge variant="secondary" className="rounded-full text-[10px]">
-              {historyEvents.length}
-            </Badge>
-          </div>
-
-          <Textarea
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Escribe una observación..."
-            className="min-h-[76px] resize-none text-sm"
-          />
-          <div className="mt-2 flex justify-end">
-            <Button
-              size="sm"
-              className="h-8 gap-1.5 text-xs"
-              onClick={handleAddNote}
-              disabled={!note.trim() || savingNote}
-            >
-              <Send className="h-3.5 w-3.5" />
-              Añadir
-            </Button>
-          </div>
-
-          {noteError && (
-            <div className="mt-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive">
-              {noteError}
+          {relatedError && (
+            <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive">
+              No se pudieron cargar algunas relaciones: {relatedError}
             </div>
           )}
 
-          <div className="mt-4 space-y-3">
-            {historyEvents.length === 0 && (
-              <p className="text-xs italic text-muted-foreground">
-                Sin observaciones todavía.
-              </p>
-            )}
+          <div className="space-y-4">
+            <nav className="grid grid-cols-5 overflow-hidden rounded-xl border border-border bg-muted/20 p-1">
+              {LEAD_DETAIL_TABS.map((tab) => {
+                const isActive = activeTab === tab.value;
+                const count =
+                  tab.value === "encargo"
+                    ? orders.length
+                    : tab.value === "visitas"
+                      ? visits.length
+                      : tab.value === "rg"
+                        ? rgHistoryEvents.length
+                        : tab.value === "valoracion"
+                          ? valuationHistoryEvents.length
+                          : undefined;
 
-            {historyEvents.map((event) => (
-              <div key={event.id} className="relative border-l border-border pl-4">
-                <span className="absolute -left-[5px] top-1 h-2.5 w-2.5 rounded-full border border-primary bg-background" />
-                <div className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-                  <Clock className="h-3 w-3" />
-                  <span>{fmtDateTimeShort(event.createdAt)}</span>
-                  <span>por {event.createdBy}</span>
+                return (
+                  <button
+                    key={tab.value}
+                    type="button"
+                    onClick={() => setActiveTab(tab.value)}
+                    className={cn(
+                      "flex h-10 items-center justify-center gap-2 rounded-lg px-3 text-center text-xs font-semibold uppercase tracking-wide transition",
+                      isActive
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    )}
+                  >
+                    <span>{tab.label}</span>
+                    {count !== undefined && (
+                      <span
+                        className={cn(
+                          "rounded-full px-1.5 py-0.5 text-[10px]",
+                          isActive
+                            ? "bg-primary-foreground/20 text-primary-foreground"
+                            : "bg-background text-muted-foreground"
+                        )}
+                      >
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </nav>
+
+            <div className="min-w-0 rounded-xl border border-border bg-background p-5 shadow-sm">
+              {activeTab === "resumen" && (
+                <div className="space-y-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Resumen del lead
+                  </h3>
+                  <div className="space-y-5">
+                    <section className="space-y-3">
+                      <h4 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Datos generales
+                      </h4>
+                      <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
+                        <SmallDataCard label="Propietario">
+                          {effectiveLead.ownerName || "—"}
+                        </SmallDataCard>
+                        <SmallDataCard label="Teléfono">
+                          {effectiveLead.phone || "—"}
+                        </SmallDataCard>
+                        <SmallDataCard label="Valor">
+                          {effectiveLead.valor || "—"}
+                        </SmallDataCard>
+                        <SmallDataCard label="F. Noticia">
+                          {fmtDate(effectiveLead.fechaNoticia)}
+                        </SmallDataCard>
+                        <SmallDataCard label="F. Contacto">
+                          {fmtDate(effectiveLead.fechaContacto)}
+                        </SmallDataCard>
+                        <SmallDataCard label="En Venta">
+                          {effectiveLead.enVenta || "—"}
+                        </SmallDataCard>
+                        <SmallDataCard label="Planner">
+                          {effectiveLead.planner || "—"}
+                        </SmallDataCard>
+                        <SmallDataCard label="Owner">
+                          {effectiveLead.owner || "—"}
+                        </SmallDataCard>
+                        <SmallDataCard label="Origen">
+                          {effectiveLead.source || "—"}
+                        </SmallDataCard>
+                      </div>
+                    </section>
+
+                    <section className="space-y-3 border-t border-border pt-4">
+                      <h4 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Datos del inmueble
+                      </h4>
+                      <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
+                        <SmallDataCard label="Domicilio">
+                          {domicilioParts.length > 0 ? domicilioParts.join(", ") : "—"}
+                        </SmallDataCard>
+                        <SmallDataCard label="Distrito">
+                          {effectiveLead.distrito || "—"}
+                        </SmallDataCard>
+                        <SmallDataCard label="CP">
+                          {effectiveLead.cp || "—"}
+                        </SmallDataCard>
+                        <SmallDataCard label="Municipio">
+                          {effectiveLead.municipio || "—"}
+                        </SmallDataCard>
+                        <SmallDataCard label="Provincia">
+                          {effectiveLead.provincia || "—"}
+                        </SmallDataCard>
+                        <SmallDataCard label="Dominio">
+                          {getLeadDominio(effectiveLead) || "—"}
+                        </SmallDataCard>
+                      </div>
+                    </section>
+                  </div>
+
+                  <div className="mt-5 border-t border-border pt-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        <MessageSquare className="h-3.5 w-3.5" />
+                        Observaciones
+                      </div>
+                      <Badge variant="secondary" className="rounded-full text-[10px]">
+                        {historyEvents.length}
+                      </Badge>
+                    </div>
+
+                    <Textarea
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      placeholder="Escribe una observación..."
+                      className="min-h-[76px] resize-none text-sm"
+                    />
+                    <div className="mt-2 flex justify-end">
+                      <Button
+                        size="sm"
+                        className="h-8 gap-1.5 text-xs"
+                        onClick={handleAddNote}
+                        disabled={!note.trim() || savingNote}
+                      >
+                        <Send className="h-3.5 w-3.5" />
+                        Añadir
+                      </Button>
+                    </div>
+
+                    {noteError && (
+                      <div className="mt-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive">
+                        {noteError}
+                      </div>
+                    )}
+
+                    <div className="mt-4 space-y-3">
+                      {historyEvents.length === 0 && (
+                        <p className="text-xs italic text-muted-foreground">
+                          Sin observaciones todavía.
+                        </p>
+                      )}
+
+                      {historyEvents.map((event) => (
+                        <div key={event.id} className="relative border-l border-border pl-4">
+                          <span className="absolute -left-[5px] top-1 h-2.5 w-2.5 rounded-full border border-primary bg-background" />
+                          <div className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                            <Clock className="h-3 w-3" />
+                            <span>{fmtDateTimeShort(event.createdAt)}</span>
+                            <span>por {event.createdBy}</span>
+                          </div>
+                          <div className="rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground">
+                            {event.type === "field_change" ? (
+                              <span>
+                                {event.createdBy} cambió {fieldDisplayName(event.field!)} de{" "}
+                                {formatFieldValue(event.field!, event.prevValue || "")} a{" "}
+                                {formatFieldValue(event.field!, event.newValue || "")}
+                              </span>
+                            ) : (
+                              event.noteText
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-                <div className="rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground">
-                  {event.type === "field_change" ? (
-                    <span>
-                      {event.createdBy} cambió {fieldDisplayName(event.field!)} de{" "}
-                      {formatFieldValue(event.field!, event.prevValue || "")} a{" "}
-                      {formatFieldValue(event.field!, event.newValue || "")}
-                    </span>
+              )}
+
+              {activeTab === "valoracion" && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Historial de valoraciones
+                    </h3>
+                    <Badge variant="secondary" className="rounded-full text-[10px]">
+                      {valuationHistoryEvents.length}
+                    </Badge>
+                  </div>
+
+                  {valuationHistoryEvents.length === 0 ? (
+                    <div className="rounded-lg border border-border bg-card p-4">
+                      <p className="text-xs italic text-muted-foreground">
+                        No hay valoraciones cargadas todavía.
+                      </p>
+                    </div>
                   ) : (
-                    event.noteText
+                    <div className="overflow-hidden rounded-lg border border-border bg-card">
+                      <div className="grid grid-cols-[94px_1.3fr_90px_1fr_1fr_1fr_44px] border-b border-border bg-muted/40 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        <span>Valoración</span>
+                        <span>Fecha</span>
+                        <span>Hora</span>
+                        <span>Medio</span>
+                        <span>Planner</span>
+                        <span>Resultado</span>
+                        <span />
+                      </div>
+
+                      {valuationHistoryEvents.map((event) => {
+                        const isOpen = openValuationRowId === event.id;
+
+                        return (
+                          <div key={event.id} className="border-b border-border last:border-b-0">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setOpenValuationRowId((current) =>
+                                  current === event.id ? null : event.id
+                                )
+                              }
+                              className="grid w-full grid-cols-[94px_1.3fr_90px_1fr_1fr_1fr_44px] items-center px-3 py-3 text-left text-sm transition hover:bg-muted/40"
+                            >
+                              <span className="font-semibold text-foreground">
+                                #{event.numero}
+                              </span>
+                              <span className="text-foreground">{fmtDate(event.fecha)}</span>
+                              <span className="text-muted-foreground">
+                                {event.hora || "—"}
+                              </span>
+                              <span className="text-muted-foreground">{event.medio}</span>
+                              <span className="text-muted-foreground">{event.planner}</span>
+                              <span>
+                                <Badge variant="outline" className="rounded-md text-[11px]">
+                                  {event.resultado}
+                                </Badge>
+                              </span>
+                              <span className="flex justify-end">
+                                <ChevronDown
+                                  className={cn(
+                                    "h-4 w-4 text-muted-foreground transition-transform",
+                                    isOpen && "rotate-180"
+                                  )}
+                                />
+                              </span>
+                            </button>
+
+                            {isOpen && (
+                              <div className="border-t border-border bg-muted/20 px-4 py-4">
+                                <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                                  <SmallDataCard label="Número valoración">
+                                    #{event.numero}
+                                  </SmallDataCard>
+                                  <SmallDataCard label="Fecha valoración">
+                                    {fmtDate(event.fecha)}
+                                  </SmallDataCard>
+                                  <SmallDataCard label="Hora">
+                                    {event.hora || "—"}
+                                  </SmallDataCard>
+                                  <SmallDataCard label="Medio">
+                                    {event.medio}
+                                  </SmallDataCard>
+                                  <SmallDataCard label="Planner">
+                                    {event.planner}
+                                  </SmallDataCard>
+                                  <SmallDataCard label="Owner">
+                                    {event.owner}
+                                  </SmallDataCard>
+                                  <SmallDataCard label="Dominio">
+                                    {event.dominio}
+                                  </SmallDataCard>
+                                  <SmallDataCard label="Resultado">
+                                    {event.resultado}
+                                  </SmallDataCard>
+                                </div>
+
+                                <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
+                                  <span className="font-semibold uppercase tracking-wide text-foreground">
+                                    Observación / memo:{" "}
+                                  </span>
+                                  {event.memo || "—"}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
-              </div>
-            ))}
+              )}
+
+              {activeTab === "encargo" && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Encargo
+                    </h3>
+                    <Badge variant="secondary" className="rounded-full text-[10px]">
+                      {orders.length}
+                    </Badge>
+                  </div>
+
+                  {relatedLoading ? (
+                    <p className="text-xs text-muted-foreground">Cargando encargos...</p>
+                  ) : orders.length === 0 ? (
+                    <div className="rounded-lg border border-border bg-card p-4">
+                      <p className="text-xs italic text-muted-foreground">
+                        No hay encargos cargados todavía.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="overflow-hidden rounded-lg border border-border bg-card">
+                      <div className="grid grid-cols-[84px_1.2fr_1.2fr_1fr_1fr_1fr_44px] border-b border-border bg-muted/40 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        <span>Encargo</span>
+                        <span>Inicio</span>
+                        <span>Fin</span>
+                        <span>PVP inicial</span>
+                        <span>PVP actual</span>
+                        <span>Health</span>
+                        <span />
+                      </div>
+
+                      {orders.map((order, index) => {
+                        const rowId = String(order.id ?? `order-${index}`);
+                        const isOpen = openOrderRowId === rowId;
+                        const inicio = order.fecha_inicio || "";
+                        const fin = order.fecha_fin || "";
+                        const diasGestion = daysBetween(inicio, localTodayValue());
+                        const diasRestantes = daysBetween(localTodayValue(), fin);
+
+                        return (
+                          <div key={rowId} className="border-b border-border last:border-b-0">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setOpenOrderRowId((current) =>
+                                  current === rowId ? null : rowId
+                                )
+                              }
+                              className="grid w-full grid-cols-[84px_1.2fr_1.2fr_1fr_1fr_1fr_44px] items-center px-3 py-3 text-left text-sm transition hover:bg-muted/40"
+                            >
+                              <span className="font-semibold text-foreground">
+                                #{index + 1}
+                              </span>
+                              <span className="text-foreground">{fmtDate(inicio)}</span>
+                              <span className="text-foreground">{fmtDate(fin)}</span>
+                              <span className="text-muted-foreground">
+                                {displayMoney(order.pvp_inicial)}
+                              </span>
+                              <span className="text-muted-foreground">
+                                {displayMoney(order.pvp_actual)}
+                              </span>
+                              <span>
+                                <Badge variant="outline" className="rounded-md text-[11px]">
+                                  {displayValue(order.health || "0,0")}
+                                </Badge>
+                              </span>
+                              <span className="flex justify-end">
+                                <ChevronDown
+                                  className={cn(
+                                    "h-4 w-4 text-muted-foreground transition-transform",
+                                    isOpen && "rotate-180"
+                                  )}
+                                />
+                              </span>
+                            </button>
+
+                            {isOpen && (
+                              <div className="border-t border-border bg-muted/20 px-4 py-4">
+                                <section className="space-y-3">
+                                  <h5 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                    Datos del encargo #{index + 1}
+                                  </h5>
+                                  <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                                    <SmallDataCard label="Health">
+                                      {displayValue(order.health || "0,0")}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="Estado">
+                                      {statusLabel(effectiveLead.status)}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="Dominio">
+                                      {getLeadDominio(effectiveLead) || "—"}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="Origen">
+                                      {effectiveLead.source || "—"}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="Inicio">
+                                      {fmtDate(inicio)}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="Fin">
+                                      {fmtDate(fin)}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="Días gestión">
+                                      {diasGestion}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="Días rest.">
+                                      {diasRestantes}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="In month">
+                                      {monthValue(inicio)}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="Out month">
+                                      {monthValue(fin)}
+                                    </SmallDataCard>
+                                  </div>
+                                </section>
+
+                                <section className="mt-5 space-y-3 border-t border-border pt-4">
+                                  <h5 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                    Inmueble y responsables
+                                  </h5>
+                                  <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                                    <SmallDataCard label="Domicilio">
+                                      {domicilioParts.length > 0 ? domicilioParts.join(", ") : "—"}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="Propietario">
+                                      {effectiveLead.ownerName || "—"}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="Planner">
+                                      {effectiveLead.planner || "—"}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="Owner">
+                                      {effectiveLead.owner || "—"}
+                                    </SmallDataCard>
+                                  </div>
+                                </section>
+
+                                <section className="mt-5 space-y-3 border-t border-border pt-4">
+                                  <h5 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                    Comisiones y PVP
+                                  </h5>
+                                  <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                                    <SmallDataCard label="% vendedor">
+                                      {percentageValue(order.com_vendedor)}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="% comprador">
+                                      {percentageValue(order.com_comprador)}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="PVP inicial">
+                                      {displayMoney(order.pvp_inicial)}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="PVP actual">
+                                      {displayMoney(order.pvp_actual)}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="PVP estimado">
+                                      {displayMoney(order.pvp_estimado)}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="Rebajas">
+                                      {displayValue(order.rebajas)}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="PVP desvío">
+                                      —
+                                    </SmallDataCard>
+                                    <SmallDataCard label="% desvío">
+                                      —
+                                    </SmallDataCard>
+                                  </div>
+                                </section>
+
+                                <section className="mt-5 border-t border-border pt-4">
+                                  <h5 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                    Memo
+                                  </h5>
+                                  <div className="rounded-md border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
+                                    {order.memo || "—"}
+                                  </div>
+                                </section>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeTab === "rg" && (
+                <div className="space-y-3">
+                  <section className="border-t border-border pt-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Historial R.G.
+                      </h4>
+                      <Badge variant="secondary" className="rounded-full text-[10px]">
+                        {rgHistoryEvents.length}
+                      </Badge>
+                    </div>
+
+                    {rgHistoryEvents.length === 0 ? (
+                      <p className="text-xs italic text-muted-foreground">
+                        Sin gestiones R.G. registradas todavía.
+                      </p>
+                    ) : (
+                      <div className="overflow-hidden rounded-lg border border-border bg-card">
+                        <div className="grid grid-cols-[64px_1.3fr_90px_1fr_1fr_1fr_44px] border-b border-border bg-muted/40 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          <span>R.G.</span>
+                          <span>Fecha</span>
+                          <span>Hora</span>
+                          <span>Medio</span>
+                          <span>Resultado</span>
+                          <span>Dominio</span>
+                          <span />
+                        </div>
+
+                        {rgHistoryEvents.map((event) => {
+                          const isOpen = openRgRowId === event.id;
+
+                          return (
+                            <div key={event.id} className="border-b border-border last:border-b-0">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setOpenRgRowId((current) =>
+                                    current === event.id ? null : event.id
+                                  )
+                                }
+                                className="grid w-full grid-cols-[64px_1.3fr_90px_1fr_1fr_1fr_44px] items-center px-3 py-3 text-left text-sm transition hover:bg-muted/40"
+                              >
+                                <span className="font-semibold text-foreground">
+                                  #{event.numero}
+                                </span>
+                                <span className="text-foreground">{fmtDate(event.fecha)}</span>
+                                <span className="text-muted-foreground">
+                                  {event.hora || "—"}
+                                </span>
+                                <span className="text-muted-foreground">{event.medio}</span>
+                                <span>
+                                  <Badge variant="outline" className="rounded-md text-[11px]">
+                                    {event.resultado}
+                                  </Badge>
+                                </span>
+                                <span className="text-muted-foreground">{event.dominio}</span>
+                                <span className="flex justify-end">
+                                  <ChevronDown
+                                    className={cn(
+                                      "h-4 w-4 text-muted-foreground transition-transform",
+                                      isOpen && "rotate-180"
+                                    )}
+                                  />
+                                </span>
+                              </button>
+
+                              {isOpen && (
+                                <div className="border-t border-border bg-muted/20 px-4 py-4">
+                                  <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                                    <SmallDataCard label="Número R.G.">
+                                      #{event.numero}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="Fecha R.G.">
+                                      {fmtDate(event.fecha)}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="Hora">
+                                      {event.hora || "—"}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="Medio">
+                                      {event.medio}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="Resultado">
+                                      {event.resultado}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="Dominio">
+                                      {event.dominio}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="Planner">
+                                      {event.planner}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="Owner">
+                                      {event.owner}
+                                    </SmallDataCard>
+                                  </div>
+
+                                  <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
+                                    <span className="font-semibold uppercase tracking-wide text-foreground">
+                                      Observación / memo:{" "}
+                                    </span>
+                                    {event.memo || "—"}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </section>
+                </div>
+              )}
+
+              {activeTab === "visitas" && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Visitas
+                    </h3>
+                    <Badge variant="secondary" className="rounded-full text-[10px]">
+                      {visits.length}
+                    </Badge>
+                  </div>
+
+                  {relatedLoading ? (
+                    <p className="text-xs text-muted-foreground">Cargando visitas...</p>
+                  ) : visits.length === 0 ? (
+                    <p className="text-xs italic text-muted-foreground">
+                      Sin visitas asociadas todavía.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {visits.map((visit, index) => (
+                        <div
+                          key={String(visit.id ?? index)}
+                          className="rounded-lg border border-border bg-card p-3"
+                        >
+                          <div className="mb-2 flex items-center justify-between gap-2">
+                            <span className="text-sm font-semibold text-foreground">
+                              {fmtDate(visit.fecha_visita || "")}
+                              {visit.hora ? ` · ${visit.hora}` : ""}
+                            </span>
+                            <Badge variant="outline" className="rounded-md text-[11px]">
+                              {displayValue(visit.estado)}
+                            </Badge>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
+                            <Row label="Buyer">{displayValue(visit.buyer)}</Row>
+                            <Row label="Nombre">{displayValue(visit.nombre_apellido)}</Row>
+                            <Row label="Teléfono">
+                              {displayValue(visit.telefono_comprador || visit.telefono)}
+                            </Row>
+                            <Row label="DNI">{displayValue(visit.dni)}</Row>
+                            <Row label="Vende">{displayValue(visit.vende)}</Row>
+                            <Row label="Planner">{displayValue(visit.planner)}</Row>
+                            <Row label="Owner">{displayValue(visit.owner)}</Row>
+                            <Row label="Dominio">{displayValue(visit.dominio)}</Row>
+                          </div>
+                          {visit.observaciones_visita && (
+                            <div className="mt-3 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                              {visit.observaciones_visita}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+            </div>
           </div>
         </div>
       </div>

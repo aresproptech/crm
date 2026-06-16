@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Topbar } from "@/components/crm/topbar";
 import { supabase } from "@/lib/supabase";
 import { useUser } from "@/lib/hooks/useUser";
-import { RefreshCw, Search } from "lucide-react";
+import { Plus, RefreshCw, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -38,6 +38,7 @@ type LeadRow = {
   domicilio: string | null;
   estado: string | null;
   dominio_desc: string | null;
+  contact_name: string | null;
   comercial_name: string | null;
   source_name: string | null;
 };
@@ -364,6 +365,7 @@ export default function EncargosPage() {
   const [pageError, setPageError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selected, setSelected] = useState<EncargoItem | null>(null);
+  const [createLeadId, setCreateLeadId] = useState("");
   const [editOpen, setEditOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -377,6 +379,19 @@ export default function EncargosPage() {
     com_comprador: "",
     memo: "",
   });
+
+  function resetEditForm() {
+    setEditForm({
+      fecha_inicio: "",
+      fecha_fin: "",
+      pvp_inicial: "",
+      pvp_actual: "",
+      pvp_estimado: "",
+      com_vendedor: "",
+      com_comprador: "",
+      memo: "",
+    });
+  }
 
   function setField(field: keyof typeof editForm, value: string) {
     setEditForm((prev) => ({ ...prev, [field]: value }));
@@ -435,7 +450,7 @@ export default function EncargosPage() {
 
     let query = supabase
       .from("crm_leads_view")
-      .select("id, propietario, domicilio, estado, dominio_desc, comercial_name, source_name")
+      .select("id, propietario, domicilio, estado, dominio_desc, contact_name, comercial_name, source_name")
       .eq("fase_name", "Encargo");
 
     if (rol === "Comercial" && nombre) {
@@ -469,8 +484,8 @@ export default function EncargosPage() {
         .in("opportunity_id", safeLeadIds),
       supabase
         .from("opportunity_contacts")
-        .select("oportunity_id, fecha")
-        .in("oportunity_id", safeLeadIds)
+        .select("opportunity_id, fecha")
+        .in("opportunity_id", safeLeadIds)
         .gte("fecha", formatDate(fifteenDaysAgo)),
       supabase
         .from("visitas")
@@ -501,7 +516,7 @@ export default function EncargosPage() {
 
     const rg15dMap = new Map<number, number>();
     for (const contact of contactsResult.data ?? []) {
-      const opportunityId = Number((contact as { oportunity_id: number | null }).oportunity_id);
+      const opportunityId = Number((contact as { opportunity_id: number | null }).opportunity_id);
       if (!Number.isFinite(opportunityId)) continue;
       rg15dMap.set(opportunityId, (rg15dMap.get(opportunityId) ?? 0) + 1);
     }
@@ -524,7 +539,7 @@ export default function EncargosPage() {
         domicilio: lead.domicilio?.trim() || "—",
         estado: lead.estado?.trim() || "—",
         dominio: lead.dominio_desc?.trim() || "—",
-        planner: lead.dominio_desc?.trim() || "—",
+        planner: lead.contact_name?.trim() || "—",
         owner: lead.comercial_name?.trim() || "—",
         origen: lead.source_name?.trim() || "—",
         fecha_inicio: order?.fecha_inicio ?? "",
@@ -549,8 +564,17 @@ export default function EncargosPage() {
     if (userWithRole) void loadEncargos();
   }, [userWithRole]);
 
+  function handleCreateClick() {
+    setFormError(null);
+    setSelected(null);
+    setCreateLeadId("");
+    resetEditForm();
+    setEditOpen(true);
+  }
+
   function handleRowClick(item: EncargoItem) {
     setFormError(null);
+    setCreateLeadId("");
     setSelected(item);
     setEditForm({
       fecha_inicio: item.fecha_inicio || "",
@@ -566,7 +590,14 @@ export default function EncargosPage() {
   }
 
   async function handleSave() {
-    if (!selected) return;
+    const activeItem =
+      selected ?? items.find((item) => String(item.leadId) === createLeadId) ?? null;
+
+    if (!activeItem) {
+      setFormError("Seleccioná una oportunidad para crear el encargo.");
+      return;
+    }
+
     setSaving(true);
     setFormError(null);
 
@@ -580,13 +611,13 @@ export default function EncargosPage() {
 
     const nextPvpActual = editForm.pvp_actual ? Number(editForm.pvp_actual) : null;
     const shouldIncrementRebajas =
-      selected.pvp_actual !== null &&
+      activeItem.pvp_actual !== null &&
       nextPvpActual !== null &&
-      nextPvpActual < selected.pvp_actual;
-    const nextRebajas = selected.rebajas + (shouldIncrementRebajas ? 1 : 0);
+      nextPvpActual < activeItem.pvp_actual;
+    const nextRebajas = activeItem.rebajas + (shouldIncrementRebajas ? 1 : 0);
 
     const payload = {
-      opportunity_id: selected.leadId,
+      opportunity_id: activeItem.leadId,
       fecha_inicio: editForm.fecha_inicio || null,
       fecha_fin: editForm.fecha_fin || null,
       pvp_inicial: editForm.pvp_inicial ? Number(editForm.pvp_inicial) : null,
@@ -600,11 +631,11 @@ export default function EncargosPage() {
 
     let error;
 
-    if (selected.hasOrder) {
+    if (activeItem.hasOrder) {
       const result = await supabase
         .from("opportunity_orders")
         .update(payload)
-        .eq("opportunity_id", selected.leadId);
+        .eq("opportunity_id", activeItem.leadId);
       error = result.error;
     } else {
       const result = await supabase
@@ -622,6 +653,9 @@ export default function EncargosPage() {
     }
 
     setEditOpen(false);
+    setSelected(null);
+    setCreateLeadId("");
+    resetEditForm();
     void loadEncargos();
   }
 
@@ -676,6 +710,14 @@ export default function EncargosPage() {
               />
             </div>
           </div>
+          <button
+            type="button"
+            onClick={handleCreateClick}
+            className="inline-flex h-8 items-center gap-2 rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Crear Encargo
+          </button>
         </div>
 
         {pageError && (
@@ -794,22 +836,58 @@ export default function EncargosPage() {
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-base font-semibold">Editar encargo</DialogTitle>
+            <DialogTitle className="text-base font-semibold">
+              {selected ? "Editar encargo" : "Crear encargo"}
+            </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
-              {selected?.domicilio} — {selected?.propietario}
+              {selected
+                ? `${selected.domicilio} — ${selected.propietario}`
+                : "Seleccioná una oportunidad y cargá los datos del encargo."}
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid grid-cols-2 gap-x-4 gap-y-4 py-2">
-            <div className="col-span-2 grid grid-cols-3 gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3 text-xs">
-              <div><span className="text-muted-foreground">Estado: </span><span className="font-medium">{selected?.estado}</span></div>
-              <div><span className="text-muted-foreground">Dominio: </span><span className="font-medium">{selected?.dominio}</span></div>
-              <div><span className="text-muted-foreground">Owner: </span><span className="font-medium">{selected?.owner}</span></div>
-              <div><span className="text-muted-foreground">Origen: </span><span className="font-medium">{selected?.origen}</span></div>
-              <div><span className="text-muted-foreground">Planner: </span><span className="font-medium">{selected?.planner}</span></div>
-            </div>
+            {!selected && (
+              <div className="col-span-2 flex flex-col gap-1.5">
+                <Label className="text-xs font-medium">Oportunidad</Label>
+                <select
+                  value={createLeadId}
+                  onChange={(e) => setCreateLeadId(e.target.value)}
+                  className="h-8 rounded-md border border-border bg-background px-3 text-sm outline-none"
+                >
+                  <option value="">Seleccionar oportunidad...</option>
+                  {items.map((item) => (
+                    <option key={item.leadId} value={String(item.leadId)}>
+                      {item.propietario} — {item.domicilio}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
-            {selected && <HealthBreakdownCard item={selected} />}
+            {(() => {
+              const activeItem =
+                selected ?? items.find((item) => String(item.leadId) === createLeadId) ?? null;
+
+              if (!activeItem) return null;
+
+              return (
+                <div className="col-span-2 grid grid-cols-3 gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3 text-xs">
+                  <div><span className="text-muted-foreground">Estado: </span><span className="font-medium">{activeItem.estado}</span></div>
+                  <div><span className="text-muted-foreground">Dominio: </span><span className="font-medium">{activeItem.dominio}</span></div>
+                  <div><span className="text-muted-foreground">Owner: </span><span className="font-medium">{activeItem.owner}</span></div>
+                  <div><span className="text-muted-foreground">Origen: </span><span className="font-medium">{activeItem.origen}</span></div>
+                  <div><span className="text-muted-foreground">Planner: </span><span className="font-medium">{activeItem.planner}</span></div>
+                </div>
+              );
+            })()}
+
+            {(() => {
+              const activeItem =
+                selected ?? items.find((item) => String(item.leadId) === createLeadId) ?? null;
+
+              return activeItem ? <HealthBreakdownCard item={activeItem} /> : null;
+            })()}
             {formError && (
               <div className="col-span-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
                 {formError}
@@ -885,7 +963,7 @@ export default function EncargosPage() {
             <div className="flex flex-col gap-1.5">
               <Label className="text-xs font-medium">Rebajas acumuladas</Label>
               <div className="flex h-8 items-center rounded-md border border-border bg-muted/40 px-3 text-sm text-muted-foreground">
-                {selected?.rebajas ?? 0}
+                {(selected ?? items.find((item) => String(item.leadId) === createLeadId))?.rebajas ?? 0}
               </div>
             </div>
 
@@ -913,7 +991,12 @@ export default function EncargosPage() {
           <DialogFooter>
             <button
               type="button"
-              onClick={() => setEditOpen(false)}
+              onClick={() => {
+                setEditOpen(false);
+                setSelected(null);
+                setCreateLeadId("");
+                resetEditForm();
+              }}
               disabled={saving}
               className="inline-flex h-8 items-center rounded-md border border-border bg-background px-3 text-xs font-medium hover:bg-accent"
             >

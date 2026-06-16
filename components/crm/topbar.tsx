@@ -1,7 +1,6 @@
 "use client";
 
-import { Plus, Bell, ChevronDown } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Bell, ChevronDown } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,10 +13,9 @@ import { useUser } from "@/lib/hooks/useUser";
 
 interface TopbarProps {
   title: string;
-  onCreateLead?: () => void;
 }
 
-export function Topbar({ title, onCreateLead }: TopbarProps) {
+export function Topbar({ title }: TopbarProps) {
   const { userWithRole } = useUser();
 
   // Iniciales del usuario
@@ -66,14 +64,6 @@ export function Topbar({ title, onCreateLead }: TopbarProps) {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <Button
-          size="sm"
-          className="h-8 gap-1.5 text-xs font-semibold px-3"
-          onClick={onCreateLead}
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Crear lead
-        </Button>
 
         {/* Profile */}
         <DropdownMenu>

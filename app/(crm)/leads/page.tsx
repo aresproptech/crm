@@ -46,6 +46,11 @@ type SortKey = keyof LeadTableRow;
 type SortDir = "asc" | "desc";
 type LeadsViewMode = "table" | "kanban";
 
+type PhaseFilterValue = "all" | Lead["phase"];
+type StatusFilterValue = "all" | Lead["status"];
+type DateFilterField = "fechaNoticia";
+type DateQuickFilterValue = "all" | "last7" | "last30" | "custom";
+
 const LEADS_PAGE_SIZE = 100;
 
 type CrmLeadRow = {
@@ -98,6 +103,28 @@ const PHASE_ID_MAP: Partial<Record<Lead["phase"], number>> = {
   valorada: 3,
   encargo: 5,
 };
+
+const PHASE_FILTER_OPTIONS: Array<{ value: PhaseFilterValue; label: string }> = [
+  { value: "all", label: "Todas las fases" },
+  { value: "noticia", label: "Noticia" },
+  { value: "concertada", label: "Concertada" },
+  { value: "valorada", label: "Valorada" },
+  { value: "encargo", label: "Encargo" },
+];
+
+const DATE_FILTER_OPTIONS: Array<{ value: DateFilterField; label: string }> = [
+  { value: "fechaNoticia", label: "F. Noticia" },
+];
+
+const DATE_QUICK_FILTER_OPTIONS: Array<{
+  value: DateQuickFilterValue;
+  label: string;
+}> = [
+  { value: "all", label: "Selecciona el periodo" },
+  { value: "last7", label: "Últimos 7 días" },
+  { value: "last30", label: "Últimos 30 días" },
+  { value: "custom", label: "Personalizado" },
+];
 
 function SortIcon({
   col,
@@ -187,6 +214,14 @@ const STATUS_CONFIG: Record<
     borderColor: "#4B3820",
   },
 };
+
+const STATUS_FILTER_OPTIONS: Array<{ value: StatusFilterValue; label: string }> = [
+  { value: "all", label: "Todos los estados" },
+  { value: "identificar" as Lead["status"], label: STATUS_CONFIG.identificar.label },
+  { value: "cualificada" as Lead["status"], label: STATUS_CONFIG.cualificada.label },
+  { value: "caliente" as Lead["status"], label: STATUS_CONFIG.caliente.label },
+  { value: "desestimada" as Lead["status"], label: STATUS_CONFIG.desestimada.label },
+];
 
 function getStatusConfig(status: string | null | undefined) {
   return STATUS_CONFIG[status || "identificar"] ?? STATUS_CONFIG.identificar;
@@ -557,6 +592,33 @@ function normalizeDate(raw: string | null | undefined): string {
   return parsed.toISOString().slice(0, 10);
 }
 
+function toLocalDateInputValue(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function addDaysToDateInputValue(value: string, days: number) {
+  const parsed = new Date(`${value}T00:00:00`);
+  if (isNaN(parsed.getTime())) return "";
+  parsed.setDate(parsed.getDate() + days);
+  return toLocalDateInputValue(parsed);
+}
+
+function formatDateInputLabel(value: string) {
+  if (!value) return "—";
+  const parsed = new Date(`${value}T00:00:00`);
+  if (isNaN(parsed.getTime())) return value;
+
+  return parsed.toLocaleDateString("es-ES", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
 function normalizePostalId(cp: string | null | undefined): number | null {
   const value = cp?.trim();
   if (!value || !/^\d{5}$/.test(value)) return null;
@@ -637,6 +699,15 @@ export default function LeadsPage() {
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [searchTerm, setSearchTerm] = useState("");
+  const [phaseFilter, setPhaseFilter] = useState<PhaseFilterValue>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>("all");
+  const [dateFilterField, setDateFilterField] =
+    useState<DateFilterField>("fechaNoticia");
+  const [dateQuickFilter, setDateQuickFilter] =
+    useState<DateQuickFilterValue>("all");
+  const [dateFromFilter, setDateFromFilter] = useState("");
+  const [dateToFilter, setDateToFilter] = useState("");
+  const [datePopoverOpen, setDatePopoverOpen] = useState(false);
   const [viewMode, setViewMode] = useState<LeadsViewMode>("table");
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
@@ -931,6 +1002,70 @@ export default function LeadsPage() {
     void loadLeadsFromSupabase({ append: false });
   }, []);
 
+  function clearLeadFilters() {
+    setSearchTerm("");
+    setPhaseFilter("all");
+    setStatusFilter("all");
+    setDateFilterField("fechaNoticia");
+    setDateQuickFilter("all");
+    setDateFromFilter("");
+    setDateToFilter("");
+    setDatePopoverOpen(false);
+  }
+
+  function applyDateRange(nextValue: DateQuickFilterValue, from: string, to: string) {
+    setDateQuickFilter(nextValue);
+    setDateFromFilter(from);
+    setDateToFilter(to);
+  }
+
+  function applyTodayFilter() {
+    const todayValue = toLocalDateInputValue(new Date());
+    applyDateRange("custom", todayValue, todayValue);
+    setDatePopoverOpen(false);
+  }
+
+  function applyYesterdayFilter() {
+    const todayValue = toLocalDateInputValue(new Date());
+    const yesterdayValue = addDaysToDateInputValue(todayValue, -1);
+    applyDateRange("custom", yesterdayValue, yesterdayValue);
+    setDatePopoverOpen(false);
+  }
+
+  function applyLastDaysFilter(nextValue: "last7" | "last30") {
+    const todayValue = toLocalDateInputValue(new Date());
+    const daysBack = nextValue === "last7" ? 6 : 29;
+    const fromValue = addDaysToDateInputValue(todayValue, -daysBack);
+    applyDateRange(nextValue, fromValue, todayValue);
+    setDatePopoverOpen(false);
+  }
+
+  function applyCustomDateFilter() {
+    setDateQuickFilter("custom");
+    setDatePopoverOpen(false);
+  }
+
+  const dateFilterLabel = useMemo(() => {
+    if (dateQuickFilter === "all") return "Selecciona el periodo";
+
+    let fromDate = dateFromFilter;
+    let toDate = dateToFilter;
+
+    if (dateQuickFilter === "last7" || dateQuickFilter === "last30") {
+      const todayValue = toLocalDateInputValue(new Date());
+      const daysBack = dateQuickFilter === "last7" ? 6 : 29;
+      fromDate = addDaysToDateInputValue(todayValue, -daysBack);
+      toDate = todayValue;
+    }
+
+    if (!fromDate && !toDate) return "Selecciona el periodo";
+    if (fromDate && toDate) {
+      return `${formatDateInputLabel(fromDate)} - ${formatDateInputLabel(toDate)}`;
+    }
+    if (fromDate) return `Desde ${formatDateInputLabel(fromDate)}`;
+    return `Hasta ${formatDateInputLabel(toDate)}`;
+  }, [dateQuickFilter, dateFromFilter, dateToFilter]);
+
   function handleSort(key: SortKey) {
     if (sortKey === key) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -946,10 +1081,33 @@ export default function LeadsPage() {
       : leads;
 
     const q = searchTerm.trim().toLowerCase();
-    if (!q) return baseLeads;
 
-    return baseLeads.filter((lead) =>
-      [
+    return baseLeads.filter((lead) => {
+      if (phaseFilter !== "all" && lead.phase !== phaseFilter) return false;
+      if (statusFilter !== "all" && lead.status !== statusFilter) return false;
+
+      const leadDateValue = lead[dateFilterField]?.slice(0, 10) || "";
+
+      if (dateQuickFilter !== "all") {
+        if (!leadDateValue) return false;
+
+        let fromDate = dateFromFilter;
+        let toDate = dateToFilter;
+
+        if (dateQuickFilter === "last7" || dateQuickFilter === "last30") {
+          const todayValue = toLocalDateInputValue(new Date());
+          const daysBack = dateQuickFilter === "last7" ? 6 : 29;
+          fromDate = addDaysToDateInputValue(todayValue, -daysBack);
+          toDate = todayValue;
+        }
+
+        if (fromDate && leadDateValue < fromDate) return false;
+        if (toDate && leadDateValue > toDate) return false;
+      }
+
+      if (!q) return true;
+
+      return [
         lead.ownerName,
         lead.address,
         lead.distrito,
@@ -971,9 +1129,20 @@ export default function LeadsPage() {
       ]
         .join(" ")
         .toLowerCase()
-        .includes(q)
-    );
-  }, [leads, searchTerm, showFavoritesOnly, favoriteIds]);
+        .includes(q);
+    });
+  }, [
+    leads,
+    searchTerm,
+    showFavoritesOnly,
+    favoriteIds,
+    phaseFilter,
+    statusFilter,
+    dateFilterField,
+    dateQuickFilter,
+    dateFromFilter,
+    dateToFilter,
+  ]);
 
   const sortedLeads = useMemo(() => {
     if (!sortKey) return filteredLeads;
@@ -1049,7 +1218,7 @@ export default function LeadsPage() {
 
   return (
     <>
-      <Topbar title="Leads" onCreateLead={() => setModalOpen(true)} />
+      <Topbar title="Leads" />
 
       <main className="mt-14 flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border bg-card px-6 py-2.5">
@@ -1070,6 +1239,165 @@ export default function LeadsPage() {
                 className="h-8 w-[260px] rounded-md border border-border bg-background pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground"
               />
             </div>
+
+            <select
+              value={phaseFilter}
+              onChange={(e) => setPhaseFilter(e.target.value as PhaseFilterValue)}
+              className="h-8 w-[150px] rounded-md border border-border bg-background px-2 text-xs font-medium text-foreground outline-none"
+              aria-label="Filtrar por fase"
+            >
+              {PHASE_FILTER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as StatusFilterValue)}
+              className="h-8 w-[160px] rounded-md border border-border bg-background px-2 text-xs font-medium text-foreground outline-none"
+              aria-label="Filtrar por estado"
+            >
+              {[
+                { value: "all", label: "Estados" },
+                ...STATUS_FILTER_OPTIONS.slice(1),
+              ].map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setDatePopoverOpen((prev) => !prev)}
+                className="inline-flex h-8 min-w-[245px] items-center justify-between gap-3 rounded-md border border-border bg-background px-3 text-left text-xs font-medium text-foreground outline-none transition hover:bg-muted/50"
+                aria-label="Seleccionar periodo"
+              >
+                <span className="truncate">{dateFilterLabel}</span>
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              </button>
+
+              {datePopoverOpen && (
+                <div className="absolute left-0 top-10 z-50 w-[430px] overflow-hidden rounded-xl border border-border bg-background shadow-2xl">
+                  <div className="border-b border-border bg-muted/30 p-4">
+                    <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Periodo de F. Noticia
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className="space-y-1">
+                        <span className="text-[11px] font-semibold text-muted-foreground">
+                          Fecha de inicio
+                        </span>
+                        <input
+                          type="date"
+                          value={dateFromFilter}
+                          onChange={(e) => {
+                            setDateQuickFilter("custom");
+                            setDateFromFilter(e.target.value);
+                          }}
+                          className="h-9 w-full rounded-md border border-border bg-background px-2 text-xs font-medium text-foreground outline-none"
+                        />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-[11px] font-semibold text-muted-foreground">
+                          Fecha de fin
+                        </span>
+                        <input
+                          type="date"
+                          value={dateToFilter}
+                          onChange={(e) => {
+                            setDateQuickFilter("custom");
+                            setDateToFilter(e.target.value);
+                          }}
+                          className="h-9 w-full rounded-md border border-border bg-background px-2 text-xs font-medium text-foreground outline-none"
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="p-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDateQuickFilter("all");
+                        setDateFromFilter("");
+                        setDateToFilter("");
+                        setDatePopoverOpen(false);
+                      }}
+                      className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium text-foreground hover:bg-muted"
+                    >
+                      Selecciona el periodo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={applyTodayFilter}
+                      className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium text-foreground hover:bg-muted"
+                    >
+                      Hoy
+                    </button>
+                    <button
+                      type="button"
+                      onClick={applyYesterdayFilter}
+                      className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium text-foreground hover:bg-muted"
+                    >
+                      Ayer
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyLastDaysFilter("last7")}
+                      className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium text-foreground hover:bg-muted"
+                    >
+                      Últimos 7 días
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyLastDaysFilter("last30")}
+                      className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium text-foreground hover:bg-muted"
+                    >
+                      Últimos 30 días
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 border-t border-border bg-muted/20 p-3">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 text-xs font-semibold"
+                      onClick={() => setDatePopoverOpen(false)}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-8 text-xs font-semibold"
+                      onClick={applyCustomDateFilter}
+                    >
+                      Aplicar
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {(searchTerm ||
+              phaseFilter !== "all" ||
+              statusFilter !== "all" ||
+              dateQuickFilter !== "all") && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-8 px-2 text-xs font-semibold text-muted-foreground"
+                onClick={clearLeadFilters}
+              >
+                Limpiar
+              </Button>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -1214,6 +1542,10 @@ export default function LeadsPage() {
               <colgroup>
                 {selectionMode && <col style={{ width: 44 }} />}
                 <col style={{ width: 48 }} />
+                <col style={{ width: 230 }} />
+                <col style={{ width: 310 }} />
+                <col style={{ width: 95 }} />
+                <col style={{ width: 175 }} />
                 <col style={{ width: 115 }} />
                 <col style={{ width: 135 }} />
                 <col style={{ width: 120 }} />
@@ -1226,11 +1558,7 @@ export default function LeadsPage() {
                 <col style={{ width: 155 }} />
                 <col style={{ width: 165 }} />
                 <col style={{ width: 150 }} />
-                <col style={{ width: 175 }} />
-                <col style={{ width: 95 }} />
                 <col style={{ width: 130 }} />
-                <col style={{ width: 310 }} />
-                <col style={{ width: 230 }} />
                 <col style={{ width: 170 }} />
                 <col style={{ width: 130 }} />
               </colgroup>
@@ -1257,6 +1585,10 @@ export default function LeadsPage() {
 
                   {(
                     [
+                      { label: "Propietario", key: "ownerName" },
+                      { label: "Domicilio", key: "address" },
+                      { label: "CP", key: "cp" },
+                      { label: "Distrito", key: "distrito" },
                       { label: "Fase", key: "phase" },
                       { label: "Estado", key: "status" },
                       { label: "F. Noticia", key: "fechaNoticia" },
@@ -1269,11 +1601,7 @@ export default function LeadsPage() {
                       { label: "Planner", key: "planner" },
                       { label: "Owner", key: "owner" },
                       { label: "Origen", key: "source" },
-                      { label: "Distrito", key: "distrito" },
-                      { label: "CP", key: "cp" },
                       { label: "Valor", key: "valor" },
-                      { label: "Domicilio", key: "address" },
-                      { label: "Propietario", key: "ownerName" },
                       { label: "Teléfono", key: "phone" },
                       { label: "En Venta", key: "enVenta" },
                     ] as { label: string; key: SortKey }[]
@@ -1350,6 +1678,24 @@ export default function LeadsPage() {
                           )}
                         />
                       </button>
+                    </td>
+
+                    <td className="truncate whitespace-nowrap px-3 py-2.5">
+                      <span className="font-medium text-foreground">
+                        {lead.ownerName}
+                      </span>
+                    </td>
+
+                    <td className="truncate whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
+                      {lead.address}
+                    </td>
+
+                    <td className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
+                      {lead.cp}
+                    </td>
+
+                    <td className="truncate whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
+                      {lead.distrito}
                     </td>
 
                     <td className="px-3 py-2.5">
@@ -1456,27 +1802,11 @@ export default function LeadsPage() {
                       </span>
                     </td>
 
-                    <td className="truncate whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
-                      {lead.distrito}
-                    </td>
-
-                    <td className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
-                      {lead.cp}
-                    </td>
 
                     <td className="whitespace-nowrap px-3 py-2.5 text-xs font-medium text-foreground">
                       {lead.valor}
                     </td>
 
-                    <td className="truncate whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
-                      {lead.address}
-                    </td>
-
-                    <td className="truncate whitespace-nowrap px-3 py-2.5">
-                      <span className="font-medium text-foreground">
-                        {lead.ownerName}
-                      </span>
-                    </td>
 
                     <td className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
                       {lead.phone}
