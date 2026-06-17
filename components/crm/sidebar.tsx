@@ -107,7 +107,7 @@ export function Sidebar() {
           <Building2 className="h-4 w-4 text-primary-foreground" />
         </div>
         <span className="text-sm font-semibold tracking-tight text-sidebar-foreground">
-          PropCRM
+          Flow
         </span>
       </div>
 
