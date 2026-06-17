@@ -11,7 +11,7 @@ export type UserWithRole = {
 
 async function fetchCrmUser(userId: string): Promise<CrmUser | null> {
   const { data, error } = await supabase
-    .from("users")
+    .from("profile")
     .select("*")
     .eq("auth_id", userId)
     .single();
