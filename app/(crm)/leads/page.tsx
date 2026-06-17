@@ -105,7 +105,7 @@ const PHASE_ID_MAP: Partial<Record<Lead["phase"], number>> = {
 };
 
 const PHASE_FILTER_OPTIONS: Array<{ value: PhaseFilterValue; label: string }> = [
-  { value: "all", label: "Todas las fases" },
+  { value: "all", label: "Fases (Todas)" },
   { value: "noticia", label: "Noticia" },
   { value: "concertada", label: "Concertada" },
   { value: "valorada", label: "Valorada" },
