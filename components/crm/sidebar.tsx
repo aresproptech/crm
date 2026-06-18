@@ -33,7 +33,7 @@ const navItems: NavItem[] = [
     roles: ["Admin", "Coordinador", "Comercial"],
   },
   {
-    label: "Leads",
+    label: "Oportunidades",
     href: "/leads",
     icon: Users,
     roles: ["Admin", "Coordinador", "Comercial"],
