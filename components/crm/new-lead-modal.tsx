@@ -430,50 +430,6 @@ export function NewLeadModal({
                 className="h-8 text-sm"
               />
             </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="fechaContacto" className="text-xs font-medium">
-                Fecha contacto
-              </Label>
-              <Input
-                id="fechaContacto"
-                type="date"
-                value={form.fechaContacto}
-                onChange={(e) => handleField("fechaContacto", e.target.value)}
-                className="h-8 text-sm"
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label
-                htmlFor="fechaValoracion"
-                className="text-xs font-medium"
-              >
-                Fecha valoración
-              </Label>
-              <Input
-                id="fechaValoracion"
-                type="date"
-                value={form.fechaValoracion}
-                onChange={(e) =>
-                  handleField("fechaValoracion", e.target.value)
-                }
-                className="h-8 text-sm"
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="hora" className="text-xs font-medium">
-                Hora
-              </Label>
-              <Input
-                id="hora"
-                type="time"
-                value={form.hora}
-                onChange={(e) => handleField("hora", e.target.value)}
-                className="h-8 text-sm"
-              />
-            </div>
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
