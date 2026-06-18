@@ -1,3 +1,4 @@
+import type { DragEvent } from "react";
 import { type Lead } from "@/lib/crm-data";
 import { LeadCard } from "./lead-card";
 
@@ -9,14 +10,36 @@ interface PipelineColumnProps {
   leads: Lead[];
   accentColor: string;
   onOpenLead: (lead: Lead) => void;
+  onMoveLead?: (leadId: string, nextPhase: PipelinePhase) => void;
 }
 
 export function PipelineColumn({
+  phase,
   label,
   leads,
   accentColor,
   onOpenLead,
+  onMoveLead,
 }: PipelineColumnProps) {
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  };
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+
+    const leadId =
+      event.dataTransfer.getData("application/x-crm-lead-id") ||
+      event.dataTransfer.getData("text/plain");
+
+    if (!leadId || !onMoveLead) {
+      return;
+    }
+
+    onMoveLead(leadId, phase);
+  };
+
   return (
     <section className="flex min-h-0 w-[280px] shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-column-bg">
       <div className="flex items-center justify-between border-b border-border bg-card px-3 py-2.5">
@@ -34,14 +57,27 @@ export function PipelineColumn({
         </span>
       </div>
 
-      <div className="flex min-h-[200px] flex-1 flex-col gap-2 overflow-y-auto p-2">
+      <div
+        className="flex min-h-[200px] flex-1 flex-col gap-2 overflow-y-auto p-2"
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+      >
         {leads.length > 0 ? (
           leads.map((lead) => (
-            <LeadCard
+            <div
               key={lead.id}
-              lead={lead}
-              onClick={() => onOpenLead(lead)}
-            />
+              draggable
+              onDragStart={(event) => {
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("application/x-crm-lead-id", lead.id);
+                event.dataTransfer.setData("text/plain", lead.id);
+              }}
+            >
+              <LeadCard
+                lead={lead}
+                onClick={() => onOpenLead(lead)}
+              />
+            </div>
           ))
         ) : (
           <div className="flex min-h-[120px] items-center justify-center rounded-lg border border-dashed border-border bg-background/60 px-3 text-center text-xs text-muted-foreground">

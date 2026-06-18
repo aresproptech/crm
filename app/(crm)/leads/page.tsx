@@ -968,6 +968,41 @@ export default function LeadsPage() {
     setSelectedLead(mappedLead);
   }
 
+  async function handleMoveLead(leadId: string, nextPhase: Lead["phase"]) {
+    setPageError(null);
+
+    const currentLead = leads.find((lead) => lead.id === leadId);
+
+    if (!currentLead || currentLead.phase === nextPhase) {
+      return;
+    }
+
+    const previousLeads = leads;
+    const resolvedPhaseId = await resolvePhaseId(nextPhase);
+
+    setLeads((prev) =>
+      prev.map((lead) =>
+        lead.id === leadId
+          ? {
+              ...lead,
+              phase: nextPhase,
+            }
+          : lead
+      )
+    );
+
+    const { error } = await supabase
+      .from("opportunities")
+      .update({ fase_id: resolvedPhaseId })
+      .eq("id", Number(leadId));
+
+    if (error) {
+      console.error("Error actualizando fase del lead:", error);
+      setPageError("No se pudo mover el lead de fase. Intentá nuevamente.");
+      setLeads(previousLeads);
+    }
+  }
+
   async function handleToggleFavorite(leadId: string) {
     setPageError(null);
     const nextFavorite = !favoriteIds.has(leadId);
@@ -1854,12 +1889,13 @@ export default function LeadsPage() {
             )}
           </div>
         ) : (
-          <div className="flex-1 overflow-x-auto overflow-y-hidden px-6 py-5">
+          <div className="flex-1 overflow-auto px-6 py-5">
             <KanbanBoard
               leads={filteredLeads.filter((lead) =>
                 VALID_PHASES.includes(lead.phase)
               )}
               onOpenLead={(lead) => setSelectedLead(lead)}
+              onMoveLead={handleMoveLead}
             />
           </div>
         )}

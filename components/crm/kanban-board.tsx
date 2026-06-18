@@ -11,9 +11,10 @@ const COLUMNS: { phase: PipelinePhase; label: string; accentColor: string }[] = 
 type KanbanBoardProps = {
   leads: Lead[];
   onOpenLead: (lead: Lead) => void;
+  onMoveLead?: (leadId: string, nextPhase: PipelinePhase) => void;
 };
 
-export function KanbanBoard({ leads, onOpenLead }: KanbanBoardProps) {
+export function KanbanBoard({ leads, onOpenLead, onMoveLead }: KanbanBoardProps) {
   return (
     <div className="flex min-h-0 gap-3 overflow-x-auto pb-4">
       {COLUMNS.map(({ phase, label, accentColor }) => (
@@ -24,6 +25,7 @@ export function KanbanBoard({ leads, onOpenLead }: KanbanBoardProps) {
           leads={leads.filter((lead) => lead.phase === phase)}
           accentColor={accentColor}
           onOpenLead={onOpenLead}
+          onMoveLead={onMoveLead}
         />
       ))}
     </div>
