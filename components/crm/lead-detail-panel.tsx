@@ -268,7 +268,7 @@ type VisitRow = {
 
 type LeadDetailTab = "resumen" | "valoracion" | "encargo" | "rg" | "visitas";
 
-type EditLeadTab = "resumen" | "inmueble" | "valoracion" | "asignacion" | "notas";
+type EditLeadTab = "resumen" | "inmueble" | "asignacion";
 
 const LEAD_DETAIL_TABS: Array<{ value: LeadDetailTab; label: string }> = [
   { value: "resumen", label: "Resumen" },
@@ -281,9 +281,7 @@ const LEAD_DETAIL_TABS: Array<{ value: LeadDetailTab; label: string }> = [
 const EDIT_LEAD_TABS: Array<{ value: EditLeadTab; label: string }> = [
   { value: "resumen", label: "Resumen" },
   { value: "inmueble", label: "Inmueble" },
-  { value: "valoracion", label: "Valoración" },
   { value: "asignacion", label: "Asignación" },
-  { value: "notas", label: "Notas" },
 ];
 
 const LEAD_DETAIL_PHASE_OPTIONS = PHASE_OPTIONS.filter((opt) =>
@@ -958,63 +956,6 @@ function EditLeadModal({
                 </section>
               )}
 
-              {activeEditTab === "valoracion" && (
-                <section className="space-y-3">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Seguimiento y valoración
-                  </h3>
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium">Fecha contacto</Label>
-                      <Input
-                        type="date"
-                        value={form.fechaContacto}
-                        onChange={(e) => set("fechaContacto", e.target.value)}
-                        className="h-9 text-sm"
-                      />
-                    </div>
-
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium">Fecha valoración</Label>
-                      <Input
-                        type="date"
-                        value={form.fechaValoracion}
-                        onChange={(e) => set("fechaValoracion", e.target.value)}
-                        className="h-9 text-sm"
-                      />
-                    </div>
-
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium">Hora</Label>
-                      <Input
-                        type="time"
-                        value={form.hora}
-                        onChange={(e) => set("hora", e.target.value)}
-                        className="h-9 text-sm"
-                      />
-                    </div>
-
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium">Medio</Label>
-                      <Select
-                        value={form.medio ?? ""}
-                        onValueChange={(v) => set("medio", v)}
-                      >
-                        <SelectTrigger className="h-9 text-sm">
-                          <SelectValue placeholder="Seleccionar medio" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {LEAD_DETAIL_MEDIO_OPTIONS.map((option) => (
-                            <SelectItem key={option} value={option} className="text-sm">
-                              {option}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </section>
-              )}
 
               {activeEditTab === "asignacion" && (
                 <section className="space-y-3">
@@ -1081,19 +1022,6 @@ function EditLeadModal({
                 </section>
               )}
 
-              {activeEditTab === "notas" && (
-                <section className="space-y-3">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Notas
-                  </h3>
-                  <Textarea
-                    value={form.notes ?? ""}
-                    onChange={(e) => set("notes", e.target.value)}
-                    className="min-h-[160px] resize-none text-sm"
-                    placeholder="Observaciones generales..."
-                  />
-                </section>
-              )}
             </div>
           </div>
         </div>
@@ -1144,6 +1072,7 @@ export function LeadDetailPanel({
   const [openOrderRowId, setOpenOrderRowId] = useState<string | null>(null);
   const [valuationModalOpen, setValuationModalOpen] = useState(false);
   const [orderModalOpen, setOrderModalOpen] = useState(false);
+  const [rgModalOpen, setRgModalOpen] = useState(false);
 
   useEffect(() => {
     setLocalLead(lead as LeadWithDominio | null);
@@ -1415,16 +1344,6 @@ export function LeadDetailPanel({
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5 text-xs"
-            onClick={() => setEditOpen(true)}
-          >
-            <Pencil className="h-3.5 w-3.5" />
-            Editar
-          </Button>
           <button
             type="button"
             onClick={onClose}
@@ -1537,9 +1456,20 @@ export function LeadDetailPanel({
                 <div className="space-y-3">
                   <div className="space-y-5">
                     <section className="space-y-3">
-                      <h4 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        Datos generales
-                      </h4>
+                      <div className="flex items-center justify-between gap-3">
+                        <h4 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          Datos generales
+                        </h4>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-8 gap-1.5 bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary/90"
+                          onClick={() => setEditOpen(true)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          Editar datos
+                        </Button>
+                      </div>
                       <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
                         <SmallDataCard label="Propietario">
                           {effectiveLead.ownerName || "—"}
@@ -1696,7 +1626,7 @@ export function LeadDetailPanel({
                     </div>
                   ) : (
                     <div className="overflow-hidden rounded-lg border border-border bg-card">
-                      <div className="grid grid-cols-[94px_1.3fr_90px_1fr_1fr_1fr_44px] border-b border-border bg-muted/40 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      <div className="grid grid-cols-[94px_1.3fr_90px_1fr_1fr_1fr_72px] border-b border-border bg-muted/40 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                         <span>Valoración</span>
                         <span>Fecha</span>
                         <span>Hora</span>
@@ -1718,7 +1648,7 @@ export function LeadDetailPanel({
                                   current === event.id ? null : event.id
                                 )
                               }
-                              className="grid w-full grid-cols-[94px_1.3fr_90px_1fr_1fr_1fr_44px] items-center px-3 py-3 text-left text-sm transition hover:bg-muted/40"
+                              className="grid w-full grid-cols-[94px_1.3fr_90px_1fr_1fr_1fr_72px] items-center px-3 py-3 text-left text-sm transition hover:bg-muted/40"
                             >
                               <span className="font-semibold text-foreground">
                                 #{event.numero}
@@ -1734,7 +1664,8 @@ export function LeadDetailPanel({
                                   {event.resultado}
                                 </Badge>
                               </span>
-                              <span className="flex justify-end">
+                              <span className="flex items-center justify-end gap-2">
+                                <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                                 <ChevronDown
                                   className={cn(
                                     "h-4 w-4 text-muted-foreground transition-transform",
@@ -1821,7 +1752,7 @@ export function LeadDetailPanel({
                     </div>
                   ) : (
                     <div className="overflow-hidden rounded-lg border border-border bg-card">
-                      <div className="grid grid-cols-[84px_1.2fr_1.2fr_1fr_1fr_1fr_44px] border-b border-border bg-muted/40 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      <div className="grid grid-cols-[84px_1.2fr_1.2fr_1fr_1fr_1fr_72px] border-b border-border bg-muted/40 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                         <span>Encargo</span>
                         <span>Inicio</span>
                         <span>Fin</span>
@@ -1848,7 +1779,7 @@ export function LeadDetailPanel({
                                   current === rowId ? null : rowId
                                 )
                               }
-                              className="grid w-full grid-cols-[84px_1.2fr_1.2fr_1fr_1fr_1fr_44px] items-center px-3 py-3 text-left text-sm transition hover:bg-muted/40"
+                              className="grid w-full grid-cols-[84px_1.2fr_1.2fr_1fr_1fr_1fr_72px] items-center px-3 py-3 text-left text-sm transition hover:bg-muted/40"
                             >
                               <span className="font-semibold text-foreground">
                                 #{index + 1}
@@ -1866,7 +1797,8 @@ export function LeadDetailPanel({
                                   {displayValue(order.health || "0,0")}
                                 </Badge>
                               </span>
-                              <span className="flex justify-end">
+                              <span className="flex items-center justify-end gap-2">
+                                <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                                 <ChevronDown
                                   className={cn(
                                     "h-4 w-4 text-muted-foreground transition-transform",
@@ -1988,8 +1920,8 @@ export function LeadDetailPanel({
 
               {activeTab === "rg" && (
                 <div className="space-y-3">
-                  <section className="border-t border-border pt-4">
-                    <div className="mb-3 flex items-center justify-between">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
                       <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         Historial R.G.
                       </h4>
@@ -1998,103 +1930,113 @@ export function LeadDetailPanel({
                       </Badge>
                     </div>
 
-                    {rgHistoryEvents.length === 0 ? (
-                      <p className="text-xs italic text-muted-foreground">
-                        Sin gestiones R.G. registradas todavía.
-                      </p>
-                    ) : (
-                      <div className="overflow-hidden rounded-lg border border-border bg-card">
-                        <div className="grid grid-cols-[64px_1.3fr_90px_1fr_1fr_1fr_44px] border-b border-border bg-muted/40 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                          <span>R.G.</span>
-                          <span>Fecha</span>
-                          <span>Hora</span>
-                          <span>Medio</span>
-                          <span>Resultado</span>
-                          <span>Dominio</span>
-                          <span />
-                        </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => setRgModalOpen(true)}
+                    >
+                      Agregar R.G.
+                    </Button>
+                  </div>
 
-                        {rgHistoryEvents.map((event) => {
-                          const isOpen = openRgRowId === event.id;
-
-                          return (
-                            <div key={event.id} className="border-b border-border last:border-b-0">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setOpenRgRowId((current) =>
-                                    current === event.id ? null : event.id
-                                  )
-                                }
-                                className="grid w-full grid-cols-[64px_1.3fr_90px_1fr_1fr_1fr_44px] items-center px-3 py-3 text-left text-sm transition hover:bg-muted/40"
-                              >
-                                <span className="font-semibold text-foreground">
-                                  #{event.numero}
-                                </span>
-                                <span className="text-foreground">{fmtDate(event.fecha)}</span>
-                                <span className="text-muted-foreground">
-                                  {event.hora || "—"}
-                                </span>
-                                <span className="text-muted-foreground">{event.medio}</span>
-                                <span>
-                                  <Badge variant="outline" className="rounded-md text-[11px]">
-                                    {event.resultado}
-                                  </Badge>
-                                </span>
-                                <span className="text-muted-foreground">{event.dominio}</span>
-                                <span className="flex justify-end">
-                                  <ChevronDown
-                                    className={cn(
-                                      "h-4 w-4 text-muted-foreground transition-transform",
-                                      isOpen && "rotate-180"
-                                    )}
-                                  />
-                                </span>
-                              </button>
-
-                              {isOpen && (
-                                <div className="border-t border-border bg-muted/20 px-4 py-4">
-                                  <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-                                    <SmallDataCard label="Número R.G.">
-                                      #{event.numero}
-                                    </SmallDataCard>
-                                    <SmallDataCard label="Fecha R.G.">
-                                      {fmtDate(event.fecha)}
-                                    </SmallDataCard>
-                                    <SmallDataCard label="Hora">
-                                      {event.hora || "—"}
-                                    </SmallDataCard>
-                                    <SmallDataCard label="Medio">
-                                      {event.medio}
-                                    </SmallDataCard>
-                                    <SmallDataCard label="Resultado">
-                                      {event.resultado}
-                                    </SmallDataCard>
-                                    <SmallDataCard label="Dominio">
-                                      {event.dominio}
-                                    </SmallDataCard>
-                                    <SmallDataCard label="Planner">
-                                      {event.planner}
-                                    </SmallDataCard>
-                                    <SmallDataCard label="Owner">
-                                      {event.owner}
-                                    </SmallDataCard>
-                                  </div>
-
-                                  <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
-                                    <span className="font-semibold uppercase tracking-wide text-foreground">
-                                      Observación / memo:{" "}
-                                    </span>
-                                    {event.memo || "—"}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
+                  {rgHistoryEvents.length === 0 ? (
+                    <p className="text-xs italic text-muted-foreground">
+                      Sin gestiones R.G. registradas todavía.
+                    </p>
+                  ) : (
+                    <div className="overflow-hidden rounded-lg border border-border bg-card">
+                      <div className="grid grid-cols-[64px_1.3fr_90px_1fr_1fr_1fr_72px] border-b border-border bg-muted/40 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        <span>R.G.</span>
+                        <span>Fecha</span>
+                        <span>Hora</span>
+                        <span>Medio</span>
+                        <span>Resultado</span>
+                        <span>Dominio</span>
+                        <span />
                       </div>
-                    )}
-                  </section>
+
+                      {rgHistoryEvents.map((event) => {
+                        const isOpen = openRgRowId === event.id;
+
+                        return (
+                          <div key={event.id} className="border-b border-border last:border-b-0">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setOpenRgRowId((current) =>
+                                  current === event.id ? null : event.id
+                                )
+                              }
+                              className="grid w-full grid-cols-[64px_1.3fr_90px_1fr_1fr_1fr_72px] items-center px-3 py-3 text-left text-sm transition hover:bg-muted/40"
+                            >
+                              <span className="font-semibold text-foreground">
+                                #{event.numero}
+                              </span>
+                              <span className="text-foreground">{fmtDate(event.fecha)}</span>
+                              <span className="text-muted-foreground">
+                                {event.hora || "—"}
+                              </span>
+                              <span className="text-muted-foreground">{event.medio}</span>
+                              <span>
+                                <Badge variant="outline" className="rounded-md text-[11px]">
+                                  {event.resultado}
+                                </Badge>
+                              </span>
+                              <span className="text-muted-foreground">{event.dominio}</span>
+                              <span className="flex items-center justify-end gap-2">
+                                <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                                <ChevronDown
+                                  className={cn(
+                                    "h-4 w-4 text-muted-foreground transition-transform",
+                                    isOpen && "rotate-180"
+                                  )}
+                                />
+                              </span>
+                            </button>
+
+                            {isOpen && (
+                              <div className="border-t border-border bg-muted/20 px-4 py-4">
+                                <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                                  <SmallDataCard label="Número R.G.">
+                                    #{event.numero}
+                                  </SmallDataCard>
+                                  <SmallDataCard label="Fecha R.G.">
+                                    {fmtDate(event.fecha)}
+                                  </SmallDataCard>
+                                  <SmallDataCard label="Hora">
+                                    {event.hora || "—"}
+                                  </SmallDataCard>
+                                  <SmallDataCard label="Medio">
+                                    {event.medio}
+                                  </SmallDataCard>
+                                  <SmallDataCard label="Resultado">
+                                    {event.resultado}
+                                  </SmallDataCard>
+                                  <SmallDataCard label="Dominio">
+                                    {event.dominio}
+                                  </SmallDataCard>
+                                  <SmallDataCard label="Planner">
+                                    {event.planner}
+                                  </SmallDataCard>
+                                  <SmallDataCard label="Owner">
+                                    {event.owner}
+                                  </SmallDataCard>
+                                </div>
+
+                                <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
+                                  <span className="font-semibold uppercase tracking-wide text-foreground">
+                                    Observación / memo:{" "}
+                                  </span>
+                                  {event.memo || "—"}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -2316,6 +2258,85 @@ export function LeadDetailPanel({
               onClick={() => setOrderModalOpen(false)}
             >
               Guardar encargo
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={rgModalOpen} onOpenChange={setRgModalOpen}>
+        <DialogContent className="sm:max-w-[720px]">
+          <DialogHeader>
+            <DialogTitle>Agregar R.G.</DialogTitle>
+            <DialogDescription>
+              Carga los datos principales de la reunión de gestión del lead.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs font-medium">Fecha R.G.</Label>
+              <Input type="date" className="h-9 text-sm" />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs font-medium">Hora</Label>
+              <Input type="time" className="h-9 text-sm" />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs font-medium">Medio</Label>
+              <Select>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder="Seleccionar medio" />
+                </SelectTrigger>
+                <SelectContent>
+                  {LEAD_DETAIL_MEDIO_OPTIONS.map((option) => (
+                    <SelectItem key={option} value={option} className="text-sm">
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs font-medium">Resultado</Label>
+              <Select>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder="Seleccionar resultado" />
+                </SelectTrigger>
+                <SelectContent>
+                  {LEAD_DETAIL_STATUS_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value} className="text-sm">
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex flex-col gap-1.5 md:col-span-2">
+              <Label className="text-xs font-medium">Observación</Label>
+              <Textarea
+                placeholder="Observaciones de la R.G..."
+                className="min-h-[96px] resize-none text-sm"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setRgModalOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={() => setRgModalOpen(false)}
+            >
+              Guardar R.G.
             </Button>
           </DialogFooter>
         </DialogContent>
