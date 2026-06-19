@@ -875,14 +875,7 @@ function EditLeadModal({
                     Datos del inmueble
                   </h3>
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                    <div className="flex flex-col gap-1.5 md:col-span-4">
-                      <Label className="text-xs font-medium">Domicilio</Label>
-                      <Input
-                        value={form.address}
-                        onChange={(e) => set("address", e.target.value)}
-                        className="h-9 text-sm"
-                      />
-                    </div>
+                  
 
                     <div className="flex flex-col gap-1.5">
                       <Label className="text-xs font-medium">CP</Label>
@@ -1147,8 +1140,10 @@ export function LeadDetailPanel({
   const [relatedError, setRelatedError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<LeadDetailTab>("resumen");
   const [openRgRowId, setOpenRgRowId] = useState<string | null>(null);
-  const [openOrderRowId, setOpenOrderRowId] = useState<string | null>(null);
   const [openValuationRowId, setOpenValuationRowId] = useState<string | null>(null);
+  const [openOrderRowId, setOpenOrderRowId] = useState<string | null>(null);
+  const [valuationModalOpen, setValuationModalOpen] = useState(false);
+  const [orderModalOpen, setOrderModalOpen] = useState(false);
 
   useEffect(() => {
     setLocalLead(lead as LeadWithDominio | null);
@@ -1540,9 +1535,6 @@ export function LeadDetailPanel({
             <div className="min-w-0 rounded-xl border border-border bg-background p-5 shadow-sm">
               {activeTab === "resumen" && (
                 <div className="space-y-3">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Resumen del lead
-                  </h3>
                   <div className="space-y-5">
                     <section className="space-y-3">
                       <h4 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -1676,14 +1668,25 @@ export function LeadDetailPanel({
 
               {activeTab === "valoracion" && (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Historial de valoraciones
-                    </h3>
-                    <Badge variant="secondary" className="rounded-full text-[10px]">
-                      {valuationHistoryEvents.length}
-                    </Badge>
-                  </div>
+                  <div className="flex items-center justify-between gap-3">
+  <div className="flex items-center gap-2">
+    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      Historial de valoraciones
+    </h3>
+    <Badge variant="secondary" className="rounded-full text-[10px]">
+      {valuationHistoryEvents.length}
+    </Badge>
+  </div>
+
+  <Button
+    type="button"
+    size="sm"
+    className="h-8 text-xs"
+    onClick={() => setValuationModalOpen(true)}
+  >
+    Agregar valoración
+  </Button>
+</div>
 
                   {valuationHistoryEvents.length === 0 ? (
                     <div className="rounded-lg border border-border bg-card p-4">
@@ -1788,14 +1791,25 @@ export function LeadDetailPanel({
 
               {activeTab === "encargo" && (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Encargo
-                    </h3>
-                    <Badge variant="secondary" className="rounded-full text-[10px]">
-                      {orders.length}
-                    </Badge>
-                  </div>
+                  <div className="flex items-center justify-between gap-3">
+  <div className="flex items-center gap-2">
+    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      Encargo
+    </h3>
+    <Badge variant="secondary" className="rounded-full text-[10px]">
+      {orders.length}
+    </Badge>
+  </div>
+
+  <Button
+    type="button"
+    size="sm"
+    className="h-8 text-xs"
+    onClick={() => setOrderModalOpen(true)}
+  >
+    Agregar encargo
+  </Button>
+</div>
 
                   {relatedLoading ? (
                     <p className="text-xs text-muted-foreground">Cargando encargos...</p>
@@ -2151,6 +2165,161 @@ export function LeadDetailPanel({
           Cerrar
         </Button>
       </div>
+
+      <Dialog open={valuationModalOpen} onOpenChange={setValuationModalOpen}>
+        <DialogContent className="sm:max-w-[720px]">
+          <DialogHeader>
+            <DialogTitle>Agregar valoración</DialogTitle>
+            <DialogDescription>
+              Carga los datos principales de la valoración del lead.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs font-medium">Fecha valoración</Label>
+              <Input type="date" className="h-9 text-sm" />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs font-medium">Hora</Label>
+              <Input type="time" className="h-9 text-sm" />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs font-medium">Medio</Label>
+              <Select>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder="Seleccionar medio" />
+                </SelectTrigger>
+                <SelectContent>
+                  {LEAD_DETAIL_MEDIO_OPTIONS.map((option) => (
+                    <SelectItem key={option} value={option} className="text-sm">
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setValuationModalOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={() => setValuationModalOpen(false)}
+            >
+              Guardar valoración
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={orderModalOpen} onOpenChange={setOrderModalOpen}>
+        <DialogContent className="sm:max-w-[820px]">
+          <DialogHeader>
+            <DialogTitle>Agregar encargo</DialogTitle>
+            <DialogDescription>
+              Carga los datos principales del encargo del lead.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs font-medium">Fecha inicio</Label>
+              <Input type="date" className="h-9 text-sm" />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs font-medium">Fecha fin</Label>
+              <Input type="date" className="h-9 text-sm" />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs font-medium">PVP inicial</Label>
+              <Input
+                className="h-9 text-sm"
+                placeholder="Ej. 450.000 €"
+                inputMode="numeric"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs font-medium">PVP actual</Label>
+              <Input
+                className="h-9 text-sm"
+                placeholder="Ej. 440.000 €"
+                inputMode="numeric"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs font-medium">PVP estimado</Label>
+              <Input
+                className="h-9 text-sm"
+                placeholder="Ej. 430.000 €"
+                inputMode="numeric"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs font-medium">Comisión vendedor</Label>
+              <Input
+                className="h-9 text-sm"
+                placeholder="Ej. 3 %"
+                inputMode="decimal"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs font-medium">Comisión comprador</Label>
+              <Input
+                className="h-9 text-sm"
+                placeholder="Ej. 3 %"
+                inputMode="decimal"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5 md:col-span-2">
+              <Label className="text-xs font-medium">Domicilio</Label>
+              <Input
+                className="h-9 text-sm"
+                placeholder="Domicilio del inmueble"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5 md:col-span-2">
+              <Label className="text-xs font-medium">Observación</Label>
+              <Textarea
+                placeholder="Observaciones del encargo..."
+                className="min-h-[96px] resize-none text-sm"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOrderModalOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={() => setOrderModalOpen(false)}
+            >
+              Guardar encargo
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <EditLeadModal
         lead={effectiveLead}
