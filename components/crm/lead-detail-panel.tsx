@@ -1070,6 +1070,7 @@ export function LeadDetailPanel({
   const [openRgRowId, setOpenRgRowId] = useState<string | null>(null);
   const [openValuationRowId, setOpenValuationRowId] = useState<string | null>(null);
   const [openOrderRowId, setOpenOrderRowId] = useState<string | null>(null);
+  const [openVisitRowId, setOpenVisitRowId] = useState<string | null>(null);
   const [valuationModalOpen, setValuationModalOpen] = useState(false);
   const [orderModalOpen, setOrderModalOpen] = useState(false);
   const [rgModalOpen, setRgModalOpen] = useState(false);
@@ -2042,56 +2043,140 @@ export function LeadDetailPanel({
 
               {activeTab === "visitas" && (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Visitas
-                    </h3>
-                    <Badge variant="secondary" className="rounded-full text-[10px]">
-                      {visits.length}
-                    </Badge>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Historial de visitas
+                      </h3>
+                      <Badge variant="secondary" className="rounded-full text-[10px]">
+                        {visits.length}
+                      </Badge>
+                    </div>
                   </div>
 
                   {relatedLoading ? (
                     <p className="text-xs text-muted-foreground">Cargando visitas...</p>
                   ) : visits.length === 0 ? (
-                    <p className="text-xs italic text-muted-foreground">
-                      Sin visitas asociadas todavía.
-                    </p>
+                    <div className="rounded-lg border border-border bg-card p-4">
+                      <p className="text-xs italic text-muted-foreground">
+                        Sin visitas asociadas todavía.
+                      </p>
+                    </div>
                   ) : (
-                    <div className="space-y-3">
-                      {visits.map((visit, index) => (
-                        <div
-                          key={String(visit.id ?? index)}
-                          className="rounded-lg border border-border bg-card p-3"
-                        >
-                          <div className="mb-2 flex items-center justify-between gap-2">
-                            <span className="text-sm font-semibold text-foreground">
-                              {fmtDate(visit.fecha_visita || "")}
-                              {visit.hora ? ` · ${visit.hora}` : ""}
-                            </span>
-                            <Badge variant="outline" className="rounded-md text-[11px]">
-                              {displayValue(visit.estado)}
-                            </Badge>
+                    <div className="overflow-hidden rounded-lg border border-border bg-card">
+                      <div className="grid grid-cols-[84px_1.2fr_90px_1fr_1fr_1fr_72px] border-b border-border bg-muted/40 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        <span>Visita</span>
+                        <span>Fecha</span>
+                        <span>Hora</span>
+                        <span>Comprador</span>
+                        <span>Teléfono</span>
+                        <span>Estado</span>
+                        <span />
+                      </div>
+
+                      {visits.map((visit, index) => {
+                        const rowId = String(visit.id ?? `visit-${index}`);
+                        const isOpen = openVisitRowId === rowId;
+
+                        return (
+                          <div key={rowId} className="border-b border-border last:border-b-0">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setOpenVisitRowId((current) =>
+                                  current === rowId ? null : rowId
+                                )
+                              }
+                              className="grid w-full grid-cols-[84px_1.2fr_90px_1fr_1fr_1fr_72px] items-center px-3 py-3 text-left text-sm transition hover:bg-muted/40"
+                            >
+                              <span className="font-semibold text-foreground">
+                                #{index + 1}
+                              </span>
+                              <span className="text-foreground">
+                                {fmtDate(visit.fecha_visita || "")}
+                              </span>
+                              <span className="text-muted-foreground">
+                                {visit.hora || "—"}
+                              </span>
+                              <span className="text-muted-foreground">
+                                {displayValue(visit.nombre_apellido || visit.buyer)}
+                              </span>
+                              <span className="text-muted-foreground">
+                                {displayValue(visit.telefono_comprador || visit.telefono)}
+                              </span>
+                              <span>
+                                <Badge variant="outline" className="rounded-md text-[11px]">
+                                  {displayValue(visit.estado)}
+                                </Badge>
+                              </span>
+                              <span className="flex items-center justify-end gap-2">
+                                <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                                <ChevronDown
+                                  className={cn(
+                                    "h-4 w-4 text-muted-foreground transition-transform",
+                                    isOpen && "rotate-180"
+                                  )}
+                                />
+                              </span>
+                            </button>
+
+                            {isOpen && (
+                              <div className="border-t border-border bg-muted/20 px-4 py-4">
+                                <section className="space-y-3">
+                                  <h5 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                    Datos de la visita #{index + 1}
+                                  </h5>
+
+                                  <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                                    <SmallDataCard label="Fecha visita">
+                                      {fmtDate(visit.fecha_visita || "")}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="Hora">
+                                      {visit.hora || "—"}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="Estado">
+                                      {displayValue(visit.estado)}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="Buyer">
+                                      {displayValue(visit.buyer)}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="Nombre">
+                                      {displayValue(visit.nombre_apellido)}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="Teléfono">
+                                      {displayValue(visit.telefono_comprador || visit.telefono)}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="DNI">
+                                      {displayValue(visit.dni)}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="Vende">
+                                      {displayValue(visit.vende)}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="Planner">
+                                      {displayValue(visit.planner)}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="Owner">
+                                      {displayValue(visit.owner)}
+                                    </SmallDataCard>
+                                    <SmallDataCard label="Dominio">
+                                      {displayValue(visit.dominio)}
+                                    </SmallDataCard>
+                                  </div>
+                                </section>
+
+                                <section className="mt-5 border-t border-border pt-4">
+                                  <h5 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                    Observaciones
+                                  </h5>
+                                  <div className="rounded-md border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
+                                    {visit.observaciones_visita || "—"}
+                                  </div>
+                                </section>
+                              </div>
+                            )}
                           </div>
-                          <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
-                            <Row label="Buyer">{displayValue(visit.buyer)}</Row>
-                            <Row label="Nombre">{displayValue(visit.nombre_apellido)}</Row>
-                            <Row label="Teléfono">
-                              {displayValue(visit.telefono_comprador || visit.telefono)}
-                            </Row>
-                            <Row label="DNI">{displayValue(visit.dni)}</Row>
-                            <Row label="Vende">{displayValue(visit.vende)}</Row>
-                            <Row label="Planner">{displayValue(visit.planner)}</Row>
-                            <Row label="Owner">{displayValue(visit.owner)}</Row>
-                            <Row label="Dominio">{displayValue(visit.dominio)}</Row>
-                          </div>
-                          {visit.observaciones_visita && (
-                            <div className="mt-3 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-                              {visit.observaciones_visita}
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
