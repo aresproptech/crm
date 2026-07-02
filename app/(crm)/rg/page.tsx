@@ -103,6 +103,41 @@ function mapCrmLeadToLead(row: CrmLeadRow): Lead {
   };
 }
 
+type OpportunityContactRow = {
+  id: number;
+  opportunity_id: number;
+  fecha: string | null;
+  memo: string | null;
+  created_at: string | null;
+};
+
+type RgEntry = {
+  id: string;
+  leadId: string;
+  fecha: string;
+  hora: string;
+  medio: string;
+  resultado: string;
+  ownerName: string;
+  address: string;
+  phone: string;
+  planner: string;
+  owner: string;
+};
+
+function parseRgMemo(memo: string | null | undefined) {
+  const text = (memo || "").trim();
+  const match = text.match(
+    /^\[R\.G\.\] Medio: (.*?) \| Resultado: (.*?)(?: \| Hora: (.*))?$/
+  );
+
+  return {
+    medio: match?.[1] && match[1] !== "—" ? match[1] : "",
+    resultado: match?.[2] && match[2] !== "—" ? match[2] : "",
+    hora: match?.[3] || "",
+  };
+}
+
 function startOfDay(date: Date) {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
@@ -126,7 +161,7 @@ function getPlanningLabel(dateStr: string) {
 }
 
 export default function RGPage() {
-  const [items, setItems] = useState<Lead[]>([]);
+  const [items, setItems] = useState<RgEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -134,26 +169,90 @@ export default function RGPage() {
     async function loadRG() {
       setLoading(true);
 
-      const { data, error } = await supabase
-        .from("crm_leads_view")
-        .select("*")
-        .order("created_at", { ascending: false });
+      const [contactsResult, leadsResult] = await Promise.all([
+        supabase
+          .from("opportunity_contacts")
+          .select("id, opportunity_id, fecha, memo, created_at")
+          .ilike("memo", "[R.G.]%")
+          .order("fecha", { ascending: false }),
+        supabase.from("crm_leads_view").select("*").order("created_at", { ascending: false }),
+      ]);
 
-      if (error) {
-        console.error("Supabase RG error:", error);
+      if (contactsResult.error) {
+        console.error("Supabase RG error:", contactsResult.error);
         setLoading(false);
         return;
       }
 
-      const mapped = (data ?? []).map((row) =>
-        mapCrmLeadToLead(row as CrmLeadRow)
-      );
+      if (leadsResult.error) {
+        console.error("Supabase leads error:", leadsResult.error);
+        setLoading(false);
+        return;
+      }
 
-      const filtered = mapped.filter(
-        (lead) => lead.phase === "cualificada" || lead.phase === "encargo"
-      );
+      const contactRows = (contactsResult.data ?? []) as OpportunityContactRow[];
 
-      setItems(filtered);
+      const leadsMap = new Map<number, Lead>();
+      for (const row of leadsResult.data ?? []) {
+        const mapped = mapCrmLeadToLead(row as CrmLeadRow);
+        leadsMap.set(Number(mapped.id), mapped);
+      }
+
+      const entries: RgEntry[] = contactRows.map((row) => {
+        const lead = leadsMap.get(row.opportunity_id);
+        const { medio, hora, resultado } = parseRgMemo(row.memo);
+
+        return {
+          id: String(row.id),
+          leadId: String(row.opportunity_id),
+          fecha: row.fecha || row.created_at || "",
+          hora,
+          medio,
+          resultado,
+          ownerName: lead?.ownerName || "—",
+          address: lead?.address || "—",
+          phone: lead?.phone || "—",
+          planner: lead?.planner || "—",
+          owner: lead?.owner || "—",
+        };
+      });
+
+      const leadIdsWithRealEntries = new Set(contactRows.map((row) => row.opportunity_id));
+
+      const legacyEntries: RgEntry[] = [];
+      for (const lead of leadsMap.values()) {
+        const leadIdNum = Number(lead.id);
+        const isPendingGestion = lead.phase === "cualificada" || lead.phase === "encargo";
+
+        if (
+          !isPendingGestion ||
+          leadIdsWithRealEntries.has(leadIdNum) ||
+          !lead.fechaNoticia
+        ) {
+          continue;
+        }
+
+        legacyEntries.push({
+          id: `legacy-${lead.id}`,
+          leadId: lead.id,
+          fecha: lead.fechaNoticia,
+          hora: "",
+          medio: "Teléfono",
+          resultado:
+            lead.status === "caliente"
+              ? "Positiva"
+              : lead.status === "desestimada"
+              ? "Cancelada"
+              : "Seguimiento",
+          ownerName: lead.ownerName,
+          address: lead.address,
+          phone: lead.phone,
+          planner: lead.planner || "—",
+          owner: lead.owner,
+        });
+      }
+
+      setItems([...entries, ...legacyEntries]);
       setLoading(false);
     }
 
@@ -164,15 +263,16 @@ export default function RGPage() {
     const q = searchTerm.trim().toLowerCase();
     if (!q) return items;
 
-    return items.filter((lead) =>
+    return items.filter((item) =>
       [
-        lead.ownerName,
-        lead.address,
-        lead.phone,
-        lead.owner,
-        lead.planner ?? "",
-        lead.notes ?? "",
-        getPlanningLabel(lead.fechaNoticia),
+        item.ownerName,
+        item.address,
+        item.phone,
+        item.owner,
+        item.planner,
+        item.medio,
+        item.resultado,
+        getPlanningLabel(item.fecha),
       ]
         .join(" ")
         .toLowerCase()
@@ -254,50 +354,46 @@ export default function RGPage() {
             </thead>
 
             <tbody className="bg-background">
-              {filteredItems.map((lead, i) => (
+              {filteredItems.map((item, i) => (
                 <tr
-                  key={lead.id}
+                  key={item.id}
                   className={cn(
                     "border-b border-border transition-colors hover:bg-accent/40",
                     i % 2 === 0 ? "bg-card" : "bg-background"
                   )}
                 >
                   <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                    {getPlanningLabel(lead.fechaNoticia)}
+                    {getPlanningLabel(item.fecha)}
                   </td>
                   <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                    {fmt(lead.fechaNoticia)}
+                    {fmt(item.fecha)}
                   </td>
                   <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                    {lead.hora || "—"}
+                    {item.hora || "—"}
                   </td>
                   <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                    {lead.planner || "—"}
+                    {item.planner || "—"}
                   </td>
                   <td className="max-w-[260px] truncate px-3 py-2.5 text-xs text-muted-foreground">
-                    {lead.address}
+                    {item.address}
                   </td>
                   <td className="px-3 py-2.5 font-medium text-foreground">
-                    {lead.ownerName}
+                    {item.ownerName}
                   </td>
                   <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                    {lead.phone}
+                    {item.phone}
                   </td>
                   <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                    Teléfono
+                    {item.medio || "—"}
                   </td>
                   <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                    {lead.status === "caliente"
-                      ? "Positiva"
-                      : lead.status === "desestimada"
-                      ? "Cancelada"
-                      : "Seguimiento"}
+                    {item.resultado || "—"}
                   </td>
                   <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                    {lead.planner || "—"}
+                    {item.planner || "—"}
                   </td>
                   <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                    {lead.owner}
+                    {item.owner}
                   </td>
                 </tr>
               ))}

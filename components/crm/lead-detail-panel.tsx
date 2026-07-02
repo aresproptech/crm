@@ -1075,6 +1075,39 @@ export function LeadDetailPanel({
   const [orderModalOpen, setOrderModalOpen] = useState(false);
   const [rgModalOpen, setRgModalOpen] = useState(false);
 
+  const [encargoForm, setEncargoForm] = useState({
+    fecha_inicio: "",
+    fecha_fin: "",
+    pvp_inicial: "",
+    pvp_actual: "",
+    pvp_estimado: "",
+    com_vendedor: "",
+    com_comprador: "",
+    memo: "",
+  });
+  const [encargoSaving, setEncargoSaving] = useState(false);
+  const [encargoError, setEncargoError] = useState<string | null>(null);
+
+  const [rgForm, setRgForm] = useState({
+    fecha: "",
+    hora: "",
+    medio: "",
+    resultado: "",
+    memo: "",
+  });
+  const [rgSaving, setRgSaving] = useState(false);
+  const [rgError, setRgError] = useState<string | null>(null);
+  const [rgEntries, setRgEntries] = useState<OpportunityContactRow[]>([]);
+
+  const [valuationForm, setValuationForm] = useState({
+    fecha: "",
+    hora: "",
+    medio: "",
+  });
+  const [valuationSaving, setValuationSaving] = useState(false);
+  const [valuationError, setValuationError] = useState<string | null>(null);
+  const [valuationEntries, setValuationEntries] = useState<OpportunityContactRow[]>([]);
+
   useEffect(() => {
     setLocalLead(lead as LeadWithDominio | null);
     setNoteError(null);
@@ -1173,13 +1206,57 @@ export function LeadDetailPanel({
     setHistoryEvents(events);
   }
 
+  async function loadRgEntries(leadId: string) {
+    const { data, error } = await supabase
+      .from("opportunity_contacts")
+      .select("id, created_at, fecha, memo, resultado")
+      .eq("opportunity_id", Number(leadId))
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error cargando R.G.:", error);
+      setRgEntries([]);
+      return;
+    }
+
+    const rows = ((data ?? []) as OpportunityContactRow[]).filter((row) =>
+      row.memo?.trim().startsWith("[R.G.]")
+    );
+
+    setRgEntries(rows);
+  }
+
+  async function loadValuationEntries(leadId: string) {
+    const { data, error } = await supabase
+      .from("opportunity_contacts")
+      .select("id, created_at, fecha, memo, resultado")
+      .eq("opportunity_id", Number(leadId))
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error cargando valoraciones:", error);
+      setValuationEntries([]);
+      return;
+    }
+
+    const rows = ((data ?? []) as OpportunityContactRow[]).filter((row) =>
+      row.memo?.trim().startsWith("[VALORACION]")
+    );
+
+    setValuationEntries(rows);
+  }
+
   useEffect(() => {
     if (!lead?.id) {
       setHistoryEvents([]);
+      setRgEntries([]);
+      setValuationEntries([]);
       return;
     }
 
     void loadObservations(lead.id);
+    void loadRgEntries(lead.id);
+    void loadValuationEntries(lead.id);
   }, [lead?.id, currentUserName]);
 
   function buildFieldChangeEvents(prev: LeadWithDominio, next: LeadWithDominio) {
@@ -1290,6 +1367,127 @@ export function LeadDetailPanel({
     setSavingNote(false);
   }
 
+  async function handleAddEncargo() {
+    if (!effectiveLead) return;
+
+    setEncargoSaving(true);
+    setEncargoError(null);
+
+    const payload = {
+      opportunity_id: Number(effectiveLead.id),
+      fecha_inicio: encargoForm.fecha_inicio || null,
+      fecha_fin: encargoForm.fecha_fin || null,
+      pvp_inicial: encargoForm.pvp_inicial ? Number(encargoForm.pvp_inicial) : null,
+      pvp_actual: encargoForm.pvp_actual ? Number(encargoForm.pvp_actual) : null,
+      pvp_estimado: encargoForm.pvp_estimado ? Number(encargoForm.pvp_estimado) : null,
+      com_vendedor: encargoForm.com_vendedor ? Number(encargoForm.com_vendedor) : null,
+      com_comprador: encargoForm.com_comprador ? Number(encargoForm.com_comprador) : null,
+      memo: encargoForm.memo.trim() || null,
+    };
+
+    const { error } = await supabase.from("opportunity_orders").insert(payload);
+
+    setEncargoSaving(false);
+
+    if (error) {
+      console.error("Error guardando encargo:", error);
+      setEncargoError(`No se pudo guardar el encargo: ${error.message}`);
+      return;
+    }
+
+    setEncargoForm({
+      fecha_inicio: "",
+      fecha_fin: "",
+      pvp_inicial: "",
+      pvp_actual: "",
+      pvp_estimado: "",
+      com_vendedor: "",
+      com_comprador: "",
+      memo: "",
+    });
+    setOrderModalOpen(false);
+    await loadRelatedData(effectiveLead.id);
+  }
+
+  async function handleAddRg() {
+    if (!effectiveLead) return;
+
+    if (!rgForm.fecha) {
+      setRgError("La fecha es obligatoria.");
+      return;
+    }
+
+    setRgSaving(true);
+    setRgError(null);
+
+    const resultadoLabel =
+      LEAD_DETAIL_STATUS_OPTIONS.find((option) => option.value === rgForm.resultado)
+        ?.label || "—";
+
+    const summaryLine = `[R.G.] Medio: ${rgForm.medio || "—"} | Resultado: ${resultadoLabel}${
+      rgForm.hora ? ` | Hora: ${rgForm.hora}` : ""
+    }`;
+    const memo = rgForm.memo.trim()
+      ? `${summaryLine}\n${rgForm.memo.trim()}`
+      : summaryLine;
+
+    const { error } = await supabase.from("opportunity_contacts").insert({
+      opportunity_id: Number(effectiveLead.id),
+      fecha: rgForm.fecha,
+      memo,
+      resultado: true,
+    });
+
+    setRgSaving(false);
+
+    if (error) {
+      console.error("Error guardando R.G.:", error);
+      setRgError(`No se pudo guardar la R.G.: ${error.message}`);
+      return;
+    }
+
+    setRgForm({ fecha: "", hora: "", medio: "", resultado: "", memo: "" });
+    setRgModalOpen(false);
+    await loadRgEntries(effectiveLead.id);
+    await loadObservations(effectiveLead.id);
+  }
+
+  async function handleAddValuation() {
+    if (!effectiveLead) return;
+
+    if (!valuationForm.fecha) {
+      setValuationError("La fecha es obligatoria.");
+      return;
+    }
+
+    setValuationSaving(true);
+    setValuationError(null);
+
+    const summaryLine = `[VALORACION] Medio: ${valuationForm.medio || "—"}${
+      valuationForm.hora ? ` | Hora: ${valuationForm.hora}` : ""
+    }`;
+
+    const { error } = await supabase.from("opportunity_contacts").insert({
+      opportunity_id: Number(effectiveLead.id),
+      fecha: valuationForm.fecha,
+      memo: summaryLine,
+      resultado: true,
+    });
+
+    setValuationSaving(false);
+
+    if (error) {
+      console.error("Error guardando valoración:", error);
+      setValuationError(`No se pudo guardar la valoración: ${error.message}`);
+      return;
+    }
+
+    setValuationForm({ fecha: "", hora: "", medio: "" });
+    setValuationModalOpen(false);
+    await loadValuationEntries(effectiveLead.id);
+    await loadObservations(effectiveLead.id);
+  }
+
   if (!effectiveLead) return null;
 
   const domicilioParts = [
@@ -1298,39 +1496,91 @@ export function LeadDetailPanel({
     effectiveLead.cp && effectiveLead.cp !== "—" ? `(${effectiveLead.cp})` : "",
   ].filter((part) => part && part !== "—");
 
-  const rgHistoryEvents: RgHistoryEvent[] = effectiveLead.fechaNoticia
-    ? [
-        {
-          id: `rg-${effectiveLead.id}-${effectiveLead.fechaNoticia}`,
-          numero: 1,
-          fecha: effectiveLead.fechaNoticia,
-          hora: effectiveLead.hora || "",
-          medio: effectiveLead.medio || "—",
-          resultado: statusLabel(effectiveLead.status),
-          dominio: getLeadDominio(effectiveLead) || "—",
-          planner: effectiveLead.planner || "—",
-          owner: effectiveLead.owner || "—",
-          memo: "R.G. derivada de la información actual del lead. Cuando se conecte opportunity_rg, este historial mostrará todas las gestiones reales.",
-        },
-      ]
-    : [];
+  const parsedRgEntries: RgHistoryEvent[] = rgEntries.map((row, index) => {
+    const memoText = row.memo?.trim() || "";
+    const [summaryLine, ...rest] = memoText.split("\n");
+    const match = summaryLine.match(
+      /^\[R\.G\.\] Medio: (.*?) \| Resultado: (.*?)(?: \| Hora: (.*))?$/
+    );
 
-  const valuationHistoryEvents: ValuationHistoryEvent[] = effectiveLead.fechaValoracion
-    ? [
-        {
-          id: `valuation-${effectiveLead.id}-${effectiveLead.fechaValoracion}`,
-          numero: 1,
-          fecha: effectiveLead.fechaValoracion,
-          hora: effectiveLead.hora || "",
-          medio: effectiveLead.medio || "—",
-          planner: effectiveLead.planner || "—",
-          owner: effectiveLead.owner || "—",
-          dominio: getLeadDominio(effectiveLead) || "—",
-          resultado: statusLabel(effectiveLead.status),
-          memo: "Valoración derivada de la información actual del lead. Cuando se conecte una tabla de historial de valoraciones, esta sección mostrará todas las valoraciones reales.",
-        },
-      ]
-    : [];
+    return {
+      id: String(row.id),
+      numero: rgEntries.length - index,
+      fecha: row.fecha || row.created_at || "",
+      hora: match?.[3] || "",
+      medio: match?.[1] || "—",
+      resultado: match?.[2] || "—",
+      dominio: getLeadDominio(effectiveLead) || "—",
+      planner: effectiveLead.planner || "—",
+      owner: effectiveLead.owner || "—",
+      memo: rest.join("\n").trim(),
+    };
+  });
+
+  const legacyRgEvent: RgHistoryEvent[] =
+    parsedRgEntries.length === 0 && effectiveLead.fechaNoticia
+      ? [
+          {
+            id: `rg-${effectiveLead.id}-${effectiveLead.fechaNoticia}`,
+            numero: 1,
+            fecha: effectiveLead.fechaNoticia,
+            hora: effectiveLead.hora || "",
+            medio: effectiveLead.medio || "—",
+            resultado: statusLabel(effectiveLead.status),
+            dominio: getLeadDominio(effectiveLead) || "—",
+            planner: effectiveLead.planner || "—",
+            owner: effectiveLead.owner || "—",
+            memo: "R.G. derivada de la información actual del lead.",
+          },
+        ]
+      : [];
+
+  const rgHistoryEvents: RgHistoryEvent[] = [...parsedRgEntries, ...legacyRgEvent];
+
+  const parsedValuationEntries: ValuationHistoryEvent[] = valuationEntries.map(
+    (row, index) => {
+      const memoText = row.memo?.trim() || "";
+      const match = memoText.match(
+        /^\[VALORACION\] Medio: (.*?)(?: \| Hora: (.*))?$/
+      );
+
+      return {
+        id: String(row.id),
+        numero: valuationEntries.length - index,
+        fecha: row.fecha || row.created_at || "",
+        hora: match?.[2] || "",
+        medio: match?.[1] || "—",
+        planner: effectiveLead.planner || "—",
+        owner: effectiveLead.owner || "—",
+        dominio: getLeadDominio(effectiveLead) || "—",
+        resultado: statusLabel(effectiveLead.status),
+        memo: "",
+      };
+    }
+  );
+
+  const legacyValuationEvent: ValuationHistoryEvent[] =
+    parsedValuationEntries.length === 0 && effectiveLead.fechaValoracion
+      ? [
+          {
+            id: `valuation-${effectiveLead.id}-${effectiveLead.fechaValoracion}`,
+            numero: 1,
+            fecha: effectiveLead.fechaValoracion,
+            hora: effectiveLead.hora || "",
+            medio: effectiveLead.medio || "—",
+            planner: effectiveLead.planner || "—",
+            owner: effectiveLead.owner || "—",
+            dominio: getLeadDominio(effectiveLead) || "—",
+            resultado: statusLabel(effectiveLead.status),
+            memo: "Valoración derivada de la información actual del lead.",
+          },
+        ]
+      : [];
+
+  const valuationHistoryEvents: ValuationHistoryEvent[] = [
+    ...parsedValuationEntries,
+    ...legacyValuationEvent,
+  ];
 
   return (
     <aside className="fixed right-0 top-0 z-40 flex h-screen w-[1080px] max-w-[calc(100vw-1rem)] flex-col border-l border-border bg-background shadow-2xl">
@@ -2205,17 +2455,36 @@ export function LeadDetailPanel({
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="flex flex-col gap-1.5">
               <Label className="text-xs font-medium">Fecha valoración</Label>
-              <Input type="date" className="h-9 text-sm" />
+              <Input
+                type="date"
+                className="h-9 text-sm"
+                value={valuationForm.fecha}
+                onChange={(e) =>
+                  setValuationForm((prev) => ({ ...prev, fecha: e.target.value }))
+                }
+              />
             </div>
 
             <div className="flex flex-col gap-1.5">
               <Label className="text-xs font-medium">Hora</Label>
-              <Input type="time" className="h-9 text-sm" />
+              <Input
+                type="time"
+                className="h-9 text-sm"
+                value={valuationForm.hora}
+                onChange={(e) =>
+                  setValuationForm((prev) => ({ ...prev, hora: e.target.value }))
+                }
+              />
             </div>
 
             <div className="flex flex-col gap-1.5">
               <Label className="text-xs font-medium">Medio</Label>
-              <Select>
+              <Select
+                value={valuationForm.medio}
+                onValueChange={(value) =>
+                  setValuationForm((prev) => ({ ...prev, medio: value }))
+                }
+              >
                 <SelectTrigger className="h-9 text-sm">
                   <SelectValue placeholder="Seleccionar medio" />
                 </SelectTrigger>
@@ -2230,19 +2499,25 @@ export function LeadDetailPanel({
             </div>
           </div>
 
+          {valuationError ? (
+            <p className="text-sm text-destructive">{valuationError}</p>
+          ) : null}
+
           <DialogFooter>
             <Button
               type="button"
               variant="outline"
               onClick={() => setValuationModalOpen(false)}
+              disabled={valuationSaving}
             >
               Cancelar
             </Button>
             <Button
               type="button"
-              onClick={() => setValuationModalOpen(false)}
+              onClick={handleAddValuation}
+              disabled={valuationSaving}
             >
-              Guardar valoración
+              {valuationSaving ? "Guardando..." : "Guardar valoración"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2260,12 +2535,26 @@ export function LeadDetailPanel({
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="flex flex-col gap-1.5">
               <Label className="text-xs font-medium">Fecha inicio</Label>
-              <Input type="date" className="h-9 text-sm" />
+              <Input
+                type="date"
+                className="h-9 text-sm"
+                value={encargoForm.fecha_inicio}
+                onChange={(e) =>
+                  setEncargoForm((prev) => ({ ...prev, fecha_inicio: e.target.value }))
+                }
+              />
             </div>
 
             <div className="flex flex-col gap-1.5">
               <Label className="text-xs font-medium">Fecha fin</Label>
-              <Input type="date" className="h-9 text-sm" />
+              <Input
+                type="date"
+                className="h-9 text-sm"
+                value={encargoForm.fecha_fin}
+                onChange={(e) =>
+                  setEncargoForm((prev) => ({ ...prev, fecha_fin: e.target.value }))
+                }
+              />
             </div>
 
             <div className="flex flex-col gap-1.5">
@@ -2274,6 +2563,10 @@ export function LeadDetailPanel({
                 className="h-9 text-sm"
                 placeholder="Ej. 450.000 €"
                 inputMode="numeric"
+                value={encargoForm.pvp_inicial}
+                onChange={(e) =>
+                  setEncargoForm((prev) => ({ ...prev, pvp_inicial: e.target.value }))
+                }
               />
             </div>
 
@@ -2283,6 +2576,10 @@ export function LeadDetailPanel({
                 className="h-9 text-sm"
                 placeholder="Ej. 440.000 €"
                 inputMode="numeric"
+                value={encargoForm.pvp_actual}
+                onChange={(e) =>
+                  setEncargoForm((prev) => ({ ...prev, pvp_actual: e.target.value }))
+                }
               />
             </div>
 
@@ -2292,6 +2589,10 @@ export function LeadDetailPanel({
                 className="h-9 text-sm"
                 placeholder="Ej. 430.000 €"
                 inputMode="numeric"
+                value={encargoForm.pvp_estimado}
+                onChange={(e) =>
+                  setEncargoForm((prev) => ({ ...prev, pvp_estimado: e.target.value }))
+                }
               />
             </div>
 
@@ -2301,6 +2602,10 @@ export function LeadDetailPanel({
                 className="h-9 text-sm"
                 placeholder="Ej. 3 %"
                 inputMode="decimal"
+                value={encargoForm.com_vendedor}
+                onChange={(e) =>
+                  setEncargoForm((prev) => ({ ...prev, com_vendedor: e.target.value }))
+                }
               />
             </div>
 
@@ -2310,14 +2615,10 @@ export function LeadDetailPanel({
                 className="h-9 text-sm"
                 placeholder="Ej. 3 %"
                 inputMode="decimal"
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5 md:col-span-2">
-              <Label className="text-xs font-medium">Domicilio</Label>
-              <Input
-                className="h-9 text-sm"
-                placeholder="Domicilio del inmueble"
+                value={encargoForm.com_comprador}
+                onChange={(e) =>
+                  setEncargoForm((prev) => ({ ...prev, com_comprador: e.target.value }))
+                }
               />
             </div>
 
@@ -2326,23 +2627,29 @@ export function LeadDetailPanel({
               <Textarea
                 placeholder="Observaciones del encargo..."
                 className="min-h-[96px] resize-none text-sm"
+                value={encargoForm.memo}
+                onChange={(e) =>
+                  setEncargoForm((prev) => ({ ...prev, memo: e.target.value }))
+                }
               />
             </div>
           </div>
+
+          {encargoError ? (
+            <p className="text-sm text-destructive">{encargoError}</p>
+          ) : null}
 
           <DialogFooter>
             <Button
               type="button"
               variant="outline"
               onClick={() => setOrderModalOpen(false)}
+              disabled={encargoSaving}
             >
               Cancelar
             </Button>
-            <Button
-              type="button"
-              onClick={() => setOrderModalOpen(false)}
-            >
-              Guardar encargo
+            <Button type="button" onClick={handleAddEncargo} disabled={encargoSaving}>
+              {encargoSaving ? "Guardando..." : "Guardar encargo"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2360,17 +2667,30 @@ export function LeadDetailPanel({
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="flex flex-col gap-1.5">
               <Label className="text-xs font-medium">Fecha R.G.</Label>
-              <Input type="date" className="h-9 text-sm" />
+              <Input
+                type="date"
+                className="h-9 text-sm"
+                value={rgForm.fecha}
+                onChange={(e) => setRgForm((prev) => ({ ...prev, fecha: e.target.value }))}
+              />
             </div>
 
             <div className="flex flex-col gap-1.5">
               <Label className="text-xs font-medium">Hora</Label>
-              <Input type="time" className="h-9 text-sm" />
+              <Input
+                type="time"
+                className="h-9 text-sm"
+                value={rgForm.hora}
+                onChange={(e) => setRgForm((prev) => ({ ...prev, hora: e.target.value }))}
+              />
             </div>
 
             <div className="flex flex-col gap-1.5">
               <Label className="text-xs font-medium">Medio</Label>
-              <Select>
+              <Select
+                value={rgForm.medio}
+                onValueChange={(value) => setRgForm((prev) => ({ ...prev, medio: value }))}
+              >
                 <SelectTrigger className="h-9 text-sm">
                   <SelectValue placeholder="Seleccionar medio" />
                 </SelectTrigger>
@@ -2386,7 +2706,12 @@ export function LeadDetailPanel({
 
             <div className="flex flex-col gap-1.5">
               <Label className="text-xs font-medium">Resultado</Label>
-              <Select>
+              <Select
+                value={rgForm.resultado}
+                onValueChange={(value) =>
+                  setRgForm((prev) => ({ ...prev, resultado: value }))
+                }
+              >
                 <SelectTrigger className="h-9 text-sm">
                   <SelectValue placeholder="Seleccionar resultado" />
                 </SelectTrigger>
@@ -2405,23 +2730,25 @@ export function LeadDetailPanel({
               <Textarea
                 placeholder="Observaciones de la R.G..."
                 className="min-h-[96px] resize-none text-sm"
+                value={rgForm.memo}
+                onChange={(e) => setRgForm((prev) => ({ ...prev, memo: e.target.value }))}
               />
             </div>
           </div>
+
+          {rgError ? <p className="text-sm text-destructive">{rgError}</p> : null}
 
           <DialogFooter>
             <Button
               type="button"
               variant="outline"
               onClick={() => setRgModalOpen(false)}
+              disabled={rgSaving}
             >
               Cancelar
             </Button>
-            <Button
-              type="button"
-              onClick={() => setRgModalOpen(false)}
-            >
-              Guardar R.G.
+            <Button type="button" onClick={handleAddRg} disabled={rgSaving}>
+              {rgSaving ? "Guardando..." : "Guardar R.G."}
             </Button>
           </DialogFooter>
         </DialogContent>

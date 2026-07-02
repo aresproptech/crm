@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 type OpportunityOrderRow = {
+  id: number;
   opportunity_id: number;
   fecha_inicio: string | null;
   fecha_fin: string | null;
@@ -30,6 +31,7 @@ type OpportunityOrderRow = {
   memo: string | null;
   health: number | null;
   rebajas: number | null;
+  created_at?: string | null;
 };
 
 type LeadRow = {
@@ -44,8 +46,10 @@ type LeadRow = {
 };
 
 type EncargoItem = {
+  id: string;
   leadId: number;
   hasOrder: boolean;
+  orderId: number | null;
   propietario: string;
   domicilio: string;
   estado: string;
@@ -448,16 +452,57 @@ export default function EncargosPage() {
     const rol = userWithRole?.crmUser.rol;
     const nombre = userWithRole?.crmUser.name;
 
-    let query = supabase
-      .from("crm_leads_view")
-      .select("id, propietario, domicilio, estado, dominio_desc, contact_name, comercial_name, source_name")
-      .eq("fase_name", "Encargo");
+    const [phaseLeadsResult, ordersResult] = await Promise.all([
+      supabase
+        .from("crm_leads_view")
+        .select("id, comercial_name")
+        .eq("fase_name", "Encargo"),
+      supabase.from("opportunity_orders").select("*"),
+    ]);
 
-    if (rol === "Comercial" && nombre) {
-      query = query.eq("comercial_name", nombre);
+    if (phaseLeadsResult.error) {
+      console.error("Error cargando encargos:", phaseLeadsResult.error);
+      setPageError("No se pudieron cargar los encargos. Intentá refrescar la tabla.");
+      setLoading(false);
+      return;
     }
 
-    const { data: leadsData, error: leadsError } = await query;
+    if (ordersResult.error) {
+      console.error("Error cargando datos de encargos:", ordersResult.error);
+      setPageError("Algunos datos de encargos no se pudieron cargar correctamente.");
+    }
+
+    const ordersByLead = new Map<number, OpportunityOrderRow[]>();
+    for (const raw of ordersResult.data ?? []) {
+      const order = raw as OpportunityOrderRow;
+      const list = ordersByLead.get(order.opportunity_id) ?? [];
+      list.push(order);
+      ordersByLead.set(order.opportunity_id, list);
+    }
+
+    for (const list of ordersByLead.values()) {
+      list.sort((a, b) => {
+        const diff = new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+        return diff !== 0 ? diff : b.id - a.id;
+      });
+    }
+
+    const targetLeadIds = new Set<number>([
+      ...(phaseLeadsResult.data ?? []).map((r) => r.id as number),
+      ...ordersByLead.keys(),
+    ]);
+    const safeLeadIds = targetLeadIds.size > 0 ? Array.from(targetLeadIds) : [0];
+
+    let leadsQuery = supabase
+      .from("crm_leads_view")
+      .select("id, propietario, domicilio, estado, dominio_desc, contact_name, comercial_name, source_name")
+      .in("id", safeLeadIds);
+
+    if (rol === "Comercial" && nombre) {
+      leadsQuery = leadsQuery.eq("comercial_name", nombre);
+    }
+
+    const { data: leadsData, error: leadsError } = await leadsQuery;
 
     if (leadsError) {
       console.error("Error cargando encargos:", leadsError);
@@ -466,8 +511,8 @@ export default function EncargosPage() {
       return;
     }
 
-    const leadIds = (leadsData ?? []).map((r) => r.id as number);
-    const safeLeadIds = leadIds.length > 0 ? leadIds : [0];
+    const finalLeadIds = (leadsData ?? []).map((r) => r.id as number);
+    const safeFinalLeadIds = finalLeadIds.length > 0 ? finalLeadIds : [0];
 
     const today = new Date();
     const fifteenDaysAgo = new Date(today);
@@ -477,27 +522,18 @@ export default function EncargosPage() {
 
     const formatDate = (date: Date) => date.toISOString().slice(0, 10);
 
-    const [ordersResult, contactsResult, visitsResult] = await Promise.all([
-      supabase
-        .from("opportunity_orders")
-        .select("*")
-        .in("opportunity_id", safeLeadIds),
+    const [contactsResult, visitsResult] = await Promise.all([
       supabase
         .from("opportunity_contacts")
         .select("opportunity_id, fecha")
-        .in("opportunity_id", safeLeadIds)
+        .in("opportunity_id", safeFinalLeadIds)
         .gte("fecha", formatDate(fifteenDaysAgo)),
       supabase
         .from("visitas")
         .select("opportunity_id, fecha_visita")
-        .in("opportunity_id", safeLeadIds)
+        .in("opportunity_id", safeFinalLeadIds)
         .gte("fecha_visita", formatDate(thirtyDaysAgo)),
     ]);
-
-    if (ordersResult.error) {
-      console.error("Error cargando datos de encargos:", ordersResult.error);
-      setPageError("Algunos datos de encargos no se pudieron cargar correctamente.");
-    }
 
     if (contactsResult.error) {
       console.error("Error cargando R.G. 15 días:", contactsResult.error);
@@ -507,11 +543,6 @@ export default function EncargosPage() {
     if (visitsResult.error) {
       console.error("Error cargando visitas 30 días:", visitsResult.error);
       setPageError("Algunos datos de visitas no se pudieron cargar correctamente.");
-    }
-
-    const ordersMap = new Map<number, OpportunityOrderRow>();
-    for (const order of ordersResult.data ?? []) {
-      ordersMap.set((order as OpportunityOrderRow).opportunity_id, order as OpportunityOrderRow);
     }
 
     const rg15dMap = new Map<number, number>();
@@ -528,13 +559,11 @@ export default function EncargosPage() {
       visitas30dMap.set(opportunityId, (visitas30dMap.get(opportunityId) ?? 0) + 1);
     }
 
-    const mapped: EncargoItem[] = (leadsData ?? []).map((row) => {
+    const mapped: EncargoItem[] = (leadsData ?? []).flatMap((row) => {
       const lead = row as LeadRow;
-      const order = ordersMap.get(lead.id) ?? null;
-
-      return {
+      const orders = ordersByLead.get(lead.id) ?? [];
+      const baseFields = {
         leadId: lead.id,
-        hasOrder: !!order,
         propietario: lead.propietario?.trim() || "—",
         domicilio: lead.domicilio?.trim() || "—",
         estado: lead.estado?.trim() || "—",
@@ -542,18 +571,45 @@ export default function EncargosPage() {
         planner: lead.contact_name?.trim() || "—",
         owner: lead.comercial_name?.trim() || "—",
         origen: lead.source_name?.trim() || "—",
-        fecha_inicio: order?.fecha_inicio ?? "",
-        fecha_fin: order?.fecha_fin ?? "",
-        pvp_inicial: order?.pvp_inicial ?? null,
-        pvp_actual: order?.pvp_actual ?? null,
-        pvp_estimado: order?.pvp_estimado ?? null,
-        com_vendedor: order?.com_vendedor ?? null,
-        com_comprador: order?.com_comprador ?? null,
-        rebajas: order?.rebajas ?? 0,
         rg_15d: rg15dMap.get(lead.id) ?? 0,
         visitas_30d: visitas30dMap.get(lead.id) ?? 0,
-        memo: order?.memo?.trim() ?? "",
       };
+
+      if (orders.length === 0) {
+        return [
+          {
+            id: `${lead.id}-empty`,
+            hasOrder: false,
+            orderId: null,
+            ...baseFields,
+            fecha_inicio: "",
+            fecha_fin: "",
+            pvp_inicial: null,
+            pvp_actual: null,
+            pvp_estimado: null,
+            com_vendedor: null,
+            com_comprador: null,
+            rebajas: 0,
+            memo: "",
+          },
+        ];
+      }
+
+      return orders.map((order) => ({
+        id: `${lead.id}-${order.id}`,
+        hasOrder: true,
+        orderId: order.id,
+        ...baseFields,
+        fecha_inicio: order.fecha_inicio ?? "",
+        fecha_fin: order.fecha_fin ?? "",
+        pvp_inicial: order.pvp_inicial ?? null,
+        pvp_actual: order.pvp_actual ?? null,
+        pvp_estimado: order.pvp_estimado ?? null,
+        com_vendedor: order.com_vendedor ?? null,
+        com_comprador: order.com_comprador ?? null,
+        rebajas: order.rebajas ?? 0,
+        memo: order.memo?.trim() ?? "",
+      }));
     });
 
     setItems(mapped);
@@ -631,11 +687,11 @@ export default function EncargosPage() {
 
     let error;
 
-    if (activeItem.hasOrder) {
+    if (selected && selected.orderId !== null) {
       const result = await supabase
         .from("opportunity_orders")
         .update(payload)
-        .eq("opportunity_id", activeItem.leadId);
+        .eq("id", selected.orderId);
       error = result.error;
     } else {
       const result = await supabase
@@ -670,6 +726,19 @@ export default function EncargosPage() {
         .includes(q)
     );
   }, [items, searchTerm]);
+
+  const leadOptions = useMemo(() => {
+    const seen = new Set<number>();
+    const result: EncargoItem[] = [];
+
+    for (const item of items) {
+      if (seen.has(item.leadId)) continue;
+      seen.add(item.leadId);
+      result.push(item);
+    }
+
+    return result;
+  }, [items]);
 
   const columns = [
     "Health", "Domicilio", "Propietario", "Estado", "Dominio",
@@ -776,7 +845,7 @@ export default function EncargosPage() {
 
                   return (
                     <tr
-                      key={item.leadId}
+                      key={item.id}
                       onClick={() => handleRowClick(item)}
                       className={cn(
                         "cursor-pointer border-b border-border transition-colors hover:bg-accent/60",
@@ -856,7 +925,7 @@ export default function EncargosPage() {
                   className="h-8 rounded-md border border-border bg-background px-3 text-sm outline-none"
                 >
                   <option value="">Seleccionar oportunidad...</option>
-                  {items.map((item) => (
+                  {leadOptions.map((item) => (
                     <option key={item.leadId} value={String(item.leadId)}>
                       {item.propietario} — {item.domicilio}
                     </option>

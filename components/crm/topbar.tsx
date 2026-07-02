@@ -33,7 +33,7 @@ export function Topbar({ title }: TopbarProps) {
     : "Usuario";
 
   return (
-    <header className="fixed top-0 right-0 left-56 z-10 flex h-14 items-center gap-4 border-b border-border bg-card px-6">
+    <header className="fixed top-0 right-0 left-0 md:left-56 z-10 flex h-14 items-center gap-4 border-b border-border bg-card pl-16 pr-6 md:px-6">
       {/* Page title */}
       <h1 className="text-sm font-semibold text-foreground tracking-tight">
         {title}

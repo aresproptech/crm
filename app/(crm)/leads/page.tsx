@@ -511,8 +511,8 @@ function normalizeLookupText(raw: string | null | undefined): string {
 function phaseNameToKey(name: string | null | undefined): Lead["phase"] | null {
   const value = normalizeLookupText(name);
 
-  if (value.includes("noticia")) return "noticia";
-  if (value.includes("concertada")) return "concertada";
+  if (value.includes("noticia") || value.includes("identificada")) return "noticia";
+  if (value.includes("concertada") || value.includes("cualificada")) return "concertada";
   if (value.includes("valorada")) return "valorada";
   if (value.includes("encargo")) return "encargo";
 
@@ -537,12 +537,11 @@ function normalizePhase(
 ): Lead["phase"] {
   const value = normalizeLookupText(raw);
 
-  if (value.includes("noticia")) return "noticia";
-  if (value.includes("concertada")) return "concertada";
+  if (value.includes("noticia") || value.includes("identificada")) return "noticia";
+  if (value.includes("concertada") || value.includes("cualificada")) return "concertada";
   if (value.includes("valorada")) return "valorada";
   if (value.includes("encargo")) return "encargo";
 
-  if (value.includes("cualificada")) return "noticia";
   if (value.includes("vendida") || value.includes("vender")) return "encargo";
 
   const byId = phaseIdToKey(phaseId);

@@ -37,6 +37,38 @@ type ValoracionLead = Lead & {
   dominio?: string | null;
 };
 
+type OpportunityContactRow = {
+  id: number;
+  opportunity_id: number;
+  fecha: string | null;
+  memo: string | null;
+  created_at: string | null;
+};
+
+type ValoracionEntry = {
+  id: string;
+  leadId: string;
+  fecha: string;
+  hora: string;
+  medio: string;
+  ownerName: string;
+  address: string;
+  phone: string;
+  source: string;
+  dominio: string;
+  phase: Lead["phase"];
+  planner: string;
+  owner: string;
+};
+
+function parseValuationMemo(memo: string | null | undefined) {
+  const text = (memo || "").trim();
+  const match = text.match(/^\[VALORACION\] Medio: (.*?)(?: \| Hora: (.*))?$/);
+  const medio = match?.[1] && match[1] !== "—" ? match[1] : "";
+
+  return { medio, hora: match?.[2] || "" };
+}
+
 const STATUS_CONFIG: Record<string, { label: string; dot: string }> = {
   identificar: { label: "Identificada", dot: "bg-violet-500" },
   cualificada: { label: "Cualificada", dot: "bg-emerald-500" },
@@ -274,11 +306,10 @@ function getPlanningStatus(dateValue: string): "previas" | "hoy" | "proximas" {
 function normalizePhase(raw: string | null | undefined): Lead["phase"] {
   const value = (raw || "").toLowerCase().trim();
 
-  if (value === "noticia") return "noticia";
-  if (value === "concertada") return "concertada";
+  if (value === "noticia" || value === "identificada") return "noticia";
+  if (value === "concertada" || value === "cualificada") return "concertada";
   if (value === "valorada") return "valorada";
   if (value === "encargo") return "encargo";
-  if (value === "cualificada") return "noticia";
   if (value === "vendida" || value === "vender") return "encargo";
 
   return "noticia";
@@ -326,7 +357,7 @@ function mapCrmLeadToLead(row: CrmLeadRow): ValoracionLead {
     status: normalizeStatus(row.estado),
     fechaNoticia: row.fecha || row.created_at || "",
     fechaContacto: normalizeDate(row.fecha_contacto),
-    fechaValoracion: normalizeDate(row.fecha_valoracion || row.fecha || row.created_at || ""),
+    fechaValoracion: normalizeDate(row.fecha_valoracion),
     hora: row.hora ? row.hora.slice(0, 5) : "",
     medio: row.medio?.trim() || "—",
     planner: plannerLabel,
@@ -344,7 +375,7 @@ function mapCrmLeadToLead(row: CrmLeadRow): ValoracionLead {
 }
 
 export default function ValoracionesPage() {
-  const [items, setItems] = useState<ValoracionLead[]>([]);
+  const [items, setItems] = useState<ValoracionEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -352,23 +383,90 @@ export default function ValoracionesPage() {
     async function loadValoraciones() {
       setLoading(true);
 
-      const { data, error } = await supabase
-        .from("crm_leads_view")
-        .select("*")
-        .order("created_at", { ascending: false });
+      const [contactsResult, leadsResult] = await Promise.all([
+        supabase
+          .from("opportunity_contacts")
+          .select("id, opportunity_id, fecha, memo, created_at")
+          .ilike("memo", "[VALORACION]%")
+          .order("fecha", { ascending: false }),
+        supabase.from("crm_leads_view").select("*").order("created_at", { ascending: false }),
+      ]);
 
-      if (error) {
-        console.error("Supabase valoraciones error:", error);
+      if (contactsResult.error) {
+        console.error("Supabase valoraciones error:", contactsResult.error);
         setLoading(false);
         return;
       }
 
-      const mapped = (data ?? []).map((row) => mapCrmLeadToLead(row as CrmLeadRow));
-      const filtered = mapped.filter(
-        (lead) => lead.phase === "concertada" || lead.phase === "valorada"
-      );
+      if (leadsResult.error) {
+        console.error("Supabase leads error:", leadsResult.error);
+        setLoading(false);
+        return;
+      }
 
-      setItems(filtered);
+      const contactRows = (contactsResult.data ?? []) as OpportunityContactRow[];
+
+      const leadsMap = new Map<number, ValoracionLead>();
+      for (const row of leadsResult.data ?? []) {
+        const mapped = mapCrmLeadToLead(row as CrmLeadRow);
+        leadsMap.set(Number(mapped.id), mapped);
+      }
+
+      const entries: ValoracionEntry[] = contactRows.map((row) => {
+        const lead = leadsMap.get(row.opportunity_id);
+        const { medio, hora } = parseValuationMemo(row.memo);
+
+        return {
+          id: String(row.id),
+          leadId: String(row.opportunity_id),
+          fecha: normalizeDate(row.fecha || row.created_at || ""),
+          hora,
+          medio,
+          ownerName: lead?.ownerName || "—",
+          address: lead?.address || "—",
+          phone: lead?.phone || "—",
+          source: lead?.source || "Sin origen",
+          dominio: lead?.dominio || "—",
+          phase: lead?.phase || "noticia",
+          planner: lead?.planner || "—",
+          owner: lead?.owner || "—",
+        };
+      });
+
+      const leadIdsWithRealEntries = new Set(contactRows.map((row) => row.opportunity_id));
+
+      const legacyEntries: ValoracionEntry[] = [];
+      for (const lead of leadsMap.values()) {
+        const leadIdNum = Number(lead.id);
+        const isConcertadaOValorada =
+          lead.phase === "concertada" || lead.phase === "valorada";
+
+        if (
+          !isConcertadaOValorada ||
+          leadIdsWithRealEntries.has(leadIdNum) ||
+          !lead.fechaValoracion
+        ) {
+          continue;
+        }
+
+        legacyEntries.push({
+          id: `legacy-${lead.id}`,
+          leadId: lead.id,
+          fecha: lead.fechaValoracion,
+          hora: lead.hora || "",
+          medio: lead.medio && lead.medio !== "—" ? lead.medio : "",
+          ownerName: lead.ownerName,
+          address: lead.address,
+          phone: lead.phone,
+          source: lead.source,
+          dominio: lead.dominio || "—",
+          phase: lead.phase,
+          planner: lead.planner || "—",
+          owner: lead.owner,
+        });
+      }
+
+      setItems([...entries, ...legacyEntries]);
       setLoading(false);
     }
 
@@ -379,19 +477,17 @@ export default function ValoracionesPage() {
     const q = searchTerm.trim().toLowerCase();
     if (!q) return items;
 
-    return items.filter((lead) =>
+    return items.filter((item) =>
       [
-        lead.ownerName,
-        lead.address,
-        lead.phone,
-        lead.source,
-        lead.medio ?? "",
-        lead.owner,
-        lead.planner ?? "",
-        lead.dominio ?? "",
-        lead.valor,
-        PHASE_LABELS[lead.phase],
-        (STATUS_CONFIG[lead.status] ?? STATUS_CONFIG.identificar).label,
+        item.ownerName,
+        item.address,
+        item.phone,
+        item.source,
+        item.medio,
+        item.owner,
+        item.planner,
+        item.dominio,
+        PHASE_LABELS[item.phase],
       ]
         .join(" ")
         .toLowerCase()
@@ -473,9 +569,9 @@ export default function ValoracionesPage() {
             </thead>
 
             <tbody className="bg-background">
-              {filteredItems.map((lead, i) => (
+              {filteredItems.map((item, i) => (
                 <tr
-                  key={lead.id}
+                  key={item.id}
                   className={cn(
                     "border-b border-border transition-colors hover:bg-accent/40",
                     i % 2 === 0 ? "bg-card" : "bg-background"
@@ -483,7 +579,7 @@ export default function ValoracionesPage() {
                 >
                   <td className="px-3 py-2.5">
                     {(() => {
-                      const planning = getPlanningStatus(lead.fechaValoracion);
+                      const planning = getPlanningStatus(item.fecha);
                       const config = PLANNING_CONFIG[planning];
 
                       return (
@@ -499,30 +595,30 @@ export default function ValoracionesPage() {
                     })()}
                   </td>
                   <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                    {fmt(lead.fechaValoracion)}
+                    {fmt(item.fecha)}
                   </td>
                   <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                    {lead.hora || "—"}
+                    {item.hora || "—"}
                   </td>
                   <td className="px-3 py-2.5">
-                    {lead.medio && lead.medio !== "—" ? (
+                    {item.medio ? (
                       <span
                         className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap"
-                        style={getMedioBadgeStyle(lead.medio)}
+                        style={getMedioBadgeStyle(item.medio)}
                       >
-                        {lead.medio}
+                        {item.medio}
                       </span>
                     ) : (
                       <span className="text-xs text-muted-foreground">—</span>
                     )}
                   </td>
                   <td className="px-3 py-2.5">
-                    {lead.dominio && lead.dominio !== "—" ? (
+                    {item.dominio && item.dominio !== "—" ? (
                       <span
                         className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap"
-                        style={getDominioBadgeStyle(lead.dominio)}
+                        style={getDominioBadgeStyle(item.dominio)}
                       >
-                        {lead.dominio}
+                        {item.dominio}
                       </span>
                     ) : (
                       <span className="text-xs text-muted-foreground">—</span>
@@ -531,34 +627,34 @@ export default function ValoracionesPage() {
                   <td className="px-3 py-2.5">
                     <span
                       className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap"
-                      style={getSourceBadgeStyle(lead.source)}
+                      style={getSourceBadgeStyle(item.source)}
                     >
-                      {lead.source}
+                      {item.source}
                     </span>
                   </td>
                   <td className="max-w-[260px] truncate px-3 py-2.5 text-xs text-muted-foreground">
-                    {lead.address}
+                    {item.address}
                   </td>
                   <td className="px-3 py-2.5 font-medium text-foreground">
-                    {lead.ownerName}
+                    {item.ownerName}
                   </td>
                   <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                    {lead.phone}
+                    {item.phone}
                   </td>
                   <td className="px-3 py-2.5">
                     <span
                       className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap"
-                      style={getPhaseBadgeStyle(lead.phase)}
+                      style={getPhaseBadgeStyle(item.phase)}
                     >
                       <Circle className="h-1.5 w-1.5 fill-current" />
-                      {PHASE_LABELS[lead.phase] ?? lead.phase}
+                      {PHASE_LABELS[item.phase] ?? item.phase}
                     </span>
                   </td>
                   <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                    {lead.planner || "—"}
+                    {item.planner || "—"}
                   </td>
                   <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                    {lead.owner}
+                    {item.owner}
                   </td>
                 </tr>
               ))}
