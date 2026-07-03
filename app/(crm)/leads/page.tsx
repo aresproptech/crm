@@ -1255,29 +1255,29 @@ export default function LeadsPage() {
       <Topbar title="Leads" />
 
       <main className="mt-14 flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border bg-card px-6 py-2.5">
-          <div className="flex items-center gap-4">
-            <span className="text-xs text-muted-foreground">
+        <div className="flex shrink-0 flex-col gap-3 border-b border-border bg-card px-4 py-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4 lg:px-6 lg:py-2.5">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:gap-3 lg:w-auto lg:flex-nowrap lg:gap-4">
+            <span className="w-full text-xs text-muted-foreground lg:w-auto">
               {visibleTableLeads.length} visibles de{" "}
               {totalLeadsCount ?? leads.length} leads
               {hasMoreLeads ? ` · ${leads.length} cargados` : ""}
             </span>
 
-            <div className="relative">
+            <div className="relative w-full sm:flex-1 lg:w-auto lg:flex-none">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Buscar leads..."
-                className="h-8 w-[260px] rounded-md border border-border bg-background pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground"
+                className="h-10 w-full rounded-md border border-border bg-background pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground sm:h-8 lg:w-[260px]"
               />
             </div>
 
             <select
               value={phaseFilter}
               onChange={(e) => setPhaseFilter(e.target.value as PhaseFilterValue)}
-              className="h-8 w-[150px] rounded-md border border-border bg-background px-2 text-xs font-medium text-foreground outline-none"
+              className="h-10 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-xs font-medium text-foreground outline-none sm:h-8 sm:flex-none sm:w-[150px]"
               aria-label="Filtrar por fase"
             >
               {PHASE_FILTER_OPTIONS.map((option) => (
@@ -1290,7 +1290,7 @@ export default function LeadsPage() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as StatusFilterValue)}
-              className="h-8 w-[160px] rounded-md border border-border bg-background px-2 text-xs font-medium text-foreground outline-none"
+              className="h-10 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-xs font-medium text-foreground outline-none sm:h-8 sm:flex-none sm:w-[160px]"
               aria-label="Filtrar por estado"
             >
               {[
@@ -1303,11 +1303,11 @@ export default function LeadsPage() {
               ))}
             </select>
 
-            <div className="relative">
+            <div className="relative w-full sm:w-auto">
               <button
                 type="button"
                 onClick={() => setDatePopoverOpen((prev) => !prev)}
-                className="inline-flex h-8 min-w-[245px] items-center justify-between gap-3 rounded-md border border-border bg-background px-3 text-left text-xs font-medium text-foreground outline-none transition hover:bg-muted/50"
+                className="inline-flex h-10 w-full items-center justify-between gap-3 rounded-md border border-border bg-background px-3 text-left text-xs font-medium text-foreground outline-none transition hover:bg-muted/50 sm:h-8 sm:min-w-[245px] sm:w-auto"
                 aria-label="Seleccionar periodo"
               >
                 <span className="truncate">{dateFilterLabel}</span>
@@ -1434,7 +1434,7 @@ export default function LeadsPage() {
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:flex-nowrap">
             <Button
               size="sm"
               variant="outline"

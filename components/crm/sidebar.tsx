@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
@@ -8,7 +9,6 @@ import {
   Users,
   UserCog,
   Settings,
-  Building2,
   FileText,
   ClipboardCheck,
   Handshake,
@@ -121,13 +121,15 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        <div className="flex h-14 shrink-0 items-center gap-2.5 px-5 border-b border-sidebar-border">
-          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary">
-            <Building2 className="h-4 w-4 text-primary-foreground" />
-          </div>
-          <span className="text-sm font-semibold tracking-tight text-sidebar-foreground">
-            Flow
-          </span>
+        <div className="flex h-14 shrink-0 items-center bg-primary px-5 border-b border-sidebar-border">
+          <Image
+            src="/ares-logo.png"
+            alt="Ares Proptech"
+            width={1376}
+            height={534}
+            className="h-7 w-auto"
+            priority
+          />
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">

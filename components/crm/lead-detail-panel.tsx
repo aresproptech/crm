@@ -1087,6 +1087,7 @@ export function LeadDetailPanel({
   });
   const [encargoSaving, setEncargoSaving] = useState(false);
   const [encargoError, setEncargoError] = useState<string | null>(null);
+  const [editingEncargoId, setEditingEncargoId] = useState<number | null>(null);
 
   const [rgForm, setRgForm] = useState({
     fecha: "",
@@ -1098,12 +1099,14 @@ export function LeadDetailPanel({
   const [rgSaving, setRgSaving] = useState(false);
   const [rgError, setRgError] = useState<string | null>(null);
   const [rgEntries, setRgEntries] = useState<OpportunityContactRow[]>([]);
+  const [editingRgId, setEditingRgId] = useState<number | null>(null);
 
   const [valuationForm, setValuationForm] = useState({
     fecha: "",
     hora: "",
     medio: "",
   });
+  const [editingValuationId, setEditingValuationId] = useState<number | null>(null);
   const [valuationSaving, setValuationSaving] = useState(false);
   const [valuationError, setValuationError] = useState<string | null>(null);
   const [valuationEntries, setValuationEntries] = useState<OpportunityContactRow[]>([]);
@@ -1385,7 +1388,13 @@ export function LeadDetailPanel({
       memo: encargoForm.memo.trim() || null,
     };
 
-    const { error } = await supabase.from("opportunity_orders").insert(payload);
+    const { error } =
+      editingEncargoId !== null
+        ? await supabase
+            .from("opportunity_orders")
+            .update(payload)
+            .eq("id", editingEncargoId)
+        : await supabase.from("opportunity_orders").insert(payload);
 
     setEncargoSaving(false);
 
@@ -1405,8 +1414,33 @@ export function LeadDetailPanel({
       com_comprador: "",
       memo: "",
     });
+    setEditingEncargoId(null);
     setOrderModalOpen(false);
     await loadRelatedData(effectiveLead.id);
+  }
+
+  function handleEditEncargoClick(
+    order: OpportunityOrderRow,
+    e: React.MouseEvent
+  ) {
+    e.stopPropagation();
+
+    const orderId = Number(order.id);
+    if (!Number.isFinite(orderId)) return;
+
+    setEncargoForm({
+      fecha_inicio: order.fecha_inicio || "",
+      fecha_fin: order.fecha_fin || "",
+      pvp_inicial: order.pvp_inicial !== null && order.pvp_inicial !== undefined ? String(order.pvp_inicial) : "",
+      pvp_actual: order.pvp_actual !== null && order.pvp_actual !== undefined ? String(order.pvp_actual) : "",
+      pvp_estimado: order.pvp_estimado !== null && order.pvp_estimado !== undefined ? String(order.pvp_estimado) : "",
+      com_vendedor: order.com_vendedor !== null && order.com_vendedor !== undefined ? String(order.com_vendedor) : "",
+      com_comprador: order.com_comprador !== null && order.com_comprador !== undefined ? String(order.com_comprador) : "",
+      memo: order.memo || "",
+    });
+    setEditingEncargoId(orderId);
+    setEncargoError(null);
+    setOrderModalOpen(true);
   }
 
   async function handleAddRg() {
@@ -1431,12 +1465,20 @@ export function LeadDetailPanel({
       ? `${summaryLine}\n${rgForm.memo.trim()}`
       : summaryLine;
 
-    const { error } = await supabase.from("opportunity_contacts").insert({
+    const payload = {
       opportunity_id: Number(effectiveLead.id),
       fecha: rgForm.fecha,
       memo,
       resultado: true,
-    });
+    };
+
+    const { error } =
+      editingRgId !== null
+        ? await supabase
+            .from("opportunity_contacts")
+            .update(payload)
+            .eq("id", editingRgId)
+        : await supabase.from("opportunity_contacts").insert(payload);
 
     setRgSaving(false);
 
@@ -1447,9 +1489,32 @@ export function LeadDetailPanel({
     }
 
     setRgForm({ fecha: "", hora: "", medio: "", resultado: "", memo: "" });
+    setEditingRgId(null);
     setRgModalOpen(false);
     await loadRgEntries(effectiveLead.id);
     await loadObservations(effectiveLead.id);
+  }
+
+  function handleEditRgClick(event: RgHistoryEvent, e: React.MouseEvent) {
+    e.stopPropagation();
+
+    const idNum = Number(event.id);
+    if (!Number.isFinite(idNum)) return;
+
+    const resultadoValue =
+      LEAD_DETAIL_STATUS_OPTIONS.find((option) => option.label === event.resultado)
+        ?.value || "";
+
+    setRgForm({
+      fecha: event.fecha,
+      hora: event.hora,
+      medio: event.medio === "—" ? "" : event.medio,
+      resultado: resultadoValue,
+      memo: event.memo,
+    });
+    setEditingRgId(idNum);
+    setRgError(null);
+    setRgModalOpen(true);
   }
 
   async function handleAddValuation() {
@@ -1467,12 +1532,20 @@ export function LeadDetailPanel({
       valuationForm.hora ? ` | Hora: ${valuationForm.hora}` : ""
     }`;
 
-    const { error } = await supabase.from("opportunity_contacts").insert({
+    const payload = {
       opportunity_id: Number(effectiveLead.id),
       fecha: valuationForm.fecha,
       memo: summaryLine,
       resultado: true,
-    });
+    };
+
+    const { error } =
+      editingValuationId !== null
+        ? await supabase
+            .from("opportunity_contacts")
+            .update(payload)
+            .eq("id", editingValuationId)
+        : await supabase.from("opportunity_contacts").insert(payload);
 
     setValuationSaving(false);
 
@@ -1483,9 +1556,29 @@ export function LeadDetailPanel({
     }
 
     setValuationForm({ fecha: "", hora: "", medio: "" });
+    setEditingValuationId(null);
     setValuationModalOpen(false);
     await loadValuationEntries(effectiveLead.id);
     await loadObservations(effectiveLead.id);
+  }
+
+  function handleEditValuationClick(
+    event: ValuationHistoryEvent,
+    e: React.MouseEvent
+  ) {
+    e.stopPropagation();
+
+    const idNum = Number(event.id);
+    if (!Number.isFinite(idNum)) return;
+
+    setValuationForm({
+      fecha: event.fecha,
+      hora: event.hora,
+      medio: event.medio === "—" ? "" : event.medio,
+    });
+    setEditingValuationId(idNum);
+    setValuationError(null);
+    setValuationModalOpen(true);
   }
 
   if (!effectiveLead) return null;
@@ -1658,7 +1751,7 @@ export function LeadDetailPanel({
           )}
 
           <div className="space-y-4">
-            <nav className="grid grid-cols-5 overflow-hidden rounded-xl border border-border bg-muted/20 p-1">
+            <nav className="flex w-full touch-pan-x gap-1 overflow-x-auto rounded-xl border border-border bg-muted/20 p-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:grid md:grid-cols-5 md:overflow-visible">
               {LEAD_DETAIL_TABS.map((tab) => {
                 const isActive = activeTab === tab.value;
                 const count =
@@ -1678,7 +1771,7 @@ export function LeadDetailPanel({
                     type="button"
                     onClick={() => setActiveTab(tab.value)}
                     className={cn(
-                      "flex h-10 items-center justify-center gap-2 rounded-lg px-3 text-center text-xs font-semibold uppercase tracking-wide transition",
+                      "inline-flex h-10 min-w-max flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-center text-[11px] font-semibold uppercase tracking-wide transition sm:px-4 md:min-w-0 md:px-2",
                       isActive
                         ? "bg-primary text-primary-foreground shadow-sm"
                         : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -1688,7 +1781,7 @@ export function LeadDetailPanel({
                     {count !== undefined && (
                       <span
                         className={cn(
-                          "rounded-full px-1.5 py-0.5 text-[10px]",
+                          "shrink-0 rounded-full px-1.5 py-0.5 text-[10px]",
                           isActive
                             ? "bg-primary-foreground/20 text-primary-foreground"
                             : "bg-background text-muted-foreground"
@@ -1863,7 +1956,12 @@ export function LeadDetailPanel({
     type="button"
     size="sm"
     className="h-8 text-xs"
-    onClick={() => setValuationModalOpen(true)}
+    onClick={() => {
+      setValuationForm({ fecha: "", hora: "", medio: "" });
+      setEditingValuationId(null);
+      setValuationError(null);
+      setValuationModalOpen(true);
+    }}
   >
     Agregar valoración
   </Button>
@@ -1916,7 +2014,15 @@ export function LeadDetailPanel({
                                 </Badge>
                               </span>
                               <span className="flex items-center justify-end gap-2">
-                                <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                                <span
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-label="Editar valoración"
+                                  onClick={(e) => handleEditValuationClick(event, e)}
+                                  className="rounded p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </span>
                                 <ChevronDown
                                   className={cn(
                                     "h-4 w-4 text-muted-foreground transition-transform",
@@ -1987,7 +2093,21 @@ export function LeadDetailPanel({
     type="button"
     size="sm"
     className="h-8 text-xs"
-    onClick={() => setOrderModalOpen(true)}
+    onClick={() => {
+      setEncargoForm({
+        fecha_inicio: "",
+        fecha_fin: "",
+        pvp_inicial: "",
+        pvp_actual: "",
+        pvp_estimado: "",
+        com_vendedor: "",
+        com_comprador: "",
+        memo: "",
+      });
+      setEditingEncargoId(null);
+      setEncargoError(null);
+      setOrderModalOpen(true);
+    }}
   >
     Agregar encargo
   </Button>
@@ -2049,7 +2169,15 @@ export function LeadDetailPanel({
                                 </Badge>
                               </span>
                               <span className="flex items-center justify-end gap-2">
-                                <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                                <span
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-label="Editar encargo"
+                                  onClick={(e) => handleEditEncargoClick(order, e)}
+                                  className="rounded p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </span>
                                 <ChevronDown
                                   className={cn(
                                     "h-4 w-4 text-muted-foreground transition-transform",
@@ -2185,7 +2313,12 @@ export function LeadDetailPanel({
                       type="button"
                       size="sm"
                       className="h-8 text-xs"
-                      onClick={() => setRgModalOpen(true)}
+                      onClick={() => {
+                        setRgForm({ fecha: "", hora: "", medio: "", resultado: "", memo: "" });
+                        setEditingRgId(null);
+                        setRgError(null);
+                        setRgModalOpen(true);
+                      }}
                     >
                       Agregar R.G.
                     </Button>
@@ -2236,7 +2369,15 @@ export function LeadDetailPanel({
                               </span>
                               <span className="text-muted-foreground">{event.dominio}</span>
                               <span className="flex items-center justify-end gap-2">
-                                <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                                <span
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-label="Editar R.G."
+                                  onClick={(e) => handleEditRgClick(event, e)}
+                                  className="rounded p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </span>
                                 <ChevronDown
                                   className={cn(
                                     "h-4 w-4 text-muted-foreground transition-transform",
@@ -2446,7 +2587,9 @@ export function LeadDetailPanel({
       <Dialog open={valuationModalOpen} onOpenChange={setValuationModalOpen}>
         <DialogContent className="sm:max-w-[720px]">
           <DialogHeader>
-            <DialogTitle>Agregar valoración</DialogTitle>
+            <DialogTitle>
+              {editingValuationId !== null ? "Editar valoración" : "Agregar valoración"}
+            </DialogTitle>
             <DialogDescription>
               Carga los datos principales de la valoración del lead.
             </DialogDescription>
@@ -2517,7 +2660,11 @@ export function LeadDetailPanel({
               onClick={handleAddValuation}
               disabled={valuationSaving}
             >
-              {valuationSaving ? "Guardando..." : "Guardar valoración"}
+              {valuationSaving
+                ? "Guardando..."
+                : editingValuationId !== null
+                ? "Guardar cambios"
+                : "Guardar valoración"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2526,7 +2673,9 @@ export function LeadDetailPanel({
       <Dialog open={orderModalOpen} onOpenChange={setOrderModalOpen}>
         <DialogContent className="sm:max-w-[820px]">
           <DialogHeader>
-            <DialogTitle>Agregar encargo</DialogTitle>
+            <DialogTitle>
+              {editingEncargoId !== null ? "Editar encargo" : "Agregar encargo"}
+            </DialogTitle>
             <DialogDescription>
               Carga los datos principales del encargo del lead.
             </DialogDescription>
@@ -2649,7 +2798,11 @@ export function LeadDetailPanel({
               Cancelar
             </Button>
             <Button type="button" onClick={handleAddEncargo} disabled={encargoSaving}>
-              {encargoSaving ? "Guardando..." : "Guardar encargo"}
+              {encargoSaving
+                ? "Guardando..."
+                : editingEncargoId !== null
+                ? "Guardar cambios"
+                : "Guardar encargo"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2658,7 +2811,9 @@ export function LeadDetailPanel({
       <Dialog open={rgModalOpen} onOpenChange={setRgModalOpen}>
         <DialogContent className="sm:max-w-[720px]">
           <DialogHeader>
-            <DialogTitle>Agregar R.G.</DialogTitle>
+            <DialogTitle>
+              {editingRgId !== null ? "Editar R.G." : "Agregar R.G."}
+            </DialogTitle>
             <DialogDescription>
               Carga los datos principales de la reunión de gestión del lead.
             </DialogDescription>
@@ -2748,7 +2903,11 @@ export function LeadDetailPanel({
               Cancelar
             </Button>
             <Button type="button" onClick={handleAddRg} disabled={rgSaving}>
-              {rgSaving ? "Guardando..." : "Guardar R.G."}
+              {rgSaving
+                ? "Guardando..."
+                : editingRgId !== null
+                ? "Guardar cambios"
+                : "Guardar R.G."}
             </Button>
           </DialogFooter>
         </DialogContent>
