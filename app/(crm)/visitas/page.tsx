@@ -305,23 +305,27 @@ export default function VisitasPage() {
       <Topbar title="Visitas" />
 
       <main className="mt-14 flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border bg-card px-6 py-2.5">
-          <div className="flex items-center gap-4">
-            <span className="text-xs text-muted-foreground">
+        <div className="flex shrink-0 flex-col gap-3 border-b border-border bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6 sm:py-2.5">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-4">
+            <span className="text-xs text-muted-foreground sm:whitespace-nowrap">
               {filteredVisitas.length} visitas en total
             </span>
-            <div className="relative">
+            <div className="relative w-full sm:w-auto">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Buscar visitas..."
-                className="h-8 w-[260px] rounded-md border border-border bg-background pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground"
+                className="h-10 w-full rounded-md border border-border bg-background pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground sm:h-8 sm:w-[260px]"
               />
             </div>
           </div>
-          <Button size="sm" className="h-7 gap-1.5 text-xs font-semibold" onClick={() => setAddModalOpen(true)}>
+          <Button
+            size="sm"
+            className="h-10 w-full gap-1.5 text-xs font-semibold sm:h-7 sm:w-auto"
+            onClick={() => setAddModalOpen(true)}
+          >
             <Plus className="h-3.5 w-3.5" />
             Agregar Visita
           </Button>

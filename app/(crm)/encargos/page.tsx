@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 const HISTORY_PREFIX = "[HISTORIAL]";
+const MOBILE_VISIBLE_COLUMNS = new Set(["Health", "Domicilio", "Propietario", "Estado"]);
 
 type OpportunityOrderRow = {
   id: number;
@@ -575,7 +576,7 @@ export default function EncargosPage() {
       visitas30dMap.set(opportunityId, (visitas30dMap.get(opportunityId) ?? 0) + 1);
     }
 
-    const mapped: EncargoItem[] = (leadsData ?? []).flatMap((row) => {
+    const mapped: EncargoItem[] = (leadsData ?? []).flatMap<EncargoItem>((row) => {
       const lead = row as LeadRow;
       const orders = ordersByLead.get(lead.id) ?? [];
       const baseFields = {
@@ -774,9 +775,9 @@ export default function EncargosPage() {
       <Topbar title="Encargos" />
 
       <main className="mt-14 flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border bg-card px-6 py-2.5">
-          <div className="flex items-center gap-4">
-            <span className="text-xs text-muted-foreground">
+        <div className="flex shrink-0 flex-col gap-3 border-b border-border bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6 sm:py-2.5">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap sm:gap-4">
+            <span className="text-xs text-muted-foreground sm:whitespace-nowrap">
               {filteredItems.length} encargos en total
             </span>
             <button
@@ -789,21 +790,21 @@ export default function EncargosPage() {
             >
               <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
             </button>
-            <div className="relative">
+            <div className="relative w-full sm:w-auto">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Buscar encargos..."
-                className="h-8 w-[260px] rounded-md border border-border bg-background pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground"
+                className="h-10 w-full rounded-md border border-border bg-background pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground sm:h-8 sm:w-[260px]"
               />
             </div>
           </div>
           <button
             type="button"
             onClick={handleCreateClick}
-            className="inline-flex h-8 items-center gap-2 rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90"
+            className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90 sm:h-8 sm:w-auto"
           >
             <Plus className="h-3.5 w-3.5" />
             Crear Encargo
@@ -823,11 +824,21 @@ export default function EncargosPage() {
         )}
 
         <div className="relative flex-1 overflow-auto">
-          <table className="w-full border-collapse text-sm" style={{ minWidth: 2320 }}>
+          <table className="w-full table-fixed border-collapse text-sm md:min-w-[2320px] md:table-auto">
             <thead className="sticky top-0 z-20 bg-card">
               <tr className="border-b border-border bg-card/95 text-left backdrop-blur">
                 {columns.map((col) => (
-                  <th key={col} className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">
+                  <th
+                    key={col}
+                    className={cn(
+                      "px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap md:px-3",
+                      !MOBILE_VISIBLE_COLUMNS.has(col) && "hidden md:table-cell",
+                      col === "Health" && "w-[15%]",
+                      col === "Domicilio" && "w-[35%]",
+                      col === "Propietario" && "w-[28%]",
+                      col === "Estado" && "w-[22%]"
+                    )}
+                  >
                     {col}
                   </th>
                 ))}
@@ -873,7 +884,7 @@ export default function EncargosPage() {
                         i % 2 === 0 ? "bg-card" : "bg-background"
                       )}
                     >
-                      <td className="px-3 py-2.5">
+                      <td className="px-2 py-2.5 md:px-3">
                         <span
                           title={healthTitle}
                           className={cn(
@@ -884,36 +895,36 @@ export default function EncargosPage() {
                           {healthCfg.label}
                         </span>
                       </td>
-                      <td className="max-w-[180px] truncate px-3 py-2.5 text-xs text-muted-foreground">{item.domicilio}</td>
-                      <td className="px-3 py-2.5 text-xs font-medium text-foreground">{item.propietario}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{item.estado}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{item.dominio}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{item.planner}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{item.owner}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{item.origen}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{fmt(item.fecha_inicio)}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{fmt(item.fecha_fin)}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{diasGestion !== null ? diasGestion : "—"}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{diasRestantes !== null ? diasRestantes : "—"}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{fmtMonth(item.fecha_inicio)}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{fmtMonth(item.fecha_fin)}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{item.com_vendedor !== null ? `${item.com_vendedor}%` : "—"}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{item.com_comprador !== null ? `${item.com_comprador}%` : "—"}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{fmtEuro(item.pvp_inicial)}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{fmtEuro(item.pvp_actual)}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{fmtEuro(item.pvp_estimado)}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{fmtEuro(pvpDesvio)}</td>
-                      <td className={cn("px-3 py-2.5 text-xs font-medium", getAvanceColor(desvioPct))}>
+                      <td className="truncate whitespace-nowrap px-2 py-2.5 text-xs text-muted-foreground md:px-3">{item.domicilio}</td>
+                      <td className="truncate whitespace-nowrap px-2 py-2.5 text-xs font-medium text-foreground md:px-3">{item.propietario}</td>
+                      <td className="truncate whitespace-nowrap px-2 py-2.5 text-xs text-muted-foreground md:px-3">{item.estado}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{item.dominio}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{item.planner}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{item.owner}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{item.origen}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{fmt(item.fecha_inicio)}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{fmt(item.fecha_fin)}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{diasGestion !== null ? diasGestion : "—"}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{diasRestantes !== null ? diasRestantes : "—"}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{fmtMonth(item.fecha_inicio)}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{fmtMonth(item.fecha_fin)}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{item.com_vendedor !== null ? `${item.com_vendedor}%` : "—"}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{item.com_comprador !== null ? `${item.com_comprador}%` : "—"}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{fmtEuro(item.pvp_inicial)}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{fmtEuro(item.pvp_actual)}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{fmtEuro(item.pvp_estimado)}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{fmtEuro(pvpDesvio)}</td>
+                      <td className={cn("px-3 py-2.5 text-xs font-medium hidden md:table-cell", getAvanceColor(desvioPct))}>
                         {fmtPct(desvioPct)}
                       </td>
-                      <td className={cn("px-3 py-2.5 text-xs font-medium", getAvanceColor(avance))}>
+                      <td className={cn("px-3 py-2.5 text-xs font-medium hidden md:table-cell", getAvanceColor(avance))}>
                         {avance !== null ? `${avance}%` : "—"}
                       </td>
-                      <td className={cn("px-3 py-2.5 text-xs font-medium", getRebajasColor(item.rebajas))}>
+                      <td className={cn("px-3 py-2.5 text-xs font-medium hidden md:table-cell", getRebajasColor(item.rebajas))}>
                         {item.rebajas}
                       </td>
-                      <td className={cn("px-3 py-2.5 text-xs font-medium", getActivityColor(item.rg_15d))}>{item.rg_15d}</td>
-                      <td className={cn("px-3 py-2.5 text-xs font-medium", getActivityColor(item.visitas_30d))}>{item.visitas_30d}</td>
+                      <td className={cn("px-3 py-2.5 text-xs font-medium hidden md:table-cell", getActivityColor(item.rg_15d))}>{item.rg_15d}</td>
+                      <td className={cn("px-3 py-2.5 text-xs font-medium hidden md:table-cell", getActivityColor(item.visitas_30d))}>{item.visitas_30d}</td>
                     </tr>
                   );
                 })
