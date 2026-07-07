@@ -1643,38 +1643,35 @@ export default function LeadsPage() {
 
         {viewMode === "table" ? (
           <div className="relative flex-1 overflow-auto">
-            <table
-              className="border-collapse text-sm"
-              style={{ width: 2700, tableLayout: "fixed" }}
-            >
+            <table className="w-full table-fixed border-collapse text-sm md:w-[2700px] md:[table-layout:fixed]">
               <colgroup>
-                {selectionMode && <col style={{ width: 44 }} />}
-                <col style={{ width: 48 }} />
-                <col style={{ width: 230 }} />
-                <col style={{ width: 310 }} />
-                <col style={{ width: 95 }} />
-                <col style={{ width: 175 }} />
-                <col style={{ width: 115 }} />
-                <col style={{ width: 135 }} />
-                <col style={{ width: 120 }} />
-                <col style={{ width: 120 }} />
-                <col style={{ width: 130 }} />
-                <col style={{ width: 85 }} />
-                <col style={{ width: 135 }} />
-                <col style={{ width: 105 }} />
-                <col style={{ width: 155 }} />
-                <col style={{ width: 155 }} />
-                <col style={{ width: 165 }} />
-                <col style={{ width: 150 }} />
-                <col style={{ width: 130 }} />
-                <col style={{ width: 170 }} />
-                <col style={{ width: 130 }} />
+                {selectionMode && <col style={{ width: 44 }} className="hidden md:table-column" />}
+                <col className="w-10 md:w-[48px]" />
+                <col className="w-[28%] md:w-[230px]" />
+                <col className="w-[42%] md:w-[310px]" />
+                <col style={{ width: 95 }} className="hidden md:table-column" />
+                <col className="w-[30%] md:w-[175px]" />
+                <col style={{ width: 115 }} className="hidden md:table-column" />
+                <col style={{ width: 135 }} className="hidden md:table-column" />
+                <col style={{ width: 120 }} className="hidden md:table-column" />
+                <col style={{ width: 120 }} className="hidden md:table-column" />
+                <col style={{ width: 130 }} className="hidden md:table-column" />
+                <col style={{ width: 85 }} className="hidden md:table-column" />
+                <col style={{ width: 135 }} className="hidden md:table-column" />
+                <col style={{ width: 105 }} className="hidden md:table-column" />
+                <col style={{ width: 155 }} className="hidden md:table-column" />
+                <col style={{ width: 155 }} className="hidden md:table-column" />
+                <col style={{ width: 165 }} className="hidden md:table-column" />
+                <col style={{ width: 150 }} className="hidden md:table-column" />
+                <col style={{ width: 130 }} className="hidden md:table-column" />
+                <col style={{ width: 170 }} className="hidden md:table-column" />
+                <col style={{ width: 130 }} className="hidden md:table-column" />
               </colgroup>
 
               <thead className="sticky top-0 z-20 bg-card">
                 <tr className="border-b border-border bg-card/95 text-left backdrop-blur">
                   {selectionMode && (
-                    <th className="w-8 px-3 py-2.5">
+                    <th className="w-8 px-3 py-2.5 hidden md:table-cell">
                       <input
                         type="checkbox"
                         checked={allVisibleSelected}
@@ -1687,48 +1684,257 @@ export default function LeadsPage() {
                     </th>
                   )}
 
-                  <th className="w-9 px-3 py-2.5">
+                  <th className="w-10 px-2 py-2.5 md:w-9 md:px-3">
                     <span className="sr-only">Favorito</span>
                   </th>
 
-                  {(
-                    [
-                      { label: "Propietario", key: "ownerName" },
-                      { label: "Domicilio", key: "address" },
-                      { label: "CP", key: "cp" },
-                      { label: "Distrito", key: "distrito" },
-                      { label: "Fase", key: "phase" },
-                      { label: "Estado", key: "status" },
-                      { label: "F. Noticia", key: "fechaNoticia" },
-                      { label: "F. Contacto", key: "fechaContacto" },
-                      { label: "F. Valoración", key: "fechaValoracion" },
-                      { label: "Hora", key: "hora" },
-                      { label: "Medio", key: "medio" },
-                      { label: "Month", key: "month" },
-                      { label: "Dominio", key: "dominio" },
-                      { label: "Planner", key: "planner" },
-                      { label: "Owner", key: "owner" },
-                      { label: "Origen", key: "source" },
-                      { label: "Valor", key: "valor" },
-                      { label: "Teléfono", key: "phone" },
-                      { label: "En Venta", key: "enVenta" },
-                    ] as { label: string; key: SortKey }[]
-                  ).map(({ label, key }) => (
-                    <th
-                      key={key}
-                      onClick={() => handleSort(key)}
-                      className="group cursor-pointer select-none whitespace-nowrap px-3 py-2.5"
-                    >
-                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors group-hover:text-foreground">
-                        {label}
-                        <SortIcon
-                          col={key}
-                          sortKey={sortKey}
-                          sortDir={sortDir}
-                        />
-                      </span>
-                    </th>
-                  ))}
+                  <th
+                    onClick={() => handleSort("ownerName")}
+                    className="group cursor-pointer select-none whitespace-nowrap px-2 py-2.5 md:px-3"
+                  >
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors group-hover:text-foreground">
+                      Propietario
+                      <SortIcon
+                        col={"ownerName"}
+                        sortKey={sortKey}
+                        sortDir={sortDir}
+                      />
+                    </span>
+                  </th>
+                  <th
+                    onClick={() => handleSort("address")}
+                    className="group cursor-pointer select-none whitespace-nowrap px-2 py-2.5 md:px-3"
+                  >
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors group-hover:text-foreground">
+                      Domicilio
+                      <SortIcon
+                        col={"address"}
+                        sortKey={sortKey}
+                        sortDir={sortDir}
+                      />
+                    </span>
+                  </th>
+                  <th
+                    onClick={() => handleSort("cp")}
+                    className="group cursor-pointer select-none whitespace-nowrap px-3 py-2.5 hidden md:table-cell"
+                  >
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors group-hover:text-foreground">
+                      CP
+                      <SortIcon
+                        col={"cp"}
+                        sortKey={sortKey}
+                        sortDir={sortDir}
+                      />
+                    </span>
+                  </th>
+                  <th
+                    onClick={() => handleSort("distrito")}
+                    className="group cursor-pointer select-none whitespace-nowrap px-2 py-2.5 md:px-3"
+                  >
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors group-hover:text-foreground">
+                      Distrito
+                      <SortIcon
+                        col={"distrito"}
+                        sortKey={sortKey}
+                        sortDir={sortDir}
+                      />
+                    </span>
+                  </th>
+                  <th
+                    onClick={() => handleSort("phase")}
+                    className="group cursor-pointer select-none whitespace-nowrap px-3 py-2.5 hidden md:table-cell"
+                  >
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors group-hover:text-foreground">
+                      Fase
+                      <SortIcon
+                        col={"phase"}
+                        sortKey={sortKey}
+                        sortDir={sortDir}
+                      />
+                    </span>
+                  </th>
+                  <th
+                    onClick={() => handleSort("status")}
+                    className="group cursor-pointer select-none whitespace-nowrap px-3 py-2.5 hidden md:table-cell"
+                  >
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors group-hover:text-foreground">
+                      Estado
+                      <SortIcon
+                        col={"status"}
+                        sortKey={sortKey}
+                        sortDir={sortDir}
+                      />
+                    </span>
+                  </th>
+                  <th
+                    onClick={() => handleSort("fechaNoticia")}
+                    className="group cursor-pointer select-none whitespace-nowrap px-3 py-2.5 hidden md:table-cell"
+                  >
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors group-hover:text-foreground">
+                      F. Noticia
+                      <SortIcon
+                        col={"fechaNoticia"}
+                        sortKey={sortKey}
+                        sortDir={sortDir}
+                      />
+                    </span>
+                  </th>
+                  <th
+                    onClick={() => handleSort("fechaContacto")}
+                    className="group cursor-pointer select-none whitespace-nowrap px-3 py-2.5 hidden md:table-cell"
+                  >
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors group-hover:text-foreground">
+                      F. Contacto
+                      <SortIcon
+                        col={"fechaContacto"}
+                        sortKey={sortKey}
+                        sortDir={sortDir}
+                      />
+                    </span>
+                  </th>
+                  <th
+                    onClick={() => handleSort("fechaValoracion")}
+                    className="group cursor-pointer select-none whitespace-nowrap px-3 py-2.5 hidden md:table-cell"
+                  >
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors group-hover:text-foreground">
+                      F. Valoración
+                      <SortIcon
+                        col={"fechaValoracion"}
+                        sortKey={sortKey}
+                        sortDir={sortDir}
+                      />
+                    </span>
+                  </th>
+                  <th
+                    onClick={() => handleSort("hora")}
+                    className="group cursor-pointer select-none whitespace-nowrap px-3 py-2.5 hidden md:table-cell"
+                  >
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors group-hover:text-foreground">
+                      Hora
+                      <SortIcon
+                        col={"hora"}
+                        sortKey={sortKey}
+                        sortDir={sortDir}
+                      />
+                    </span>
+                  </th>
+                  <th
+                    onClick={() => handleSort("medio")}
+                    className="group cursor-pointer select-none whitespace-nowrap px-3 py-2.5 hidden md:table-cell"
+                  >
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors group-hover:text-foreground">
+                      Medio
+                      <SortIcon
+                        col={"medio"}
+                        sortKey={sortKey}
+                        sortDir={sortDir}
+                      />
+                    </span>
+                  </th>
+                  <th
+                    onClick={() => handleSort("month")}
+                    className="group cursor-pointer select-none whitespace-nowrap px-3 py-2.5 hidden md:table-cell"
+                  >
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors group-hover:text-foreground">
+                      Month
+                      <SortIcon
+                        col={"month"}
+                        sortKey={sortKey}
+                        sortDir={sortDir}
+                      />
+                    </span>
+                  </th>
+                  <th
+                    onClick={() => handleSort("dominio")}
+                    className="group cursor-pointer select-none whitespace-nowrap px-3 py-2.5 hidden md:table-cell"
+                  >
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors group-hover:text-foreground">
+                      Dominio
+                      <SortIcon
+                        col={"dominio"}
+                        sortKey={sortKey}
+                        sortDir={sortDir}
+                      />
+                    </span>
+                  </th>
+                  <th
+                    onClick={() => handleSort("planner")}
+                    className="group cursor-pointer select-none whitespace-nowrap px-3 py-2.5 hidden md:table-cell"
+                  >
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors group-hover:text-foreground">
+                      Planner
+                      <SortIcon
+                        col={"planner"}
+                        sortKey={sortKey}
+                        sortDir={sortDir}
+                      />
+                    </span>
+                  </th>
+                  <th
+                    onClick={() => handleSort("owner")}
+                    className="group cursor-pointer select-none whitespace-nowrap px-3 py-2.5 hidden md:table-cell"
+                  >
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors group-hover:text-foreground">
+                      Owner
+                      <SortIcon
+                        col={"owner"}
+                        sortKey={sortKey}
+                        sortDir={sortDir}
+                      />
+                    </span>
+                  </th>
+                  <th
+                    onClick={() => handleSort("source")}
+                    className="group cursor-pointer select-none whitespace-nowrap px-3 py-2.5 hidden md:table-cell"
+                  >
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors group-hover:text-foreground">
+                      Origen
+                      <SortIcon
+                        col={"source"}
+                        sortKey={sortKey}
+                        sortDir={sortDir}
+                      />
+                    </span>
+                  </th>
+                  <th
+                    onClick={() => handleSort("valor")}
+                    className="group cursor-pointer select-none whitespace-nowrap px-3 py-2.5 hidden md:table-cell"
+                  >
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors group-hover:text-foreground">
+                      Valor
+                      <SortIcon
+                        col={"valor"}
+                        sortKey={sortKey}
+                        sortDir={sortDir}
+                      />
+                    </span>
+                  </th>
+                  <th
+                    onClick={() => handleSort("phone")}
+                    className="group cursor-pointer select-none whitespace-nowrap px-3 py-2.5 hidden md:table-cell"
+                  >
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors group-hover:text-foreground">
+                      Teléfono
+                      <SortIcon
+                        col={"phone"}
+                        sortKey={sortKey}
+                        sortDir={sortDir}
+                      />
+                    </span>
+                  </th>
+                  <th
+                    onClick={() => handleSort("enVenta")}
+                    className="group cursor-pointer select-none whitespace-nowrap px-3 py-2.5 hidden md:table-cell"
+                  >
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors group-hover:text-foreground">
+                      En Venta
+                      <SortIcon
+                        col={"enVenta"}
+                        sortKey={sortKey}
+                        sortDir={sortDir}
+                      />
+                    </span>
+                  </th>
                 </tr>
               </thead>
 
@@ -1744,7 +1950,7 @@ export default function LeadsPage() {
                     )}
                   >
                     {selectionMode && (
-                      <td className="px-3 py-2.5">
+                      <td className="px-3 py-2.5 hidden md:table-cell">
                         <input
                           type="checkbox"
                           checked={selectedIds.has(lead.id)}
@@ -1759,7 +1965,7 @@ export default function LeadsPage() {
                       </td>
                     )}
 
-                    <td className="px-3 py-2.5">
+                    <td className="px-2 py-2.5 md:px-3">
                       <button
                         type="button"
                         onClick={(e) => {
@@ -1788,25 +1994,25 @@ export default function LeadsPage() {
                       </button>
                     </td>
 
-                    <td className="truncate whitespace-nowrap px-3 py-2.5">
+                    <td className="truncate whitespace-nowrap px-2 py-2.5 md:px-3">
                       <span className="font-medium text-foreground">
                         {lead.ownerName}
                       </span>
                     </td>
 
-                    <td className="truncate whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
+                    <td className="truncate whitespace-nowrap px-2 py-2.5 text-xs text-muted-foreground md:px-3">
                       {lead.address}
                     </td>
 
-                    <td className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
+                    <td className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">
                       {lead.cp}
                     </td>
 
-                    <td className="truncate whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
+                    <td className="truncate whitespace-nowrap px-2 py-2.5 text-xs text-muted-foreground md:px-3">
                       {lead.distrito}
                     </td>
 
-                    <td className="px-3 py-2.5">
+                    <td className="px-3 py-2.5 hidden md:table-cell">
                       <span
                         className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap"
                         style={getPhaseBadgeStyle(lead.phase)}
@@ -1816,7 +2022,7 @@ export default function LeadsPage() {
                       </span>
                     </td>
 
-                    <td className="px-3 py-2.5">
+                    <td className="px-3 py-2.5 hidden md:table-cell">
                       {(() => {
                         const statusConfig = getStatusConfig(lead.status);
 
@@ -1836,23 +2042,23 @@ export default function LeadsPage() {
                       })()}
                     </td>
 
-                    <td className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
+                    <td className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">
                       {fmt(lead.fechaNoticia)}
                     </td>
 
-                    <td className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
+                    <td className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">
                       {fmt(lead.fechaContacto)}
                     </td>
 
-                    <td className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
+                    <td className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">
                       {fmt(lead.fechaValoracion)}
                     </td>
 
-                    <td className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
+                    <td className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">
                       {lead.hora || "—"}
                     </td>
 
-                    <td className="px-3 py-2.5">
+                    <td className="px-3 py-2.5 hidden md:table-cell">
                       {lead.medio && lead.medio !== "—" ? (
                         <span
                           className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap"
@@ -1865,11 +2071,11 @@ export default function LeadsPage() {
                       )}
                     </td>
 
-                    <td className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
+                    <td className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">
                       {lead.month}
                     </td>
 
-                    <td className="px-3 py-2.5">
+                    <td className="px-3 py-2.5 hidden md:table-cell">
                       {lead.dominio && lead.dominio !== "—" ? (
                         <span
                           className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap"
@@ -1882,11 +2088,11 @@ export default function LeadsPage() {
                       )}
                     </td>
 
-                    <td className="max-w-[110px] truncate whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
+                    <td className="max-w-[110px] truncate whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">
                       {lead.planner ?? "—"}
                     </td>
 
-                    <td className="px-3 py-2.5">
+                    <td className="px-3 py-2.5 hidden md:table-cell">
                       <div className="flex items-center gap-1.5 whitespace-nowrap">
                         <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[9px] font-semibold uppercase text-primary">
                           {lead.owner
@@ -1901,7 +2107,7 @@ export default function LeadsPage() {
                       </div>
                     </td>
 
-                    <td className="px-3 py-2.5">
+                    <td className="px-3 py-2.5 hidden md:table-cell">
                       <span
                         className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap"
                         style={getSourceBadgeStyle(lead.source)}
@@ -1910,17 +2116,15 @@ export default function LeadsPage() {
                       </span>
                     </td>
 
-
-                    <td className="whitespace-nowrap px-3 py-2.5 text-xs font-medium text-foreground">
+                    <td className="whitespace-nowrap px-3 py-2.5 text-xs font-medium text-foreground hidden md:table-cell">
                       {lead.valor}
                     </td>
 
-
-                    <td className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
+                    <td className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">
                       {lead.phone}
                     </td>
 
-                    <td className="px-3 py-2.5">
+                    <td className="px-3 py-2.5 hidden md:table-cell">
                       <span
                         className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap"
                         style={getEnVentaBadgeStyle(lead.enVenta)}
