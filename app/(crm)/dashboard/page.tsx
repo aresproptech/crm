@@ -28,7 +28,7 @@ type DateRange = {
 };
 
 type FunnelItem = {
-  phase: "noticia" | "concertada" | "valorada" | "encargo";
+  phase: "identificada" | "cualificada" | "valorada" | "encargo";
   label: string;
   value: number;
 };
@@ -69,13 +69,13 @@ type DashboardLead = {
   id: string;
   createdAt: string | null;
   phase: FunnelItem["phase"];
-  status: "seguimiento" | "caliente" | "desestimada" | "identificar";
+  status: "activa" | "caliente" | "desestimada";
   source: string;
 };
 
 const PHASE_ORDER: FunnelItem["phase"][] = [
-  "noticia",
-  "concertada",
+  "identificada",
+  "cualificada",
   "valorada",
   "encargo",
 ];
@@ -253,21 +253,27 @@ export default function DashboardPage() {
       const normalizedPhase = (() => {
         const raw = (lead.fase_name || "").toLowerCase().trim();
 
-        if (raw === "noticia") return "noticia";
-        if (raw === "concertada" || raw === "cualificada") return "concertada";
+        if (raw === "noticia" || raw === "identificada") return "identificada";
+        if (raw === "concertada" || raw === "cualificada") return "cualificada";
         if (raw === "valorada") return "valorada";
         if (raw === "encargo") return "encargo";
-        return "noticia";
+        return "identificada";
       })();
 
       const normalizedStatus = (() => {
         const raw = (lead.estado || "").toLowerCase().trim();
 
-        if (raw === "seguimiento") return "seguimiento";
+        if (
+          !raw ||
+          raw === "activa" ||
+          raw === "activo" ||
+          raw === "seguimiento" ||
+          raw === "cualificada"
+        ) return "activa";
         if (raw === "caliente") return "caliente";
         if (raw === "desestimada") return "desestimada";
-        if (raw === "identificar" || raw === "identificada") return "identificar";
-        return "seguimiento";
+        if (raw === "identificar" || raw === "identificada") return "activa";
+        return "activa";
       })();
 
       current.push({
@@ -284,8 +290,8 @@ export default function DashboardPage() {
 
   const funnelData = useMemo<FunnelItem[]>(() => {
     const phaseLabels: Record<FunnelItem["phase"], string> = {
-      noticia: PHASE_LABELS.noticia,
-      concertada: PHASE_LABELS.concertada,
+      identificada: PHASE_LABELS.identificada,
+      cualificada: PHASE_LABELS.cualificada,
       valorada: PHASE_LABELS.valorada,
       encargo: PHASE_LABELS.encargo,
     };
@@ -303,21 +309,21 @@ export default function DashboardPage() {
   );
 
   const conversionData = useMemo(() => {
-    const noticia = funnelData.find((x) => x.phase === "noticia")?.value ?? 0;
-    const concertada = funnelData.find((x) => x.phase === "concertada")?.value ?? 0;
+    const identificada = funnelData.find((x) => x.phase === "identificada")?.value ?? 0;
+    const cualificada = funnelData.find((x) => x.phase === "cualificada")?.value ?? 0;
     const valorada = funnelData.find((x) => x.phase === "valorada")?.value ?? 0;
     const encargo = funnelData.find((x) => x.phase === "encargo")?.value ?? 0;
 
     return [
       {
-        label: "Noticia → Concertada",
-        value: `${calcConversion(noticia, concertada)}%`,
-        detail: `${concertada} de ${noticia}`,
+        label: "Identificada → Cualificada",
+        value: `${calcConversion(identificada, cualificada)}%`,
+        detail: `${cualificada} de ${identificada}`,
       },
       {
-        label: "Concertada → Valorada",
-        value: `${calcConversion(concertada, valorada)}%`,
-        detail: `${valorada} de ${concertada}`,
+        label: "Cualificada → Valorada",
+        value: `${calcConversion(cualificada, valorada)}%`,
+        detail: `${valorada} de ${cualificada}`,
       },
       {
         label: "Valorada → Encargo",
@@ -325,8 +331,8 @@ export default function DashboardPage() {
         detail: `${encargo} de ${valorada}`,
       },
       {
-        label: "Noticia → Encargo",
-        value: `${calcConversion(noticia, encargo)}%`,
+        label: "Identificada → Encargo",
+        value: `${calcConversion(identificada, encargo)}%`,
         detail: "Conversión total",
       },
     ];
@@ -349,7 +355,7 @@ export default function DashboardPage() {
         date: label,
         ingresados: dayLeads.length,
         desestimados: dayLeads.filter((l) => l.status === "desestimada").length,
-        identificar: dayLeads.filter((l) => l.status === "identificar").length,
+        activos: dayLeads.filter((l) => l.status === "activa").length,
       };
     });
   }, [currentLeads, currentRange]);
@@ -493,9 +499,9 @@ export default function DashboardPage() {
                     value={item.value}
                     maxValue={maxFunnelValue}
                     colorClass={
-                      item.phase === "noticia"
+                      item.phase === "identificada"
                         ? "bg-slate-500"
-                        : item.phase === "concertada"
+                        : item.phase === "cualificada"
                           ? "bg-[#60a5fa]"
                           : item.phase === "valorada"
                             ? "bg-[#a78bfa]"
@@ -548,9 +554,9 @@ export default function DashboardPage() {
               </div>
 
               <div className="rounded-xl bg-[#7ecf7a] px-4 py-3 text-center text-white shadow-lg">
-                <div className="text-sm text-white/90">Identificar</div>
+                <div className="text-sm text-white/90">Activos</div>
                 <div className="text-4xl font-semibold">
-                  {currentLeads.filter((l) => l.status === "identificar").length}
+                  {currentLeads.filter((l) => l.status === "activa").length}
                 </div>
               </div>
             </div>
@@ -558,7 +564,7 @@ export default function DashboardPage() {
             <Card className="border-white/10 bg-[#e8edf1] shadow-xl">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">
-                  Ingresados / Desestimados / Identificar
+                  Ingresados / Desestimados / Activos
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -599,7 +605,7 @@ export default function DashboardPage() {
                       />
                       <Line
                         type="monotone"
-                        dataKey="identificar"
+                        dataKey="activos"
                         stroke="#d4a15f"
                         strokeWidth={2.5}
                         dot={{ r: 3 }}

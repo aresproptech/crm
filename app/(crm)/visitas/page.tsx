@@ -26,6 +26,8 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
+const HISTORY_PREFIX = "[HISTORIAL]";
+
 type Visita = {
   id: number;
   opportunity_id: number | null;
@@ -130,6 +132,20 @@ export default function VisitasPage() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<VisitaForm>(EMPTY_FORM);
   const [editForm, setEditForm] = useState<VisitaForm>(EMPTY_FORM);
+
+  async function persistLeadActivity(leadId: number, text: string) {
+    const createdBy = userWithRole?.crmUser.name ?? "Usuario";
+    const { error } = await supabase.from("opportunity_contacts").insert({
+      opportunity_id: leadId,
+      fecha: new Date().toISOString().slice(0, 10),
+      memo: `${HISTORY_PREFIX} ${createdBy}: ${text}`,
+      resultado: true,
+    });
+
+    if (error) {
+      console.error("Error guardando historial de visita:", error);
+    }
+  }
 
   function setField(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -238,6 +254,7 @@ export default function VisitasPage() {
     setSaving(false);
     if (error) { console.error("Error guardando visita:", error); return; }
 
+    await persistLeadActivity(Number(form.opportunity_id), "Agregó una visita");
     setAddModalOpen(false);
     setForm(EMPTY_FORM);
     void loadVisitas();
@@ -264,6 +281,9 @@ export default function VisitasPage() {
     setSaving(false);
     if (error) { console.error("Error actualizando visita:", error); return; }
 
+    if (selectedVisita.opportunity_id !== null) {
+      await persistLeadActivity(selectedVisita.opportunity_id, "Editó una visita");
+    }
     setEditModalOpen(false);
     setSelectedVisita(null);
     void loadVisitas();

@@ -55,14 +55,13 @@ function fmt(d: string) {
 function normalizePhase(raw: string | null | undefined): Lead["phase"] {
   const value = (raw || "").toLowerCase().trim();
 
-  if (value.includes("noticia")) return "noticia";
-  if (value.includes("concertada")) return "concertada";
+  if (value.includes("noticia") || value.includes("identificada")) return "identificada";
+  if (value.includes("concertada") || value.includes("cualificada")) return "cualificada";
   if (value.includes("valorada")) return "valorada";
-  if (value.includes("cualificada")) return "cualificada";
   if (value.includes("encargo")) return "encargo";
-  if (value.includes("vendida") || value.includes("vender")) return "vender";
+  if (value.includes("vendida") || value.includes("vender")) return "encargo";
 
-  return "noticia";
+  return "identificada";
 }
 
 function mapCrmLeadToLead(row: CrmLeadRow): Lead {
@@ -88,7 +87,7 @@ function mapCrmLeadToLead(row: CrmLeadRow): Lead {
     phone: row.telefono?.trim() || "—",
     source: row.source_name?.trim() || "Sin origen",
     phase: normalizePhase(row.fase_name),
-    status: "seguimiento",
+    status: "activa",
     fechaNoticia: row.fecha || row.created_at || "",
     fechaContacto: "",
     fechaValoracion: row.fecha || row.created_at || "",
@@ -155,7 +154,7 @@ export default function PlanningPage() {
       const planningItems: PlanningItem[] = [];
 
       mapped.forEach((lead) => {
-        if (lead.phase === "concertada" || lead.phase === "valorada") {
+        if (lead.phase === "cualificada" || lead.phase === "valorada") {
           planningItems.push({
             id: `valoracion-${lead.id}`,
             planning: getPlanningLabel(
@@ -190,7 +189,7 @@ export default function PlanningPage() {
           });
         }
 
-        if (lead.phase === "encargo" || lead.phase === "vender") {
+        if (lead.phase === "encargo") {
           planningItems.push({
             id: `visita-${lead.id}`,
             planning: getPlanningLabel(lead.fechaNoticia, "Visita"),

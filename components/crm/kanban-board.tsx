@@ -2,8 +2,8 @@ import { type Lead } from "@/lib/crm-data";
 import { PipelineColumn, type PipelinePhase } from "./pipeline-column";
 
 const COLUMNS: { phase: PipelinePhase; label: string; accentColor: string }[] = [
-  { phase: "noticia", label: "Noticia", accentColor: "#94a3b8" },
-  { phase: "concertada", label: "Concertada", accentColor: "#60a5fa" },
+  { phase: "identificada", label: "Identificada", accentColor: "#94a3b8" },
+  { phase: "cualificada", label: "Cualificada", accentColor: "#60a5fa" },
   { phase: "valorada", label: "Valorada", accentColor: "#a78bfa" },
   { phase: "encargo", label: "Encargo", accentColor: "#10b981" },
 ];

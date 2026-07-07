@@ -70,9 +70,7 @@ function parseValuationMemo(memo: string | null | undefined) {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; dot: string }> = {
-  identificar: { label: "Identificada", dot: "bg-violet-500" },
-  cualificada: { label: "Cualificada", dot: "bg-emerald-500" },
-  seguimiento: { label: "Cualificada", dot: "bg-emerald-500" },
+  activa: { label: "Activa", dot: "bg-emerald-500" },
   caliente: { label: "Caliente", dot: "bg-orange-500" },
   desestimada: { label: "Desestimada", dot: "bg-muted-foreground" },
 };
@@ -81,12 +79,12 @@ const PHASE_BADGE_STYLES: Record<
   string,
   { backgroundColor: string; color: string; borderColor: string }
 > = {
-  noticia: {
+  identificada: {
     backgroundColor: "#D4EDBC",
     color: "#288158",
     borderColor: "#B7D99C",
   },
-  concertada: {
+  cualificada: {
     backgroundColor: "#94EC89",
     color: "#14532D",
     borderColor: "#6FD864",
@@ -105,7 +103,7 @@ const PHASE_BADGE_STYLES: Record<
 
 function getPhaseBadgeStyle(phase: string | null | undefined) {
   return (
-    PHASE_BADGE_STYLES[phase || "noticia"] ?? {
+    PHASE_BADGE_STYLES[phase || "identificada"] ?? {
       backgroundColor: "#F1F5F9",
       color: "#475569",
       borderColor: "#CBD5E1",
@@ -306,25 +304,31 @@ function getPlanningStatus(dateValue: string): "previas" | "hoy" | "proximas" {
 function normalizePhase(raw: string | null | undefined): Lead["phase"] {
   const value = (raw || "").toLowerCase().trim();
 
-  if (value === "noticia" || value === "identificada") return "noticia";
-  if (value === "concertada" || value === "cualificada") return "concertada";
+  if (value === "noticia" || value === "identificada") return "identificada";
+  if (value === "concertada" || value === "cualificada") return "cualificada";
   if (value === "valorada") return "valorada";
   if (value === "encargo") return "encargo";
   if (value === "vendida" || value === "vender") return "encargo";
 
-  return "noticia";
+  return "identificada";
 }
 
 function normalizeStatus(raw: string | null | undefined): Lead["status"] {
   const value = (raw || "").toLowerCase().trim();
 
-  if (value === "identificar" || value === "identificada") return "identificar";
-  if (value === "cualificada") return "cualificada";
-  if (value === "seguimiento") return "cualificada";
+  if (
+    !value ||
+    value === "activa" ||
+    value === "activo" ||
+    value === "identificar" ||
+    value === "identificada" ||
+    value === "cualificada" ||
+    value === "seguimiento"
+  ) return "activa";
   if (value === "caliente") return "caliente";
   if (value === "desestimada") return "desestimada";
 
-  return "identificar";
+  return "activa";
 }
 
 function normalizeValor(raw: string | null | undefined) {
@@ -427,7 +431,7 @@ export default function ValoracionesPage() {
           phone: lead?.phone || "—",
           source: lead?.source || "Sin origen",
           dominio: lead?.dominio || "—",
-          phase: lead?.phase || "noticia",
+          phase: lead?.phase || "identificada",
           planner: lead?.planner || "—",
           owner: lead?.owner || "—",
         };
@@ -438,11 +442,11 @@ export default function ValoracionesPage() {
       const legacyEntries: ValoracionEntry[] = [];
       for (const lead of leadsMap.values()) {
         const leadIdNum = Number(lead.id);
-        const isConcertadaOValorada =
-          lead.phase === "concertada" || lead.phase === "valorada";
+        const isCualificadaOValorada =
+          lead.phase === "cualificada" || lead.phase === "valorada";
 
         if (
-          !isConcertadaOValorada ||
+          !isCualificadaOValorada ||
           leadIdsWithRealEntries.has(leadIdNum) ||
           !lead.fechaValoracion
         ) {

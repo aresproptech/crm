@@ -23,6 +23,7 @@ import {
 import {
   AGENT_OPTIONS,
   PHASE_OPTIONS,
+  STATUS_OPTIONS,
   SOURCE_OPTIONS,
 } from "@/lib/crm-data";
 import { LocateFixed, Loader2 } from "lucide-react";
@@ -75,15 +76,10 @@ const EMPTY_FORM: NewLeadFormData = {
 };
 
 const NEW_LEAD_PHASE_OPTIONS = PHASE_OPTIONS.filter((opt) =>
-  ["Noticia", "Concertada", "Valorada", "Encargo"].includes(opt.label)
+  ["Identificada", "Cualificada", "Valorada", "Encargo"].includes(opt.label)
 );
 
-const NEW_LEAD_STATUS_OPTIONS = [
-  { value: "Identificada", label: "Identificada" },
-  { value: "Cualificada", label: "Cualificada" },
-  { value: "Caliente", label: "Caliente" },
-  { value: "Desestimada", label: "Desestimada" },
-];
+const NEW_LEAD_STATUS_OPTIONS = STATUS_OPTIONS;
 
 function formatEuroValue(raw: string): string {
   const digits = raw.replace(/\D/g, "");

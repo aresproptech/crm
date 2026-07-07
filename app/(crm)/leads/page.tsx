@@ -21,8 +21,15 @@ import {
   Table2,
   RefreshCw,
   Star,
+  MoreHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { type Lead, PHASE_LABELS } from "@/lib/crm-data";
@@ -52,6 +59,7 @@ type DateFilterField = "fechaNoticia";
 type DateQuickFilterValue = "all" | "last7" | "last30" | "custom";
 
 const LEADS_PAGE_SIZE = 100;
+const HISTORY_PREFIX = "[HISTORIAL]";
 
 type CrmLeadRow = {
   id: number;
@@ -91,23 +99,23 @@ type PhaseRow = {
 };
 
 const VALID_PHASES: Lead["phase"][] = [
-  "noticia",
-  "concertada",
+  "identificada",
+  "cualificada",
   "valorada",
   "encargo",
 ];
 
 const PHASE_ID_MAP: Partial<Record<Lead["phase"], number>> = {
-  noticia: 1,
-  concertada: 2,
+  identificada: 1,
+  cualificada: 2,
   valorada: 3,
-  encargo: 5,
+  encargo: 4,
 };
 
 const PHASE_FILTER_OPTIONS: Array<{ value: PhaseFilterValue; label: string }> = [
   { value: "all", label: "Fases (Todas)" },
-  { value: "noticia", label: "Noticia" },
-  { value: "concertada", label: "Concertada" },
+  { value: "identificada", label: "Identificada" },
+  { value: "cualificada", label: "Cualificada" },
   { value: "valorada", label: "Valorada" },
   { value: "encargo", label: "Encargo" },
 ];
@@ -178,22 +186,8 @@ const STATUS_CONFIG: Record<
     borderColor: string;
   }
 > = {
-  identificar: {
-    label: "Identificada",
-    dot: "bg-violet-500",
-    backgroundColor: "#E5E7EB",
-    color: "#374151",
-    borderColor: "#D1D5DB",
-  },
-  cualificada: {
-    label: "Cualificada",
-    dot: "bg-emerald-500",
-    backgroundColor: "#D4EDBC",
-    color: "#288158",
-    borderColor: "#B7D99C",
-  },
-  seguimiento: {
-    label: "Cualificada",
+  activa: {
+    label: "Activa",
     dot: "bg-emerald-500",
     backgroundColor: "#D4EDBC",
     color: "#288158",
@@ -217,26 +211,26 @@ const STATUS_CONFIG: Record<
 
 const STATUS_FILTER_OPTIONS: Array<{ value: StatusFilterValue; label: string }> = [
   { value: "all", label: "Todos los estados" },
-  { value: "identificar" as Lead["status"], label: STATUS_CONFIG.identificar.label },
-  { value: "cualificada" as Lead["status"], label: STATUS_CONFIG.cualificada.label },
-  { value: "caliente" as Lead["status"], label: STATUS_CONFIG.caliente.label },
-  { value: "desestimada" as Lead["status"], label: STATUS_CONFIG.desestimada.label },
+  { value: "activa", label: STATUS_CONFIG.activa.label },
+  { value: "caliente", label: STATUS_CONFIG.caliente.label },
+  { value: "desestimada", label: STATUS_CONFIG.desestimada.label },
 ];
 
 function getStatusConfig(status: string | null | undefined) {
-  return STATUS_CONFIG[status || "identificar"] ?? STATUS_CONFIG.identificar;
+  const key = normalizeStatus(status);
+  return STATUS_CONFIG[key] ?? STATUS_CONFIG.activa;
 }
 
 const PHASE_BADGE_STYLES: Record<
   string,
   { backgroundColor: string; color: string; borderColor: string }
 > = {
-  noticia: {
+  identificada: {
     backgroundColor: "#D4EDBC",
     color: "#288158",
     borderColor: "#B7D99C",
   },
-  concertada: {
+  cualificada: {
     backgroundColor: "#94EC89",
     color: "#14532D",
     borderColor: "#6FD864",
@@ -255,7 +249,7 @@ const PHASE_BADGE_STYLES: Record<
 
 function getPhaseBadgeStyle(phase: string | null | undefined) {
   return (
-    PHASE_BADGE_STYLES[phase || "noticia"] ?? {
+    PHASE_BADGE_STYLES[phase || "identificada"] ?? {
       backgroundColor: "#F1F5F9",
       color: "#475569",
       borderColor: "#CBD5E1",
@@ -511,8 +505,8 @@ function normalizeLookupText(raw: string | null | undefined): string {
 function phaseNameToKey(name: string | null | undefined): Lead["phase"] | null {
   const value = normalizeLookupText(name);
 
-  if (value.includes("noticia") || value.includes("identificada")) return "noticia";
-  if (value.includes("concertada") || value.includes("cualificada")) return "concertada";
+  if (value.includes("noticia") || value.includes("identificada")) return "identificada";
+  if (value.includes("concertada") || value.includes("cualificada")) return "cualificada";
   if (value.includes("valorada")) return "valorada";
   if (value.includes("encargo")) return "encargo";
 
@@ -537,8 +531,8 @@ function normalizePhase(
 ): Lead["phase"] {
   const value = normalizeLookupText(raw);
 
-  if (value.includes("noticia") || value.includes("identificada")) return "noticia";
-  if (value.includes("concertada") || value.includes("cualificada")) return "concertada";
+  if (value.includes("noticia") || value.includes("identificada")) return "identificada";
+  if (value.includes("concertada") || value.includes("cualificada")) return "cualificada";
   if (value.includes("valorada")) return "valorada";
   if (value.includes("encargo")) return "encargo";
 
@@ -547,33 +541,34 @@ function normalizePhase(
   const byId = phaseIdToKey(phaseId);
   if (byId) return byId;
 
-  return "noticia";
+  return "identificada";
 }
 
 function normalizeStatus(raw: string | null | undefined): Lead["status"] {
-  const value = (raw || "").toLowerCase().trim();
+  const value = normalizeLookupText(raw);
 
-  if (value === "identificar" || value === "identificada") {
-    return "identificar" as Lead["status"];
-  }
-
-  if (value === "cualificada") {
-    return "cualificada" as Lead["status"];
-  }
-
-  if (value === "seguimiento") {
-    return "cualificada" as Lead["status"];
+  if (
+    !value ||
+    value === "activa" ||
+    value === "activo" ||
+    value === "identificar" ||
+    value === "identificada" ||
+    value === "identificado" ||
+    value === "cualificada" ||
+    value === "seguimiento"
+  ) {
+    return "activa";
   }
 
   if (value === "caliente") {
-    return "caliente" as Lead["status"];
+    return "caliente";
   }
 
   if (value === "desestimada") {
-    return "desestimada" as Lead["status"];
+    return "desestimada";
   }
 
-  return "identificar" as Lead["status"];
+  return "activa";
 }
 
 function normalizeValor(raw: string | null | undefined) {
@@ -763,6 +758,19 @@ export default function LeadsPage() {
     return resolved ?? PHASE_ID_MAP[phase] ?? 1;
   }
 
+  async function persistLeadActivity(leadId: string, text: string) {
+    const { error } = await supabase.from("opportunity_contacts").insert({
+      opportunity_id: Number(leadId),
+      fecha: new Date().toISOString().slice(0, 10),
+      memo: `${HISTORY_PREFIX} Usuario: ${text}`,
+      resultado: true,
+    });
+
+    if (error) {
+      console.error("Error guardando historial del lead:", error);
+    }
+  }
+
   async function loadLeadsFromSupabase(options?: { append?: boolean }) {
     const append = options?.append ?? false;
     const from = append ? leads.length : 0;
@@ -816,6 +824,13 @@ export default function LeadsPage() {
     setPageError(null);
     if (importedLeads.length === 0) return;
 
+    const phaseIds = new Map<Lead["phase"], number>();
+    const uniquePhases = Array.from(new Set(importedLeads.map((lead) => lead.phase)));
+
+    for (const phase of uniquePhases) {
+      phaseIds.set(phase, await resolvePhaseId(phase));
+    }
+
     const rowsToInsert = importedLeads.map((lead) => ({
       propietario: cleanNullable(lead.ownerName),
       domicilio: cleanNullable(lead.address),
@@ -828,7 +843,7 @@ export default function LeadsPage() {
       contact_user_desc: cleanNullable(lead.planner),
       dominio_desc: cleanNullable((lead as Lead & { dominio?: string | null }).dominio),
       postal_id: normalizePostalId(lead.cp),
-      fase_id: phaseIdMap[lead.phase] ?? PHASE_ID_MAP[lead.phase] ?? 1,
+      fase_id: phaseIds.get(lead.phase) ?? PHASE_ID_MAP[lead.phase] ?? 1,
       created_at: new Date().toISOString(),
       memo: cleanNullable(lead.notes),
       en_venta: null,
@@ -840,13 +855,22 @@ export default function LeadsPage() {
       deleted_at: null,
     }));
 
-    const { error } = await supabase.from("opportunities").insert(rowsToInsert);
+    const { data: insertedRows, error } = await supabase
+      .from("opportunities")
+      .insert(rowsToInsert)
+      .select("id");
 
     if (error) {
       console.error("Error importing CSV to Supabase:", error);
       setPageError("No se pudieron importar los leads. Revisá el archivo e intentá nuevamente.");
       return;
     }
+
+    await Promise.all(
+      (insertedRows ?? []).map((row) =>
+        persistLeadActivity(String(row.id), "Importó el lead por CSV")
+      )
+    );
 
     await loadLeadsFromSupabase({ append: false });
   }
@@ -885,12 +909,20 @@ export default function LeadsPage() {
       },
     ];
 
-    const { error } = await supabase.from("opportunities").insert(rowsToInsert);
+    const { data: insertedRows, error } = await supabase
+      .from("opportunities")
+      .insert(rowsToInsert)
+      .select("id");
 
     if (error) {
       console.error("Error creating lead in Supabase:", error);
       setPageError("No se pudo crear el lead. Revisá los datos e intentá nuevamente.");
       return;
+    }
+
+    const insertedId = insertedRows?.[0]?.id;
+    if (insertedId) {
+      await persistLeadActivity(String(insertedId), "Creó el lead");
     }
 
     await loadLeadsFromSupabase({ append: false });
@@ -999,7 +1031,13 @@ export default function LeadsPage() {
       console.error("Error actualizando fase del lead:", error);
       setPageError("No se pudo mover el lead de fase. Intentá nuevamente.");
       setLeads(previousLeads);
+      return;
     }
+
+    await persistLeadActivity(
+      leadId,
+      `Cambió fase de ${PHASE_LABELS[currentLead.phase]} a ${PHASE_LABELS[nextPhase]}`
+    );
   }
 
   async function handleToggleFavorite(leadId: string) {
@@ -1239,6 +1277,12 @@ export default function LeadsPage() {
       setPageError("No se pudieron eliminar los leads seleccionados. Intentá nuevamente.");
       return;
     }
+
+    await Promise.all(
+      Array.from(selectedIds).map((id) =>
+        persistLeadActivity(id, "Eliminó el lead")
+      )
+    );
 
     setLeads((prev) => prev.filter((lead) => !selectedIds.has(lead.id)));
 
@@ -1511,7 +1555,7 @@ export default function LeadsPage() {
             {viewMode === "table" && (
               <Button
                 size="sm"
-                className="h-7 gap-1.5 text-xs font-semibold"
+                className="hidden h-7 gap-1.5 text-xs font-semibold sm:inline-flex"
                 onClick={() => {
                   if (selectionMode) {
                     setSelectionMode(false);
@@ -1523,6 +1567,36 @@ export default function LeadsPage() {
               >
                 {selectionMode ? "Cancelar selección" : "Seleccionar"}
               </Button>
+            )}
+
+            {viewMode === "table" && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 w-7 p-0 sm:hidden"
+                    title="Más acciones"
+                    aria-label="Más acciones"
+                  >
+                    <MoreHorizontal className="h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44">
+                  <DropdownMenuItem
+                    onClick={() => {
+                      if (selectionMode) {
+                        setSelectionMode(false);
+                        setSelectedIds(new Set());
+                      } else {
+                        setSelectionMode(true);
+                      }
+                    }}
+                  >
+                    {selectionMode ? "Cancelar selección" : "Seleccionar leads"}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
 
             <Button

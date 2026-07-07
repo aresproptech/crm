@@ -171,25 +171,33 @@ function normalizePhase(value: string): LeadPhase {
   if (direct) return direct;
   const byLabel = Object.entries(PHASE_LABELS).find(([, label]) => norm(label) === v);
   if (byLabel) return byLabel[0] as LeadPhase;
-  return "noticia";
+  if (v.includes("noticia")) return "identificada";
+  if (v.includes("concertada")) return "cualificada";
+  if (v.includes("vendida") || v.includes("vender")) return "encargo";
+  return "identificada";
 }
 
 function normalizeStatus(value: string): LeadStatus {
   const v = norm(value);
   if (
+    !v ||
+    v === "activa" ||
+    v === "activo" ||
     v === "identificar" ||
     v === "identificada" ||
     v === "identificado" ||
     v === "identificacion" ||
-    v === "identificación"
+    v === "identificación" ||
+    v === "cualificada" ||
+    v === "seguimiento"
   ) {
-    return "identificar";
+    return "activa";
   }
   const direct = STATUS_OPTIONS.find((o) => norm(o.value) === v)?.value;
   if (direct) return direct as LeadStatus;
   const byLabel = STATUS_OPTIONS.find((o) => norm(o.label) === v)?.value;
   if (byLabel) return byLabel as LeadStatus;
-  return "seguimiento";
+  return "activa";
 }
 
 function normalizeSource(value: string): string {
@@ -272,14 +280,14 @@ export function buildLeadFromMapped(
   const fechaContacto = normalizeCsvDateToIsoDate(mapped.fechaContacto);
   const fechaValoracion = normalizeCsvDateToIsoDate(mapped.fechaValoracion);
 
-  const phase = mapped.phase ? normalizePhase(mapped.phase) : "noticia";
-  // If address is missing, force status to "Identificar" even if Estado isn't mapped.
+  const phase = mapped.phase ? normalizePhase(mapped.phase) : "identificada";
+  // If address is missing, keep the lead active so it can be completed later.
   const status =
     !address
-      ? "identificar"
+      ? "activa"
       : mapped.status
         ? normalizeStatus(mapped.status)
-        : "seguimiento";
+        : "activa";
   const source = mapped.source ? normalizeSource(mapped.source) : "Otro";
 
   return {

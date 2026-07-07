@@ -41,7 +41,7 @@
   --sidebar-border: oklch(0.30 0.025 258);
   --sidebar-ring: oklch(0.48 0.19 264);
   /* Status badge colors */
-  --status-seguimiento: oklch(0.75 0.12 250);
+  --status-activa: oklch(0.75 0.12 150);
   --status-caliente: oklch(0.72 0.18 38);
   --status-desestimada: oklch(0.65 0.04 255);
   /* Column bg */
@@ -123,7 +123,7 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-column-bg: var(--column-bg);
-  --color-status-seguimiento: var(--status-seguimiento);
+  --color-status-activa: var(--status-activa);
   --color-status-caliente: var(--status-caliente);
   --color-status-desestimada: var(--status-desestimada);
 }

@@ -51,16 +51,8 @@ import {
 } from "@/lib/crm-data";
 
 const STATUS_CONFIG = {
-  identificar: {
-    label: "Identificada",
-    badgeStyle: {
-      backgroundColor: "#E5E7EB",
-      color: "#374151",
-      borderColor: "#D1D5DB",
-    },
-  },
-  cualificada: {
-    label: "Cualificada",
+  activa: {
+    label: "Activa",
     badgeStyle: {
       backgroundColor: "#D4EDBC",
       color: "#288158",
@@ -195,6 +187,55 @@ type LeadHistoryEvent = {
   noteText?: string;
 };
 
+type LeadActivityEvent = {
+  id: string;
+  leadId: string;
+  createdAt: string;
+  createdBy: string;
+  text: string;
+};
+
+const NOTE_PREFIX = "[NOTA]";
+const HISTORY_PREFIX = "[HISTORIAL]";
+const SYSTEM_MEMO_PREFIXES = ["[VALORACION]", "[R.G.]", HISTORY_PREFIX];
+
+function parseStoredMemo(memo: string) {
+  const trimmed = memo.trim();
+  const noteMatch = trimmed.match(/^\[NOTA\]\s*(.*?):\s*([\s\S]*)$/);
+  const historyMatch = trimmed.match(/^\[HISTORIAL\]\s*(.*?):\s*([\s\S]*)$/);
+
+  if (noteMatch) {
+    return {
+      kind: "note" as const,
+      createdBy: noteMatch[1].trim() || "Usuario",
+      text: noteMatch[2].trim(),
+    };
+  }
+
+  if (historyMatch) {
+    return {
+      kind: "history" as const,
+      createdBy: historyMatch[1].trim() || "Usuario",
+      text: historyMatch[2].trim(),
+    };
+  }
+
+  return {
+    kind: "plain" as const,
+    createdBy: "Usuario",
+    text: trimmed,
+  };
+}
+
+function isManualNoteMemo(memo: string) {
+  const trimmed = memo.trim();
+  return (
+    Boolean(trimmed) &&
+    (!SYSTEM_MEMO_PREFIXES.some((prefix) => trimmed.startsWith(prefix)) ||
+      trimmed.startsWith(NOTE_PREFIX))
+  );
+}
+
 
 type RgHistoryEvent = {
   id: string;
@@ -285,12 +326,11 @@ const EDIT_LEAD_TABS: Array<{ value: EditLeadTab; label: string }> = [
 ];
 
 const LEAD_DETAIL_PHASE_OPTIONS = PHASE_OPTIONS.filter((opt) =>
-  ["Noticia", "Concertada", "Valorada", "Encargo"].includes(opt.label)
+  ["Identificada", "Cualificada", "Valorada", "Encargo"].includes(opt.label)
 );
 
 const LEAD_DETAIL_STATUS_OPTIONS = [
-  { value: "identificar", label: "Identificada" },
-  { value: "cualificada", label: "Cualificada" },
+  { value: "activa", label: "Activa" },
   { value: "caliente", label: "Caliente" },
   { value: "desestimada", label: "Desestimada" },
 ];
@@ -310,12 +350,12 @@ const PHASE_BADGE_STYLES: Record<
   string,
   { backgroundColor: string; color: string; borderColor: string }
 > = {
-  noticia: {
+  identificada: {
     backgroundColor: "#D4EDBC",
     color: "#298259",
     borderColor: "#B7D99C",
   },
-  concertada: {
+  cualificada: {
     backgroundColor: "#94EC89",
     color: "#060905",
     borderColor: "#6FD864",
@@ -433,13 +473,30 @@ function getLeadDominio(lead: Lead) {
   return dominio && dominio !== "—" ? dominio : "";
 }
 
-function getStatusConfig(status: string) {
-  if (status === "seguimiento") return STATUS_CONFIG.cualificada;
+function normalizeLeadStatusKey(status: string | null | undefined) {
+  const value = normalizeBadgeKey(status);
 
-  return (
-    STATUS_CONFIG[status as keyof typeof STATUS_CONFIG] ??
-    STATUS_CONFIG.identificar
-  );
+  if (
+    !value ||
+    value === "activa" ||
+    value === "activo" ||
+    value === "identificar" ||
+    value === "identificada" ||
+    value === "identificado" ||
+    value === "cualificada" ||
+    value === "seguimiento"
+  ) {
+    return "activa";
+  }
+
+  if (value === "caliente") return "caliente";
+  if (value === "desestimada") return "desestimada";
+
+  return "activa";
+}
+
+function getStatusConfig(status: string) {
+  return STATUS_CONFIG[normalizeLeadStatusKey(status)];
 }
 
 function normalizeValue(v: unknown): string {
@@ -1060,7 +1117,8 @@ export function LeadDetailPanel({
   const [note, setNote] = useState("");
   const [savingNote, setSavingNote] = useState(false);
   const [noteError, setNoteError] = useState<string | null>(null);
-  const [historyEvents, setHistoryEvents] = useState<LeadHistoryEvent[]>([]);
+  const [noteEvents, setNoteEvents] = useState<LeadHistoryEvent[]>([]);
+  const [activityEvents, setActivityEvents] = useState<LeadActivityEvent[]>([]);
   const [localLead, setLocalLead] = useState<LeadWithDominio | null>(lead as LeadWithDominio | null);
   const [orders, setOrders] = useState<OpportunityOrderRow[]>([]);
   const [visits, setVisits] = useState<VisitRow[]>([]);
@@ -1179,6 +1237,22 @@ export function LeadDetailPanel({
     return cleanUserDisplayName(raw);
   }, [userWithRole]);
 
+  async function persistActivity(text: string) {
+    if (!effectiveLead) return;
+
+    const createdBy = currentUserName || "Usuario";
+    const { error } = await supabase.from("opportunity_contacts").insert({
+      opportunity_id: Number(effectiveLead.id),
+      fecha: new Date().toISOString().slice(0, 10),
+      memo: `${HISTORY_PREFIX} ${createdBy}: ${text}`,
+      resultado: true,
+    });
+
+    if (error) {
+      console.error("Error guardando historial:", error);
+    }
+  }
+
   async function loadObservations(leadId: string) {
     const { data, error } = await supabase
       .from("opportunity_contacts")
@@ -1188,23 +1262,75 @@ export function LeadDetailPanel({
 
     if (error) {
       console.error("Error cargando observaciones:", error);
-      setHistoryEvents([]);
+      setNoteEvents([]);
+      setActivityEvents([]);
       setNoteError(`No se pudieron cargar las observaciones: ${error.message}`);
       return;
     }
 
-    const events: LeadHistoryEvent[] = ((data ?? []) as OpportunityContactRow[])
+    const rows = (data ?? []) as OpportunityContactRow[];
+
+    const notes: LeadHistoryEvent[] = rows
       .filter((row) => Boolean(row.memo?.trim()))
+      .filter((row) => isManualNoteMemo(row.memo || ""))
       .map((row) => ({
         id: String(row.id),
         leadId,
         type: "note",
         createdAt: row.created_at || toHistoryCreatedAt(row.fecha || ""),
-        createdBy: currentUserName || "Usuario",
-        noteText: row.memo?.trim() || "",
+        createdBy: parseStoredMemo(row.memo || "").createdBy,
+        noteText: parseStoredMemo(row.memo || "").text,
       }));
 
-    setHistoryEvents(events);
+    const activities: LeadActivityEvent[] = rows
+      .filter((row) => Boolean(row.memo?.trim()))
+      .flatMap((row) => {
+        const memo = row.memo?.trim() || "";
+        const parsed = parseStoredMemo(memo);
+        const createdAt = row.created_at || toHistoryCreatedAt(row.fecha || "");
+
+        if (parsed.kind === "history") {
+          return [
+            {
+              id: String(row.id),
+              leadId,
+              createdAt,
+              createdBy: parsed.createdBy,
+              text: parsed.text,
+            },
+          ];
+        }
+
+        if (memo.startsWith("[VALORACION]")) {
+          return [
+            {
+              id: String(row.id),
+              leadId,
+              createdAt,
+              createdBy: "Usuario",
+              text: `Agregó una valoración: ${memo.replace("[VALORACION]", "").trim()}`,
+            },
+          ];
+        }
+
+        if (memo.startsWith("[R.G.]")) {
+          return [
+            {
+              id: String(row.id),
+              leadId,
+              createdAt,
+              createdBy: "Usuario",
+              text: `Agregó una R.G.: ${memo.replace("[R.G.]", "").trim()}`,
+            },
+          ];
+        }
+
+        return [];
+      })
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    setNoteEvents(notes);
+    setActivityEvents(activities);
   }
 
   async function loadRgEntries(leadId: string) {
@@ -1249,7 +1375,8 @@ export function LeadDetailPanel({
 
   useEffect(() => {
     if (!lead?.id) {
-      setHistoryEvents([]);
+      setNoteEvents([]);
+      setActivityEvents([]);
       setRgEntries([]);
       setValuationEntries([]);
       return;
@@ -1302,7 +1429,17 @@ export function LeadDetailPanel({
     setLocalLead(next);
 
     if (changes.length > 0) {
-      setHistoryEvents((prev) => [...changes, ...prev]);
+      await Promise.all(
+        changes.map((event) =>
+          persistActivity(
+            `Cambió ${fieldDisplayName(event.field!)} de ${formatFieldValue(
+              event.field!,
+              event.prevValue || ""
+            )} a ${formatFieldValue(event.field!, event.newValue || "")}`
+          )
+        )
+      );
+      await loadObservations(next.id);
     }
   }
 
@@ -1318,7 +1455,7 @@ export function LeadDetailPanel({
       .insert({
         opportunity_id: Number(effectiveLead.id),
         fecha: new Date().toISOString().slice(0, 10),
-        memo: text,
+        memo: `${NOTE_PREFIX} ${currentUserName || "Usuario"}: ${text}`,
         resultado: true,
       })
       .select("id, created_at, fecha, memo, resultado");
@@ -1407,6 +1544,8 @@ export function LeadDetailPanel({
       memo: "",
     });
     setOrderModalOpen(false);
+    await persistActivity("Agregó un encargo");
+    await loadObservations(effectiveLead.id);
     await loadRelatedData(effectiveLead.id);
   }
 
@@ -1802,7 +1941,7 @@ export function LeadDetailPanel({
                         Observaciones
                       </div>
                       <Badge variant="secondary" className="rounded-full text-[10px]">
-                        {historyEvents.length}
+                        {noteEvents.length}
                       </Badge>
                     </div>
 
@@ -1831,13 +1970,13 @@ export function LeadDetailPanel({
                     )}
 
                     <div className="mt-4 space-y-3">
-                      {historyEvents.length === 0 && (
+                      {noteEvents.length === 0 && (
                         <p className="text-xs italic text-muted-foreground">
                           Sin observaciones todavía.
                         </p>
                       )}
 
-                      {historyEvents.map((event) => (
+                      {noteEvents.map((event) => (
                         <div key={event.id} className="relative border-l border-border pl-4">
                           <span className="absolute -left-[5px] top-1 h-2.5 w-2.5 rounded-full border border-primary bg-background" />
                           <div className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
@@ -1846,15 +1985,41 @@ export function LeadDetailPanel({
                             <span>por {event.createdBy}</span>
                           </div>
                           <div className="rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground">
-                            {event.type === "field_change" ? (
-                              <span>
-                                {event.createdBy} cambió {fieldDisplayName(event.field!)} de{" "}
-                                {formatFieldValue(event.field!, event.prevValue || "")} a{" "}
-                                {formatFieldValue(event.field!, event.newValue || "")}
-                              </span>
-                            ) : (
-                              event.noteText
-                            )}
+                            {event.noteText}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="mt-5 border-t border-border pt-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        <Clock className="h-3.5 w-3.5" />
+                        Historial
+                      </div>
+                      <Badge variant="secondary" className="rounded-full text-[10px]">
+                        {activityEvents.length}
+                      </Badge>
+                    </div>
+
+                    <div className="space-y-3">
+                      {activityEvents.length === 0 && (
+                        <p className="text-xs italic text-muted-foreground">
+                          Sin actividad registrada todavía.
+                        </p>
+                      )}
+
+                      {activityEvents.map((event) => (
+                        <div key={event.id} className="relative border-l border-border pl-4">
+                          <span className="absolute -left-[5px] top-1 h-2.5 w-2.5 rounded-full border border-primary bg-background" />
+                          <div className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                            <Clock className="h-3 w-3" />
+                            <span>{fmtDateTimeShort(event.createdAt)}</span>
+                            <span>por {event.createdBy}</span>
+                          </div>
+                          <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-foreground">
+                            {event.text}
                           </div>
                         </div>
                       ))}

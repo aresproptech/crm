@@ -1,18 +1,14 @@
 // Shared mock data and types for the CRM
 
 export type LeadStatus =
-  | "identificar"
-  | "cualificada"
-  | "seguimiento"
+  | "activa"
   | "caliente"
   | "desestimada";
 export type LeadPhase =
-  | "noticia"
-  | "concertada"
-  | "valorada"
+  | "identificada"
   | "cualificada"
-  | "encargo"
-  | "vender";
+  | "valorada"
+  | "encargo";
 
 export interface Observacion {
   id: string;
@@ -49,21 +45,17 @@ export interface Lead {
 }
 
 export const PHASE_LABELS: Record<LeadPhase, string> = {
-  noticia: "Noticia",
-  concertada: "Concertada",
-  valorada: "Valorada",
+  identificada: "Identificada",
   cualificada: "Cualificada",
+  valorada: "Valorada",
   encargo: "Encargo",
-  vender: "Vender",
 };
 
 export const PHASE_COLORS: Record<LeadPhase, string> = {
-  noticia: "#94a3b8",
-  concertada: "#60a5fa",
+  identificada: "#94a3b8",
+  cualificada: "#60a5fa",
   valorada: "#a78bfa",
-  cualificada: "#f59e0b",
   encargo: "#10b981",
-  vender: "#ef4444",
 };
 
 export const SOURCE_OPTIONS = [
@@ -83,18 +75,14 @@ export const SOURCE_OPTIONS = [
 ];  
 
 export const PHASE_OPTIONS: { value: LeadPhase; label: string }[] = [
-  { value: "noticia", label: "Noticia" },
-  { value: "concertada", label: "Concertada" },
-  { value: "valorada", label: "Valorada" },
+  { value: "identificada", label: "Identificada" },
   { value: "cualificada", label: "Cualificada" },
+  { value: "valorada", label: "Valorada" },
   { value: "encargo", label: "Encargo" },
-  { value: "vender", label: "Vender" },
 ];
 
 export const STATUS_OPTIONS: { value: LeadStatus; label: string }[] = [
-  { value: "identificar", label: "Identificada" },
-  { value: "cualificada", label: "Cualificada" },
-  { value: "seguimiento", label: "Seguimiento" },
+  { value: "activa", label: "Activa" },
   { value: "caliente", label: "Caliente" },
   { value: "desestimada", label: "Desestimada" },
 ];
@@ -124,9 +112,9 @@ export const MOCK_LEADS: Lead[] = [
     cp: "28013",
     valor: "380.000 €",
     phone: "+34 612 345 678",
-    status: "seguimiento",
+    status: "activa",
     source: "Referido",
-    phase: "noticia",
+    phase: "identificada",
     fechaNoticia: "2025-03-01",
     fechaContacto: "2025-03-03",
     fechaValoracion: "",
@@ -151,9 +139,9 @@ export const MOCK_LEADS: Lead[] = [
     cp: "08007",
     valor: "520.000 €",
     phone: "+34 699 871 234",
-    status: "seguimiento",
+    status: "activa",
     source: "Web",
-    phase: "noticia",
+    phase: "identificada",
     fechaNoticia: "2025-03-03",
     fechaContacto: "2025-03-04",
     fechaValoracion: "",
@@ -176,7 +164,7 @@ export const MOCK_LEADS: Lead[] = [
     phone: "+34 677 564 321",
     status: "desestimada",
     source: "Portales",
-    phase: "noticia",
+    phase: "identificada",
     fechaNoticia: "2025-02-20",
     fechaContacto: "2025-02-22",
     fechaValoracion: "",
@@ -202,7 +190,7 @@ export const MOCK_LEADS: Lead[] = [
     phone: "+34 645 123 456",
     status: "caliente",
     source: "LinkedIn",
-    phase: "concertada",
+    phase: "cualificada",
     fechaNoticia: "2025-03-05",
     fechaContacto: "2025-03-06",
     fechaValoracion: "2025-03-15",
@@ -227,9 +215,9 @@ export const MOCK_LEADS: Lead[] = [
     cp: "08007",
     valor: "390.000 €",
     phone: "+34 610 987 654",
-    status: "seguimiento",
+    status: "activa",
     source: "Referido",
-    phase: "concertada",
+    phase: "cualificada",
     fechaNoticia: "2025-03-06",
     fechaContacto: "2025-03-07",
     fechaValoracion: "",
@@ -277,7 +265,7 @@ export const MOCK_LEADS: Lead[] = [
     cp: "08030",
     valor: "275.000 €",
     phone: "+34 633 456 789",
-    status: "seguimiento",
+    status: "activa",
     source: "Web",
     phase: "valorada",
     fechaNoticia: "2025-02-25",
@@ -300,7 +288,7 @@ export const MOCK_LEADS: Lead[] = [
     cp: "28006",
     valor: "550.000 €",
     phone: "+34 601 321 654",
-    status: "seguimiento",
+    status: "activa",
     source: "Referido",
     phase: "valorada",
     fechaNoticia: "2025-02-22",
@@ -349,7 +337,7 @@ export const MOCK_LEADS: Lead[] = [
     cp: "08028",
     valor: "360.000 €",
     phone: "+34 644 876 543",
-    status: "seguimiento",
+    status: "activa",
     source: "Web",
     phase: "cualificada",
     fechaNoticia: "2025-03-09",
@@ -422,7 +410,7 @@ export const MOCK_LEADS: Lead[] = [
     cp: "28001",
     valor: "720.000 €",
     phone: "+34 666 111 222",
-    status: "seguimiento",
+    status: "activa",
     source: "Referido",
     phase: "encargo",
     fechaNoticia: "2025-02-10",
@@ -447,7 +435,7 @@ export const MOCK_LEADS: Lead[] = [
     phone: "+34 654 678 901",
     status: "caliente",
     source: "Referido",
-    phase: "vender",
+    phase: "encargo",
     fechaNoticia: "2025-01-30",
     fechaContacto: "2025-01-31",
     fechaValoracion: "2025-02-05",
@@ -475,7 +463,7 @@ export const MOCK_LEADS: Lead[] = [
     phone: "+34 629 345 012",
     status: "caliente",
     source: "Web",
-    phase: "vender",
+    phase: "encargo",
     fechaNoticia: "2025-02-02",
     fechaContacto: "2025-02-03",
     fechaValoracion: "2025-02-10",

@@ -18,6 +18,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
+const HISTORY_PREFIX = "[HISTORIAL]";
+
 type OpportunityOrderRow = {
   id: number;
   opportunity_id: number;
@@ -373,6 +375,20 @@ export default function EncargosPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  async function persistLeadActivity(leadId: number, text: string) {
+    const createdBy = userWithRole?.crmUser.name ?? "Usuario";
+    const { error } = await supabase.from("opportunity_contacts").insert({
+      opportunity_id: leadId,
+      fecha: new Date().toISOString().slice(0, 10),
+      memo: `${HISTORY_PREFIX} ${createdBy}: ${text}`,
+      resultado: true,
+    });
+
+    if (error) {
+      console.error("Error guardando historial del encargo:", error);
+    }
+  }
   const [editForm, setEditForm] = useState({
     fecha_inicio: "",
     fecha_fin: "",
@@ -707,6 +723,11 @@ export default function EncargosPage() {
       setFormError("No se pudo guardar el encargo. Revisá los datos e intentá nuevamente.");
       return;
     }
+
+    await persistLeadActivity(
+      activeItem.leadId,
+      selected && selected.orderId !== null ? "Editó un encargo" : "Agregó un encargo"
+    );
 
     setEditOpen(false);
     setSelected(null);

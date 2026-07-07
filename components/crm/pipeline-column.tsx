@@ -2,7 +2,7 @@ import type { DragEvent } from "react";
 import { type Lead } from "@/lib/crm-data";
 import { LeadCard } from "./lead-card";
 
-export type PipelinePhase = "noticia" | "concertada" | "valorada" | "encargo";
+export type PipelinePhase = "identificada" | "cualificada" | "valorada" | "encargo";
 
 interface PipelineColumnProps {
   phase: PipelinePhase;

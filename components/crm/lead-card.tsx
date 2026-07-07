@@ -3,16 +3,8 @@ import { type Lead } from "@/lib/crm-data";
 import { cn } from "@/lib/utils";
 
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
-  identificar: {
-    label: "Identificada",
-    className: "bg-violet-50 text-violet-700 border-violet-200",
-  },
-  cualificada: {
-    label: "Cualificada",
-    className: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  },
-  seguimiento: {
-    label: "Cualificada",
+  activa: {
+    label: "Activa",
     className: "bg-emerald-50 text-emerald-700 border-emerald-200",
   },
   caliente: {
@@ -31,7 +23,24 @@ interface LeadCardProps {
 }
 
 function getStatusConfig(status: string) {
-  return STATUS_CONFIG[status] ?? STATUS_CONFIG.identificar;
+  const key = status
+    .toLowerCase()
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  if (
+    !key ||
+    key === "identificar" ||
+    key === "identificada" ||
+    key === "identificado" ||
+    key === "cualificada" ||
+    key === "seguimiento"
+  ) {
+    return STATUS_CONFIG.activa;
+  }
+
+  return STATUS_CONFIG[key] ?? STATUS_CONFIG.activa;
 }
 
 export function LeadCard({ lead, onClick }: LeadCardProps) {
