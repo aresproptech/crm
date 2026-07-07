@@ -41,7 +41,7 @@ export function PipelineColumn({
   };
 
   return (
-    <section className="flex min-h-0 w-[280px] shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-column-bg">
+    <section className="flex min-h-0 w-[calc(100vw-3.5rem)] shrink-0 snap-start flex-col overflow-hidden rounded-xl border border-border bg-column-bg sm:w-[320px]">
       <div className="flex items-center justify-between border-b border-border bg-card px-3 py-2.5">
         <div className="flex items-center gap-2">
           <span

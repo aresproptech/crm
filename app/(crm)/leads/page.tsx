@@ -1294,7 +1294,7 @@ export default function LeadsPage() {
               aria-label="Filtrar por estado"
             >
               {[
-                { value: "all", label: "Estados" },
+                { value: "all", label: "Estados (Todos)" },
                 ...STATUS_FILTER_OPTIONS.slice(1),
               ].map((option) => (
                 <option key={option.value} value={option.value}>
@@ -1502,7 +1502,7 @@ export default function LeadsPage() {
             <Button
               size="sm"
               variant="outline"
-              className="h-7 gap-1.5 text-xs font-semibold"
+              className="hidden h-7 gap-1.5 text-xs font-semibold sm:inline-flex"
               onClick={() => setImportOpen(true)}
             >
               Importar CSV
@@ -1527,7 +1527,7 @@ export default function LeadsPage() {
 
             <Button
               size="sm"
-              className="h-7 gap-1.5 text-xs font-semibold"
+              className="hidden h-7 gap-1.5 text-xs font-semibold sm:inline-flex"
               onClick={() => setModalOpen(true)}
             >
               <Plus className="h-3.5 w-3.5" />

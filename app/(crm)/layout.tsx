@@ -19,7 +19,7 @@ export default function CRMLayout({
         type="button"
         onClick={() => setSidebarOpen(true)}
         aria-label="Abrir menú"
-        className="fixed left-3 top-3 z-30 flex h-8 w-8 items-center justify-center rounded-md border border-border bg-card text-foreground shadow-sm md:hidden"
+        className="fixed left-3 top-3 z-30 flex h-8 w-8 items-center justify-center rounded-md border border-primary bg-primary text-primary-foreground shadow-sm md:hidden"
       >
         <Menu className="h-4 w-4" />
       </button>

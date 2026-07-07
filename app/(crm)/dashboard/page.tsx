@@ -28,13 +28,7 @@ type DateRange = {
 };
 
 type FunnelItem = {
-  phase:
-    | "sin_fase"
-    | "noticia"
-    | "concertada"
-    | "valorada"
-    | "cualificada"
-    | "encargo";
+  phase: "noticia" | "concertada" | "valorada" | "encargo";
   label: string;
   value: number;
 };
@@ -80,11 +74,9 @@ type DashboardLead = {
 };
 
 const PHASE_ORDER: FunnelItem["phase"][] = [
-  "sin_fase",
   "noticia",
   "concertada",
   "valorada",
-  "cualificada",
   "encargo",
 ];
 
@@ -214,27 +206,10 @@ export default function DashboardPage() {
   const [period, setPeriod] = useState<PeriodOption>("last7");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
-  const [supabaseTest, setSupabaseTest] = useState("cargando...");
   const [crmLeads, setCrmLeads] = useState<CrmLeadRow[]>([]);
   const [crmLeadsLoading, setCrmLeadsLoading] = useState(true);
 
   useEffect(() => {
-    async function testSupabase() {
-      const { data, error } = await supabase
-        .from("crm_leads_view")
-        .select("*")
-        .limit(3);
-
-      if (error) {
-        console.error("Supabase error:", error);
-        setSupabaseTest("error");
-        return;
-      }
-
-      console.log("Supabase crm_leads_view test:", data);
-      setSupabaseTest(`ok: ${data?.length ?? 0} filas`);
-    }
-
     async function fetchCrmLeads() {
       setCrmLeadsLoading(true);
 
@@ -254,7 +229,6 @@ export default function DashboardPage() {
       setCrmLeadsLoading(false);
     }
 
-    testSupabase();
     fetchCrmLeads();
   }, []);
 
@@ -279,13 +253,11 @@ export default function DashboardPage() {
       const normalizedPhase = (() => {
         const raw = (lead.fase_name || "").toLowerCase().trim();
 
-        if (raw === "sin fase") return "sin_fase";
         if (raw === "noticia") return "noticia";
-        if (raw === "concertada") return "concertada";
+        if (raw === "concertada" || raw === "cualificada") return "concertada";
         if (raw === "valorada") return "valorada";
-        if (raw === "cualificada") return "cualificada";
         if (raw === "encargo") return "encargo";
-        return "sin_fase";
+        return "noticia";
       })();
 
       const normalizedStatus = (() => {
@@ -312,11 +284,9 @@ export default function DashboardPage() {
 
   const funnelData = useMemo<FunnelItem[]>(() => {
     const phaseLabels: Record<FunnelItem["phase"], string> = {
-      sin_fase: "Sin fase",
       noticia: PHASE_LABELS.noticia,
       concertada: PHASE_LABELS.concertada,
       valorada: PHASE_LABELS.valorada,
-      cualificada: PHASE_LABELS.cualificada,
       encargo: PHASE_LABELS.encargo,
     };
 
@@ -336,7 +306,6 @@ export default function DashboardPage() {
     const noticia = funnelData.find((x) => x.phase === "noticia")?.value ?? 0;
     const concertada = funnelData.find((x) => x.phase === "concertada")?.value ?? 0;
     const valorada = funnelData.find((x) => x.phase === "valorada")?.value ?? 0;
-    const cualificada = funnelData.find((x) => x.phase === "cualificada")?.value ?? 0;
     const encargo = funnelData.find((x) => x.phase === "encargo")?.value ?? 0;
 
     return [
@@ -351,14 +320,9 @@ export default function DashboardPage() {
         detail: `${valorada} de ${concertada}`,
       },
       {
-        label: "Valorada → Cualificada",
-        value: `${calcConversion(valorada, cualificada)}%`,
-        detail: `${cualificada} de ${valorada}`,
-      },
-      {
-        label: "Cualificada → Encargo",
-        value: `${calcConversion(cualificada, encargo)}%`,
-        detail: `${encargo} de ${cualificada}`,
+        label: "Valorada → Encargo",
+        value: `${calcConversion(valorada, encargo)}%`,
+        detail: `${encargo} de ${valorada}`,
       },
       {
         label: "Noticia → Encargo",
@@ -443,24 +407,14 @@ export default function DashboardPage() {
       <Topbar title="Dashboard" />
 
       <main className="mt-14 flex min-h-0 flex-1 flex-col overflow-hidden bg-[#0b71a9]">
-        <div className="px-6 py-2 text-sm text-white">
-          Supabase test: {supabaseTest}
-        </div>
-
-        <div className="flex shrink-0 items-center justify-between gap-4 px-6 py-4">
-          <div>
-            <h1 className="text-3xl font-semibold tracking-tight text-white">
-              Leads por Origen
-            </h1>
-          </div>
-
-          <div className="flex flex-col items-end gap-2">
-            <div className="inline-flex items-center gap-1 rounded-xl bg-white p-1 text-[11px] shadow-sm">
+        <div className="flex shrink-0 justify-end px-6 py-4">
+          <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
+            <div className="grid grid-cols-3 items-stretch gap-1 rounded-xl bg-white p-1 text-[11px] shadow-sm sm:inline-flex sm:items-center">
               <button
                 type="button"
                 onClick={() => setPeriod("last7")}
                 className={cn(
-                  "rounded-lg px-3 py-1.5 font-semibold transition-colors",
+                  "rounded-lg px-3 py-1.5 text-center font-semibold transition-colors",
                   period === "last7"
                     ? "bg-[#0b71a9] text-white"
                     : "text-slate-600 hover:text-slate-900"
@@ -472,7 +426,7 @@ export default function DashboardPage() {
                 type="button"
                 onClick={() => setPeriod("currentMonth")}
                 className={cn(
-                  "rounded-lg px-3 py-1.5 font-semibold transition-colors",
+                  "rounded-lg px-3 py-1.5 text-center font-semibold transition-colors",
                   period === "currentMonth"
                     ? "bg-[#0b71a9] text-white"
                     : "text-slate-600 hover:text-slate-900"
@@ -484,7 +438,7 @@ export default function DashboardPage() {
                 type="button"
                 onClick={() => setPeriod("custom")}
                 className={cn(
-                  "rounded-lg px-3 py-1.5 font-semibold transition-colors",
+                  "rounded-lg px-3 py-1.5 text-center font-semibold transition-colors",
                   period === "custom"
                     ? "bg-[#0b71a9] text-white"
                     : "text-slate-600 hover:text-slate-900"
@@ -495,14 +449,14 @@ export default function DashboardPage() {
             </div>
 
             {period === "custom" && (
-              <div className="flex items-center gap-2 text-[11px] text-white/90">
+              <div className="flex flex-col gap-2 text-[11px] text-white/90 sm:flex-row sm:items-center">
                 <label className="flex items-center gap-1.5">
                   <span>Desde</span>
                   <input
                     type="date"
                     value={customFrom}
                     onChange={(e) => setCustomFrom(e.target.value)}
-                    className="h-8 rounded-md border border-white/20 bg-white px-2 text-slate-900 shadow-sm outline-none"
+                    className="h-8 min-w-0 flex-1 rounded-md border border-white/20 bg-white px-2 text-slate-900 shadow-sm outline-none sm:flex-none"
                   />
                 </label>
                 <label className="flex items-center gap-1.5">
@@ -511,7 +465,7 @@ export default function DashboardPage() {
                     type="date"
                     value={customTo}
                     onChange={(e) => setCustomTo(e.target.value)}
-                    className="h-8 rounded-md border border-white/20 bg-white px-2 text-slate-900 shadow-sm outline-none"
+                    className="h-8 min-w-0 flex-1 rounded-md border border-white/20 bg-white px-2 text-slate-900 shadow-sm outline-none sm:flex-none"
                   />
                 </label>
               </div>
@@ -532,42 +486,23 @@ export default function DashboardPage() {
                 <CardTitle className="text-base">Embudo de fases</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <FunnelBar
-                  label="Sin fase"
-                  value={funnelData[0]?.value ?? 0}
-                  maxValue={maxFunnelValue}
-                  colorClass="bg-slate-500"
-                />
-                <FunnelBar
-                  label="Noticia"
-                  value={funnelData[1]?.value ?? 0}
-                  maxValue={maxFunnelValue}
-                  colorClass="bg-[#cdb8ef]"
-                />
-                <FunnelBar
-                  label="Concertada"
-                  value={funnelData[2]?.value ?? 0}
-                  maxValue={maxFunnelValue}
-                  colorClass="bg-[#facc15]"
-                />
-                <FunnelBar
-                  label="Valorada"
-                  value={funnelData[3]?.value ?? 0}
-                  maxValue={maxFunnelValue}
-                  colorClass="bg-[#2563eb]"
-                />
-                <FunnelBar
-                  label="Cualificada"
-                  value={funnelData[4]?.value ?? 0}
-                  maxValue={maxFunnelValue}
-                  colorClass="bg-[#a21caf]"
-                />
-                <FunnelBar
-                  label="Encargo"
-                  value={funnelData[5]?.value ?? 0}
-                  maxValue={maxFunnelValue}
-                  colorClass="bg-[#dc2626]"
-                />
+                {funnelData.map((item) => (
+                  <FunnelBar
+                    key={item.phase}
+                    label={item.label}
+                    value={item.value}
+                    maxValue={maxFunnelValue}
+                    colorClass={
+                      item.phase === "noticia"
+                        ? "bg-slate-500"
+                        : item.phase === "concertada"
+                          ? "bg-[#60a5fa]"
+                          : item.phase === "valorada"
+                            ? "bg-[#a78bfa]"
+                            : "bg-[#10b981]"
+                    }
+                  />
+                ))}
               </CardContent>
             </Card>
 

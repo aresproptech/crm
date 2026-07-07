@@ -16,7 +16,7 @@ type KanbanBoardProps = {
 
 export function KanbanBoard({ leads, onOpenLead, onMoveLead }: KanbanBoardProps) {
   return (
-    <div className="flex min-h-0 gap-3 overflow-x-auto pb-4">
+    <div className="flex min-h-0 snap-x snap-mandatory gap-3 overflow-x-auto pb-4">
       {COLUMNS.map(({ phase, label, accentColor }) => (
         <PipelineColumn
           key={phase}
