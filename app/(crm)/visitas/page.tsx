@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import { Topbar } from "@/components/crm/topbar";
 import { supabase } from "@/lib/supabase";
 import { useUser } from "@/lib/hooks/useUser";
-import { Search, Plus } from "lucide-react";
+import { Check, Copy, Search, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -132,6 +133,8 @@ export default function VisitasPage() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<VisitaForm>(EMPTY_FORM);
   const [editForm, setEditForm] = useState<VisitaForm>(EMPTY_FORM);
+  const [phoneCopyStatus, setPhoneCopyStatus] = useState<"idle" | "copied">("idle");
+  const [selectedPhoneIds, setSelectedPhoneIds] = useState<Set<number>>(new Set());
 
   async function persistLeadActivity(leadId: number, text: string) {
     const createdBy = userWithRole?.crmUser.name ?? "Usuario";
@@ -297,6 +300,43 @@ export default function VisitasPage() {
       .join(" ").toLowerCase().includes(q);
   });
 
+  const selectedPhoneNumbers = visitas
+    .filter((v) => selectedPhoneIds.has(v.id))
+    .map((v) => v.telefono?.trim())
+    .filter((telefono): telefono is string => Boolean(telefono && telefono !== "—"));
+
+  function togglePhoneSelection(id: number, checked: boolean) {
+    setSelectedPhoneIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+    setPhoneCopyStatus("idle");
+  }
+
+  async function handleCopySelectedPhones() {
+    if (selectedPhoneNumbers.length === 0) return;
+
+    const text = selectedPhoneNumbers.join("\n");
+
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+
+    setPhoneCopyStatus("copied");
+    window.setTimeout(() => setPhoneCopyStatus("idle"), 1600);
+  }
+
   const columns = ["Estado", "Dominio", "Planner", "Owner", "Inmueble",
     "Fecha", "Hora", "Buyer", "Nombre y Apellido", "Teléfono", "DNI", "Vende?", "Observaciones"];
 
@@ -321,14 +361,33 @@ export default function VisitasPage() {
               />
             </div>
           </div>
-          <Button
-            size="sm"
-            className="h-10 w-full gap-1.5 text-xs font-semibold sm:h-7 sm:w-auto"
-            onClick={() => setAddModalOpen(true)}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Agregar Visita
-          </Button>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-10 w-full gap-1.5 text-xs font-semibold sm:h-7 sm:w-auto"
+              onClick={() => void handleCopySelectedPhones()}
+              disabled={selectedPhoneNumbers.length === 0}
+              title="Copiar teléfonos seleccionados"
+            >
+              {phoneCopyStatus === "copied" ? (
+                <Check className="h-3.5 w-3.5" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+              {phoneCopyStatus === "copied"
+                ? "Copiados"
+                : `Copiar seleccionados (${selectedPhoneNumbers.length})`}
+            </Button>
+            <Button
+              size="sm"
+              className="h-10 w-full gap-1.5 text-xs font-semibold sm:h-7 sm:w-auto"
+              onClick={() => setAddModalOpen(true)}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Agregar Visita
+            </Button>
+          </div>
         </div>
 
         {loading && (
@@ -338,7 +397,7 @@ export default function VisitasPage() {
         )}
 
         <div className="relative flex-1 overflow-auto">
-          <table className="w-full border-collapse text-sm" style={{ minWidth: 1600 }}>
+          <table className="w-full select-none border-collapse text-sm" style={{ minWidth: 1600 }}>
             <thead className="sticky top-0 z-20 bg-card">
               <tr className="border-b border-border bg-card/95 text-left backdrop-blur">
                 {columns.map((col) => (
@@ -378,7 +437,27 @@ export default function VisitasPage() {
                       <td className="px-3 py-2.5 text-xs text-muted-foreground">{v.hora || "—"}</td>
                       <td className="px-3 py-2.5 text-xs text-muted-foreground">{v.buyer || "—"}</td>
                       <td className="px-3 py-2.5 text-xs font-medium text-foreground">{v.nombre_apellido || "—"}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{v.telefono || "—"}</td>
+                      <td
+                        className="select-text px-3 py-2.5 font-mono text-xs text-muted-foreground"
+                        onMouseDown={(event) => event.stopPropagation()}
+                        onClick={(event) => event.stopPropagation()}
+                        title="Seleccionar o copiar teléfono"
+                      >
+                        <div className="flex items-center gap-2">
+                          {v.telefono ? (
+                            <Checkbox
+                              checked={selectedPhoneIds.has(v.id)}
+                              onCheckedChange={(checked) =>
+                                togglePhoneSelection(v.id, checked === true)
+                              }
+                              aria-label={`Seleccionar teléfono ${v.telefono}`}
+                            />
+                          ) : (
+                            <span className="h-4 w-4 shrink-0" />
+                          )}
+                          <span>{v.telefono || "—"}</span>
+                        </div>
+                      </td>
                       <td className="px-3 py-2.5 text-xs text-muted-foreground">{v.dni || "—"}</td>
                       <td className="px-3 py-2.5 text-xs text-muted-foreground">
                         {v.vende === null ? "—" : v.vende ? "Sí" : "No"}

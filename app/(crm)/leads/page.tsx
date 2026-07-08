@@ -21,15 +21,8 @@ import {
   Table2,
   RefreshCw,
   Star,
-  MoreHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { type Lead, PHASE_LABELS } from "@/lib/crm-data";
@@ -1567,36 +1560,6 @@ export default function LeadsPage() {
               >
                 {selectionMode ? "Cancelar selección" : "Seleccionar"}
               </Button>
-            )}
-
-            {viewMode === "table" && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 w-7 p-0 sm:hidden"
-                    title="Más acciones"
-                    aria-label="Más acciones"
-                  >
-                    <MoreHorizontal className="h-3.5 w-3.5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-44">
-                  <DropdownMenuItem
-                    onClick={() => {
-                      if (selectionMode) {
-                        setSelectionMode(false);
-                        setSelectedIds(new Set());
-                      } else {
-                        setSelectionMode(true);
-                      }
-                    }}
-                  >
-                    {selectionMode ? "Cancelar selección" : "Seleccionar leads"}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
             )}
 
             <Button
