@@ -83,7 +83,7 @@ const PHASE_ORDER: FunnelItem["phase"][] = [
 const SOURCE_COLORS = [
   "#d8c7ef",
   "#facc15",
-  "#2563eb",
+  "#006699",
   "#a21caf",
   "#dc2626",
   "#14b8a6",
@@ -412,7 +412,7 @@ export default function DashboardPage() {
     <>
       <Topbar title="Dashboard" />
 
-      <main className="mt-14 flex min-h-0 flex-1 flex-col overflow-hidden bg-[#0b71a9]">
+      <main className="mt-14 flex min-h-0 flex-1 flex-col overflow-hidden bg-[#006699]">
         <div className="flex shrink-0 justify-end px-6 py-4">
           <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
             <div className="grid grid-cols-3 items-stretch gap-1 rounded-xl bg-white p-1 text-[11px] shadow-sm sm:inline-flex sm:items-center">
@@ -422,7 +422,7 @@ export default function DashboardPage() {
                 className={cn(
                   "rounded-lg px-3 py-1.5 text-center font-semibold transition-colors",
                   period === "last7"
-                    ? "bg-[#0b71a9] text-white"
+                    ? "bg-[#006699] text-white"
                     : "text-slate-600 hover:text-slate-900"
                 )}
               >
@@ -434,7 +434,7 @@ export default function DashboardPage() {
                 className={cn(
                   "rounded-lg px-3 py-1.5 text-center font-semibold transition-colors",
                   period === "currentMonth"
-                    ? "bg-[#0b71a9] text-white"
+                    ? "bg-[#006699] text-white"
                     : "text-slate-600 hover:text-slate-900"
                 )}
               >
@@ -446,7 +446,7 @@ export default function DashboardPage() {
                 className={cn(
                   "rounded-lg px-3 py-1.5 text-center font-semibold transition-colors",
                   period === "custom"
-                    ? "bg-[#0b71a9] text-white"
+                    ? "bg-[#006699] text-white"
                     : "text-slate-600 hover:text-slate-900"
                 )}
               >
@@ -671,7 +671,7 @@ export default function DashboardPage() {
           </div>
 
           <div className="mt-5">
-            <Card className="border-white/10 bg-[#0b71a9] shadow-none">
+            <Card className="border-white/10 bg-[#006699] shadow-none">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base text-white">
                   Evolución por origen
