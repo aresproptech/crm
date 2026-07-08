@@ -103,6 +103,25 @@ function fmt(d: string | null) {
   });
 }
 
+function getWhatsAppUrl(phone: string | null | undefined) {
+  const raw = phone?.trim();
+  if (!raw || raw === "—") return "";
+
+  let normalized = raw.replace(/[^\d+]/g, "");
+  if (normalized.startsWith("00")) {
+    normalized = normalized.slice(2);
+  }
+  if (normalized.startsWith("+")) {
+    normalized = normalized.slice(1);
+  }
+  if (/^[67]\d{8}$/.test(normalized)) {
+    normalized = `34${normalized}`;
+  }
+
+  if (!/^\d{8,15}$/.test(normalized)) return "";
+  return `https://wa.me/${normalized}`;
+}
+
 function visitaToForm(v: Visita): VisitaForm {
   return {
     opportunity_id: v.opportunity_id ? String(v.opportunity_id) : "",
@@ -417,6 +436,7 @@ export default function VisitasPage() {
               ) : (
                 filteredVisitas.map((v, i) => {
                   const inmueble = inmuebles.find((im) => im.id === v.opportunity_id);
+                  const whatsappUrl = getWhatsAppUrl(v.telefono);
                   return (
                     <tr
                       key={v.id}
@@ -455,7 +475,20 @@ export default function VisitasPage() {
                           ) : (
                             <span className="h-4 w-4 shrink-0" />
                           )}
-                          <span>{v.telefono || "—"}</span>
+                          {whatsappUrl ? (
+                            <a
+                              href={whatsappUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary underline-offset-2 hover:underline"
+                              onClick={(event) => event.stopPropagation()}
+                              title="Abrir WhatsApp"
+                            >
+                              {v.telefono}
+                            </a>
+                          ) : (
+                            <span>{v.telefono || "—"}</span>
+                          )}
                         </div>
                       </td>
                       <td className="px-3 py-2.5 text-xs text-muted-foreground">{v.dni || "—"}</td>
