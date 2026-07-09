@@ -387,7 +387,7 @@ function getToneClass(tone: PipelineItem["tone"]) {
 }
 
 function ExecutiveFunnel({ items }: { items: FunnelMetricItem[] }) {
-  const widths = ["100%", "88%", "76%", "64%", "52%"];
+  const widths = ["100%", "92%", "84%", "76%", "68%"];
 
   return (
     <Card className="border-white/10 bg-white/95 shadow-xl">
@@ -402,7 +402,7 @@ function ExecutiveFunnel({ items }: { items: FunnelMetricItem[] }) {
           {items.map((item, index) => (
             <div
               key={item.label}
-              className="mx-auto overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm"
+              className="mx-auto w-full min-w-0 overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm"
               style={{ width: widths[index] ?? "52%" }}
             >
               <div
@@ -413,23 +413,25 @@ function ExecutiveFunnel({ items }: { items: FunnelMetricItem[] }) {
               >
                 {item.label}
               </div>
-              <div className="grid grid-cols-3 divide-x divide-slate-200 px-4 py-4 text-center">
-                <div>
-                  <div className="text-xs uppercase tracking-wide text-slate-500">Hoy</div>
+              <div className="grid min-w-0 grid-cols-3 gap-1 px-2 py-4 text-center sm:divide-x sm:divide-slate-200 sm:px-4">
+                <div className="min-w-0 px-1">
+                  <div className="truncate text-[10px] font-medium uppercase tracking-normal text-slate-500 sm:text-xs sm:tracking-wide">
+                    Hoy
+                  </div>
                   <div className="mt-1 text-2xl font-semibold tabular-nums text-fuchsia-700">
                     {item.today}
                   </div>
                 </div>
-                <div>
-                  <div className="text-xs uppercase tracking-wide text-slate-500">
+                <div className="min-w-0 px-1">
+                  <div className="truncate text-[10px] font-medium uppercase tracking-normal text-slate-500 sm:text-xs sm:tracking-wide">
                     Realizado
                   </div>
                   <div className="mt-1 text-2xl font-semibold tabular-nums text-slate-950">
                     {item.value}
                   </div>
                 </div>
-                <div>
-                  <div className="text-xs uppercase tracking-wide text-slate-500">
+                <div className="min-w-0 px-1">
+                  <div className="truncate text-[10px] font-medium uppercase tracking-normal text-slate-500 sm:text-xs sm:tracking-wide">
                     Proyectado
                   </div>
                   <div className="mt-1 text-2xl font-semibold tabular-nums text-[#006699]">
