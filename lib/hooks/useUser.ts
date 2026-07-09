@@ -69,12 +69,11 @@ export function useUser() {
 }
 
 export function canViewAllLeads(crmUser: CrmUser): boolean {
-  return (
-    crmUser.rol === "Admin" ||
-    crmUser.rol === "Coordinador"
-  );
+  const role = String(crmUser.rol || "").trim().toLowerCase();
+  return role === "admin" || role === "coordinador";
 }
 
 export function canEditLeads(crmUser: CrmUser): boolean {
-  return crmUser.rol === "Admin" || crmUser.rol === "Comercial";
+  const role = String(crmUser.rol || "").trim().toLowerCase();
+  return role === "admin" || role === "comercial";
 }

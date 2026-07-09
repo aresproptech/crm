@@ -227,6 +227,49 @@ function parseStoredMemo(memo: string) {
   };
 }
 
+function stripSystemMemoPrefix(memo: string, prefix: string) {
+  return memo.replace(prefix, "").trim();
+}
+
+function parseSystemMemoDetail(memo: string, prefix: string) {
+  const detail = stripSystemMemoPrefix(memo, prefix);
+  const match = detail.match(/^(.*?):\s*([\s\S]*)$/);
+  const reservedLabels = new Set([
+    "medio",
+    "hora",
+    "resultado",
+    "dominio",
+    "planner",
+    "owner",
+    "fecha",
+  ]);
+
+  if (!match) {
+    return {
+      createdBy: "",
+      text: detail,
+    };
+  }
+
+  const possibleAuthor = cleanUserDisplayName(match[1].trim());
+  if (reservedLabels.has(normalizeBadgeKey(possibleAuthor))) {
+    return {
+      createdBy: "",
+      text: detail,
+    };
+  }
+
+  return {
+    createdBy: possibleAuthor,
+    text: match[2].trim(),
+  };
+}
+
+function buildEventDateLabel(value: string | null | undefined) {
+  const formatted = fmtDate(value || "");
+  return formatted && formatted !== "—" ? ` para el ${formatted}` : "";
+}
+
 function isManualNoteMemo(memo: string) {
   const trimmed = memo.trim();
   return (
@@ -577,6 +620,33 @@ function displayMoney(value: unknown) {
   return formatEuroValue(String(value)) || String(value);
 }
 
+function formValue(value: unknown) {
+  if (value === null || value === undefined) return "";
+  return String(value);
+}
+
+function persistedRowId(value: number | string | null | undefined) {
+  if (value === null || value === undefined || value === "") return null;
+
+  const id = String(value);
+  if (id.startsWith("rg-") || id.startsWith("valuation-") || id.startsWith("order-")) {
+    return null;
+  }
+
+  return value;
+}
+
+function statusValueFromLabel(label: string) {
+  const normalized = normalizeBadgeKey(label);
+
+  return (
+    LEAD_DETAIL_STATUS_OPTIONS.find(
+      (option) =>
+        option.value === normalized || normalizeBadgeKey(option.label) === normalized
+    )?.value || ""
+  );
+}
+
 
 function getPlanningLabel(dateValue: string | null | undefined) {
   if (!dateValue) return "Sin fecha";
@@ -627,6 +697,29 @@ function daysBetween(start: string | null | undefined, end: string | null | unde
   return String(
     Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
   );
+}
+
+function daysSince(value: string | null | undefined) {
+  if (!value) return null;
+
+  const date = new Date(value);
+  if (isNaN(date.getTime())) return null;
+
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const today = new Date();
+  const end = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+  return Math.max(
+    0,
+    Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
+  );
+}
+
+function lastCallLabel(days: number | null) {
+  if (days === null) return "Sin llamadas";
+  if (days === 0) return "0 días";
+  if (days === 1) return "1 día";
+  return `${days} días`;
 }
 
 function monthValue(value: string | null | undefined) {
@@ -1133,6 +1226,8 @@ export function LeadDetailPanel({
   const [orderModalOpen, setOrderModalOpen] = useState(false);
   const [rgModalOpen, setRgModalOpen] = useState(false);
   const [editingValuationId, setEditingValuationId] = useState<number | string | null>(null);
+  const [editingOrderId, setEditingOrderId] = useState<number | string | null>(null);
+  const [editingRgId, setEditingRgId] = useState<number | string | null>(null);
 
   const [encargoForm, setEncargoForm] = useState({
     fecha_inicio: "",
@@ -1226,7 +1321,11 @@ export function LeadDetailPanel({
 
   const currentUserName = useMemo(() => {
     const rawUser = userWithRole as Record<string, unknown> | null | undefined;
+    const rawCrmUser = rawUser?.crmUser as Record<string, unknown> | null | undefined;
     const raw =
+      stringFromUnknown(rawCrmUser?.name) ||
+      stringFromUnknown(rawCrmUser?.nombre) ||
+      stringFromUnknown(rawCrmUser?.email) ||
       stringFromUnknown(rawUser?.full_name) ||
       stringFromUnknown(rawUser?.display_name) ||
       stringFromUnknown(rawUser?.name) ||
@@ -1251,6 +1350,13 @@ export function LeadDetailPanel({
     if (error) {
       console.error("Error guardando historial:", error);
     }
+  }
+
+  async function handleCallLead() {
+    if (!effectiveLead) return;
+
+    await persistActivity("Llamó al lead");
+    await loadObservations(effectiveLead.id);
   }
 
   async function loadObservations(leadId: string) {
@@ -1302,25 +1408,31 @@ export function LeadDetailPanel({
         }
 
         if (memo.startsWith("[VALORACION]")) {
+          const detail = parseSystemMemoDetail(memo, "[VALORACION]");
           return [
             {
               id: String(row.id),
               leadId,
               createdAt,
-              createdBy: "Usuario",
-              text: `Agregó una valoración: ${memo.replace("[VALORACION]", "").trim()}`,
+              createdBy: detail.createdBy || currentUserName || parsed.createdBy,
+              text: `Agregó una valoración${buildEventDateLabel(row.fecha)}${
+                detail.text ? `: ${detail.text}` : ""
+              }`,
             },
           ];
         }
 
         if (memo.startsWith("[R.G.]")) {
+          const detail = parseSystemMemoDetail(memo, "[R.G.]");
           return [
             {
               id: String(row.id),
               leadId,
               createdAt,
-              createdBy: "Usuario",
-              text: `Agregó una R.G.: ${memo.replace("[R.G.]", "").trim()}`,
+              createdBy: detail.createdBy || currentUserName || parsed.createdBy,
+              text: `Agregó una R.G.${buildEventDateLabel(row.fecha)}${
+                detail.text ? `: ${detail.text}` : ""
+              }`,
             },
           ];
         }
@@ -1505,6 +1617,97 @@ export function LeadDetailPanel({
     setSavingNote(false);
   }
 
+  function resetEncargoForm() {
+    setEditingOrderId(null);
+    setEncargoError(null);
+    setEncargoForm({
+      fecha_inicio: "",
+      fecha_fin: "",
+      pvp_inicial: "",
+      pvp_actual: "",
+      pvp_estimado: "",
+      com_vendedor: "",
+      com_comprador: "",
+      memo: "",
+    });
+  }
+
+  function resetRgForm() {
+    setEditingRgId(null);
+    setRgError(null);
+    setRgForm({ fecha: "", hora: "", medio: "", resultado: "", memo: "" });
+  }
+
+  function resetValuationForm() {
+    setEditingValuationId(null);
+    setValuationError(null);
+    setValuationForm({ fecha: "", hora: "", medio: "" });
+  }
+
+  function openNewEncargoModal() {
+    resetEncargoForm();
+    setOrderModalOpen(true);
+  }
+
+  function openEditEncargoModal(order: OpportunityOrderRow) {
+    const orderId = persistedRowId(order.id);
+    if (!orderId) return;
+
+    setEditingOrderId(orderId);
+    setEncargoError(null);
+    setEncargoForm({
+      fecha_inicio: dateOnlyValue(order.fecha_inicio),
+      fecha_fin: dateOnlyValue(order.fecha_fin),
+      pvp_inicial: formValue(order.pvp_inicial),
+      pvp_actual: formValue(order.pvp_actual),
+      pvp_estimado: formValue(order.pvp_estimado),
+      com_vendedor: formValue(order.com_vendedor),
+      com_comprador: formValue(order.com_comprador),
+      memo: formValue(order.memo),
+    });
+    setOrderModalOpen(true);
+  }
+
+  function openNewRgModal() {
+    resetRgForm();
+    setRgModalOpen(true);
+  }
+
+  function openEditRgModal(event: RgHistoryEvent) {
+    const rgId = persistedRowId(event.id);
+    if (!rgId) return;
+
+    setEditingRgId(rgId);
+    setRgError(null);
+    setRgForm({
+      fecha: dateOnlyValue(event.fecha),
+      hora: event.hora || "",
+      medio: event.medio === "—" ? "" : event.medio,
+      resultado: statusValueFromLabel(event.resultado),
+      memo: event.memo || "",
+    });
+    setRgModalOpen(true);
+  }
+
+  function openNewValuationModal() {
+    resetValuationForm();
+    setValuationModalOpen(true);
+  }
+
+  function openEditValuationModal(event: ValuationHistoryEvent) {
+    const valuationId = persistedRowId(event.id);
+    if (!valuationId) return;
+
+    setEditingValuationId(valuationId);
+    setValuationError(null);
+    setValuationForm({
+      fecha: dateOnlyValue(event.fecha),
+      hora: event.hora || "",
+      medio: event.medio === "—" ? "" : event.medio,
+    });
+    setValuationModalOpen(true);
+  }
+
   async function handleAddEncargo() {
     if (!effectiveLead) return;
 
@@ -1523,7 +1726,12 @@ export function LeadDetailPanel({
       memo: encargoForm.memo.trim() || null,
     };
 
-    const { error } = await supabase.from("opportunity_orders").insert(payload);
+    const { error } = editingOrderId
+      ? await supabase
+          .from("opportunity_orders")
+          .update(payload)
+          .eq("id", editingOrderId)
+      : await supabase.from("opportunity_orders").insert(payload);
 
     setEncargoSaving(false);
 
@@ -1533,18 +1741,10 @@ export function LeadDetailPanel({
       return;
     }
 
-    setEncargoForm({
-      fecha_inicio: "",
-      fecha_fin: "",
-      pvp_inicial: "",
-      pvp_actual: "",
-      pvp_estimado: "",
-      com_vendedor: "",
-      com_comprador: "",
-      memo: "",
-    });
+    const wasEditing = Boolean(editingOrderId);
+    resetEncargoForm();
     setOrderModalOpen(false);
-    await persistActivity("Agregó un encargo");
+    await persistActivity(wasEditing ? "Editó un encargo" : "Agregó un encargo");
     await loadObservations(effectiveLead.id);
     await loadRelatedData(effectiveLead.id);
   }
@@ -1564,19 +1764,23 @@ export function LeadDetailPanel({
       LEAD_DETAIL_STATUS_OPTIONS.find((option) => option.value === rgForm.resultado)
         ?.label || "—";
 
-    const summaryLine = `[R.G.] Medio: ${rgForm.medio || "—"} | Resultado: ${resultadoLabel}${
-      rgForm.hora ? ` | Hora: ${rgForm.hora}` : ""
-    }`;
+    const summaryLine = `[R.G.] ${currentUserName || "Usuario"}: Medio: ${
+      rgForm.medio || "—"
+    } | Resultado: ${resultadoLabel}${rgForm.hora ? ` | Hora: ${rgForm.hora}` : ""}`;
     const memo = rgForm.memo.trim()
       ? `${summaryLine}\n${rgForm.memo.trim()}`
       : summaryLine;
 
-    const { error } = await supabase.from("opportunity_contacts").insert({
+    const payload = {
       opportunity_id: Number(effectiveLead.id),
       fecha: rgForm.fecha,
       memo,
       resultado: true,
-    });
+    };
+
+    const { error } = editingRgId
+      ? await supabase.from("opportunity_contacts").update(payload).eq("id", editingRgId)
+      : await supabase.from("opportunity_contacts").insert(payload);
 
     setRgSaving(false);
 
@@ -1586,8 +1790,12 @@ export function LeadDetailPanel({
       return;
     }
 
-    setRgForm({ fecha: "", hora: "", medio: "", resultado: "", memo: "" });
+    const wasEditing = Boolean(editingRgId);
+    resetRgForm();
     setRgModalOpen(false);
+    if (wasEditing) {
+      await persistActivity("Editó una R.G.");
+    }
     await loadRgEntries(effectiveLead.id);
     await loadObservations(effectiveLead.id);
   }
@@ -1603,16 +1811,23 @@ export function LeadDetailPanel({
     setValuationSaving(true);
     setValuationError(null);
 
-    const summaryLine = `[VALORACION] Medio: ${valuationForm.medio || "—"}${
-      valuationForm.hora ? ` | Hora: ${valuationForm.hora}` : ""
-    }`;
+    const summaryLine = `[VALORACION] ${currentUserName || "Usuario"}: Medio: ${
+      valuationForm.medio || "—"
+    }${valuationForm.hora ? ` | Hora: ${valuationForm.hora}` : ""}`;
 
-    const { error } = await supabase.from("opportunity_contacts").insert({
+    const payload = {
       opportunity_id: Number(effectiveLead.id),
       fecha: valuationForm.fecha,
       memo: summaryLine,
       resultado: true,
-    });
+    };
+
+    const { error } = editingValuationId
+      ? await supabase
+          .from("opportunity_contacts")
+          .update(payload)
+          .eq("id", editingValuationId)
+      : await supabase.from("opportunity_contacts").insert(payload);
 
     setValuationSaving(false);
 
@@ -1622,8 +1837,12 @@ export function LeadDetailPanel({
       return;
     }
 
-    setValuationForm({ fecha: "", hora: "", medio: "" });
+    const wasEditing = Boolean(editingValuationId);
+    resetValuationForm();
     setValuationModalOpen(false);
+    if (wasEditing) {
+      await persistActivity("Editó una valoración");
+    }
     await loadValuationEntries(effectiveLead.id);
     await loadObservations(effectiveLead.id);
   }
@@ -1722,6 +1941,12 @@ export function LeadDetailPanel({
     ...legacyValuationEvent,
   ];
 
+  const lastCallEvent =
+    activityEvents.find((event) =>
+      normalizeBadgeKey(event.text).startsWith("llamo-al-lead")
+    ) || null;
+  const lastCallDays = daysSince(lastCallEvent?.createdAt);
+
   return (
     <aside className="fixed right-0 top-0 z-40 flex h-screen w-[1080px] max-w-[calc(100vw-1rem)] flex-col border-l border-border bg-background shadow-2xl">
       <div className="relative flex shrink-0 border-b border-border px-5 py-4">
@@ -1737,14 +1962,19 @@ export function LeadDetailPanel({
             <>
               <a
                 href={`tel:${effectiveLead.phone.replace(/[^+\d]/g, "")}`}
+                onClick={() => void handleCallLead()}
                 className="mx-auto mt-2 flex h-10 w-full items-center justify-center rounded-md bg-primary px-3 text-center text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90 md:hidden"
               >
                 Llamar
               </a>
 
-              <p className="mt-1 hidden text-xs font-medium text-muted-foreground md:block">
+              <a
+                href={`tel:${effectiveLead.phone.replace(/[^+\d]/g, "")}`}
+                onClick={() => void handleCallLead()}
+                className="mt-1 hidden text-xs font-medium text-muted-foreground transition hover:text-foreground md:block"
+              >
                 {effectiveLead.phone}
-              </p>
+              </a>
             </>
           )}
         </div>
@@ -1882,6 +2112,14 @@ export function LeadDetailPanel({
                         </SmallDataCard>
                         <SmallDataCard label="Teléfono">
                           {effectiveLead.phone || "—"}
+                        </SmallDataCard>
+                        <SmallDataCard label="Última llamada">
+                          <span>{lastCallLabel(lastCallDays)}</span>
+                          {lastCallEvent ? (
+                            <span className="mt-1 block text-xs text-muted-foreground">
+                              {fmtDateTimeShort(lastCallEvent.createdAt)}
+                            </span>
+                          ) : null}
                         </SmallDataCard>
                         <SmallDataCard label="Valor">
                           {effectiveLead.valor || "—"}
@@ -2044,7 +2282,7 @@ export function LeadDetailPanel({
     type="button"
     size="sm"
     className="h-8 text-xs"
-    onClick={() => setValuationModalOpen(true)}
+    onClick={openNewValuationModal}
   >
     Agregar valoración
   </Button>
@@ -2097,7 +2335,29 @@ export function LeadDetailPanel({
                                 </Badge>
                               </span>
                               <span className="flex items-center justify-end gap-2">
-                                <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                                {persistedRowId(event.id) ? (
+                                  <span
+                                    role="button"
+                                    tabIndex={0}
+                                    title="Editar valoración"
+                                    aria-label="Editar valoración"
+                                    className="rounded p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                                    onClick={(clickEvent) => {
+                                      clickEvent.stopPropagation();
+                                      openEditValuationModal(event);
+                                    }}
+                                    onKeyDown={(keyEvent) => {
+                                      if (keyEvent.key !== "Enter" && keyEvent.key !== " ") return;
+                                      keyEvent.preventDefault();
+                                      keyEvent.stopPropagation();
+                                      openEditValuationModal(event);
+                                    }}
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </span>
+                                ) : (
+                                  <Pencil className="h-3.5 w-3.5 text-muted-foreground/40" />
+                                )}
                                 <ChevronDown
                                   className={cn(
                                     "h-4 w-4 text-muted-foreground transition-transform",
@@ -2168,7 +2428,7 @@ export function LeadDetailPanel({
     type="button"
     size="sm"
     className="h-8 text-xs"
-    onClick={() => setOrderModalOpen(true)}
+    onClick={openNewEncargoModal}
   >
     Agregar encargo
   </Button>
@@ -2230,7 +2490,29 @@ export function LeadDetailPanel({
                                 </Badge>
                               </span>
                               <span className="flex items-center justify-end gap-2">
-                                <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                                {persistedRowId(order.id) ? (
+                                  <span
+                                    role="button"
+                                    tabIndex={0}
+                                    title="Editar encargo"
+                                    aria-label="Editar encargo"
+                                    className="rounded p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                                    onClick={(clickEvent) => {
+                                      clickEvent.stopPropagation();
+                                      openEditEncargoModal(order);
+                                    }}
+                                    onKeyDown={(keyEvent) => {
+                                      if (keyEvent.key !== "Enter" && keyEvent.key !== " ") return;
+                                      keyEvent.preventDefault();
+                                      keyEvent.stopPropagation();
+                                      openEditEncargoModal(order);
+                                    }}
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </span>
+                                ) : (
+                                  <Pencil className="h-3.5 w-3.5 text-muted-foreground/40" />
+                                )}
                                 <ChevronDown
                                   className={cn(
                                     "h-4 w-4 text-muted-foreground transition-transform",
@@ -2366,7 +2648,7 @@ export function LeadDetailPanel({
                       type="button"
                       size="sm"
                       className="h-8 text-xs"
-                      onClick={() => setRgModalOpen(true)}
+                      onClick={openNewRgModal}
                     >
                       Agregar R.G.
                     </Button>
@@ -2417,7 +2699,29 @@ export function LeadDetailPanel({
                               </span>
                               <span className="text-muted-foreground">{event.dominio}</span>
                               <span className="flex items-center justify-end gap-2">
-                                <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                                {persistedRowId(event.id) ? (
+                                  <span
+                                    role="button"
+                                    tabIndex={0}
+                                    title="Editar R.G."
+                                    aria-label="Editar R.G."
+                                    className="rounded p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                                    onClick={(clickEvent) => {
+                                      clickEvent.stopPropagation();
+                                      openEditRgModal(event);
+                                    }}
+                                    onKeyDown={(keyEvent) => {
+                                      if (keyEvent.key !== "Enter" && keyEvent.key !== " ") return;
+                                      keyEvent.preventDefault();
+                                      keyEvent.stopPropagation();
+                                      openEditRgModal(event);
+                                    }}
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </span>
+                                ) : (
+                                  <Pencil className="h-3.5 w-3.5 text-muted-foreground/40" />
+                                )}
                                 <ChevronDown
                                   className={cn(
                                     "h-4 w-4 text-muted-foreground transition-transform",
@@ -2624,12 +2928,22 @@ export function LeadDetailPanel({
         </Button>
       </div>
 
-      <Dialog open={valuationModalOpen} onOpenChange={setValuationModalOpen}>
+      <Dialog
+        open={valuationModalOpen}
+        onOpenChange={(open) => {
+          setValuationModalOpen(open);
+          if (!open) resetValuationForm();
+        }}
+      >
         <DialogContent className="sm:max-w-[720px]">
           <DialogHeader>
-            <DialogTitle>Agregar valoración</DialogTitle>
+            <DialogTitle>
+              {editingValuationId ? "Editar valoración" : "Agregar valoración"}
+            </DialogTitle>
             <DialogDescription>
-              Carga los datos principales de la valoración del lead.
+              {editingValuationId
+                ? "Actualiza los datos principales de la valoración del lead."
+                : "Carga los datos principales de la valoración del lead."}
             </DialogDescription>
           </DialogHeader>
 
@@ -2698,18 +3012,30 @@ export function LeadDetailPanel({
               onClick={handleAddValuation}
               disabled={valuationSaving}
             >
-              {valuationSaving ? "Guardando..." : "Guardar valoración"}
+              {valuationSaving
+                ? "Guardando..."
+                : editingValuationId
+                  ? "Actualizar valoración"
+                  : "Guardar valoración"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={orderModalOpen} onOpenChange={setOrderModalOpen}>
+      <Dialog
+        open={orderModalOpen}
+        onOpenChange={(open) => {
+          setOrderModalOpen(open);
+          if (!open) resetEncargoForm();
+        }}
+      >
         <DialogContent className="sm:max-w-[820px]">
           <DialogHeader>
-            <DialogTitle>Agregar encargo</DialogTitle>
+            <DialogTitle>{editingOrderId ? "Editar encargo" : "Agregar encargo"}</DialogTitle>
             <DialogDescription>
-              Carga los datos principales del encargo del lead.
+              {editingOrderId
+                ? "Actualiza los datos principales del encargo del lead."
+                : "Carga los datos principales del encargo del lead."}
             </DialogDescription>
           </DialogHeader>
 
@@ -2830,18 +3156,30 @@ export function LeadDetailPanel({
               Cancelar
             </Button>
             <Button type="button" onClick={handleAddEncargo} disabled={encargoSaving}>
-              {encargoSaving ? "Guardando..." : "Guardar encargo"}
+              {encargoSaving
+                ? "Guardando..."
+                : editingOrderId
+                  ? "Actualizar encargo"
+                  : "Guardar encargo"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={rgModalOpen} onOpenChange={setRgModalOpen}>
+      <Dialog
+        open={rgModalOpen}
+        onOpenChange={(open) => {
+          setRgModalOpen(open);
+          if (!open) resetRgForm();
+        }}
+      >
         <DialogContent className="sm:max-w-[720px]">
           <DialogHeader>
-            <DialogTitle>Agregar R.G.</DialogTitle>
+            <DialogTitle>{editingRgId ? "Editar R.G." : "Agregar R.G."}</DialogTitle>
             <DialogDescription>
-              Carga los datos principales de la reunión de gestión del lead.
+              {editingRgId
+                ? "Actualiza los datos principales de la reunión de gestión del lead."
+                : "Carga los datos principales de la reunión de gestión del lead."}
             </DialogDescription>
           </DialogHeader>
 
@@ -2929,7 +3267,11 @@ export function LeadDetailPanel({
               Cancelar
             </Button>
             <Button type="button" onClick={handleAddRg} disabled={rgSaving}>
-              {rgSaving ? "Guardando..." : "Guardar R.G."}
+              {rgSaving
+                ? "Guardando..."
+                : editingRgId
+                  ? "Actualizar R.G."
+                  : "Guardar R.G."}
             </Button>
           </DialogFooter>
         </DialogContent>
