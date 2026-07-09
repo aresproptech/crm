@@ -1352,12 +1352,12 @@ export default function LeadsPage() {
               </button>
 
               {datePopoverOpen && (
-                <div className="absolute left-0 top-10 z-50 w-[430px] overflow-hidden rounded-xl border border-border bg-background shadow-2xl">
-                  <div className="border-b border-border bg-muted/30 p-4">
+                <div className="absolute left-0 right-0 top-11 z-50 w-full max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-border bg-background shadow-2xl sm:right-auto sm:top-10 sm:w-[430px]">
+                  <div className="border-b border-border bg-muted/30 p-3 sm:p-4">
                     <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       Periodo de F. Noticia
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <label className="space-y-1">
                         <span className="text-[11px] font-semibold text-muted-foreground">
                           Fecha de inicio
@@ -1369,7 +1369,7 @@ export default function LeadsPage() {
                             setDateQuickFilter("custom");
                             setDateFromFilter(e.target.value);
                           }}
-                          className="h-9 w-full rounded-md border border-border bg-background px-2 text-xs font-medium text-foreground outline-none"
+                          className="h-10 w-full min-w-0 rounded-md border border-border bg-background px-2 text-xs font-medium text-foreground outline-none sm:h-9"
                         />
                       </label>
                       <label className="space-y-1">
@@ -1383,13 +1383,13 @@ export default function LeadsPage() {
                             setDateQuickFilter("custom");
                             setDateToFilter(e.target.value);
                           }}
-                          className="h-9 w-full rounded-md border border-border bg-background px-2 text-xs font-medium text-foreground outline-none"
+                          className="h-10 w-full min-w-0 rounded-md border border-border bg-background px-2 text-xs font-medium text-foreground outline-none sm:h-9"
                         />
                       </label>
                     </div>
                   </div>
 
-                  <div className="p-2">
+                  <div className="max-h-[42vh] overflow-y-auto p-2 sm:max-h-none">
                     <button
                       type="button"
                       onClick={() => {
@@ -1432,12 +1432,12 @@ export default function LeadsPage() {
                     </button>
                   </div>
 
-                  <div className="flex items-center justify-end gap-2 border-t border-border bg-muted/20 p-3">
+                  <div className="grid grid-cols-2 gap-2 border-t border-border bg-muted/20 p-3 sm:flex sm:items-center sm:justify-end">
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-8 text-xs font-semibold"
+                      className="h-9 text-xs font-semibold sm:h-8"
                       onClick={() => setDatePopoverOpen(false)}
                     >
                       Cancelar
@@ -1445,7 +1445,7 @@ export default function LeadsPage() {
                     <Button
                       type="button"
                       size="sm"
-                      className="h-8 text-xs font-semibold"
+                      className="h-9 text-xs font-semibold sm:h-8"
                       onClick={applyCustomDateFilter}
                     >
                       Aplicar

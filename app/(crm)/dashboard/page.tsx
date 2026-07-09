@@ -1,14 +1,24 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { CalendarIcon } from "lucide-react";
+import type { DateRange as DayPickerDateRange } from "react-day-picker";
 import { Topbar } from "@/components/crm/topbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { canViewAllLeads, useUser } from "@/lib/hooks/useUser";
 import { PHASE_LABELS } from "@/lib/crm-data";
 
-type PeriodOption = "last7" | "currentMonth" | "custom";
+type PeriodOption =
+  | "today"
+  | "yesterday"
+  | "last7"
+  | "last30"
+  | "currentMonth"
+  | "custom";
 type DashboardTab = "general" | "commercials";
 type CommercialDomainFilter = "all" | "chamartin" | "proptech";
 
@@ -186,6 +196,23 @@ function endOfDay(date: Date): Date {
   return d;
 }
 
+function createTodayRange(today = new Date()): DateRange {
+  return { start: startOfDay(today), end: endOfDay(today) };
+}
+
+function createYesterdayRange(today = new Date()): DateRange {
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  return { start: startOfDay(yesterday), end: endOfDay(yesterday) };
+}
+
+function createLast30DaysRange(today = new Date()): DateRange {
+  const end = endOfDay(today);
+  const start = startOfDay(new Date(today));
+  start.setDate(start.getDate() - 29);
+  return { start, end };
+}
+
 function createLast7DaysRange(today = new Date()): DateRange {
   const end = endOfDay(today);
   const start = startOfDay(new Date(today));
@@ -216,6 +243,39 @@ function createCustomRange(
   }
 
   return { start: startOfDay(fromDate), end: endOfDay(toDate) };
+}
+
+function dateInputValue(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function parseDateInputValue(value: string) {
+  if (!value) return undefined;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return undefined;
+
+  const parsed = new Date(year, month - 1, day);
+  return isNaN(parsed.getTime()) ? undefined : parsed;
+}
+
+function formatRangeDisplay(from: string, to: string) {
+  const fromDate = parseDateInputValue(from);
+  const toDate = parseDateInputValue(to);
+
+  if (!fromDate && !toDate) return "Seleccionar fechas";
+
+  const formatter = new Intl.DateTimeFormat("es-ES", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+
+  if (fromDate && !toDate) return `Desde ${formatter.format(fromDate)}`;
+  if (!fromDate && toDate) return `Hasta ${formatter.format(toDate)}`;
+  return `${formatter.format(fromDate!)} - ${formatter.format(toDate!)}`;
 }
 
 function isWithinRange(date: Date, range: DateRange): boolean {
@@ -675,6 +735,7 @@ export default function DashboardPage() {
   const [period, setPeriod] = useState<PeriodOption>("last7");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
+  const [customCalendarOpen, setCustomCalendarOpen] = useState(false);
   const [commercialDomainFilter, setCommercialDomainFilter] =
     useState<CommercialDomainFilter>("all");
   const [crmLeads, setCrmLeads] = useState<CrmLeadRow[]>([]);
@@ -757,10 +818,21 @@ export default function DashboardPage() {
     const today = new Date();
     const defaultRange = createLast7DaysRange(today);
 
-    if (period === "last7") return defaultRange;
+    if (period === "today") return createTodayRange(today);
+    if (period === "yesterday") return createYesterdayRange(today);
+    if (period === "last30") return createLast30DaysRange(today);
     if (period === "currentMonth") return createCurrentMonthRange(today);
-    return createCustomRange(customFrom, customTo, defaultRange);
+    if (period === "custom") return createCustomRange(customFrom, customTo, defaultRange);
+    return defaultRange;
   }, [period, customFrom, customTo]);
+
+  const selectedCustomRange = useMemo<DayPickerDateRange | undefined>(() => {
+    const from = parseDateInputValue(customFrom);
+    const to = parseDateInputValue(customTo);
+
+    if (!from && !to) return undefined;
+    return { from, to };
+  }, [customFrom, customTo]);
 
   const allLeads = useMemo<DashboardLead[]>(() => {
     const normalized: DashboardLead[] = [];
@@ -846,10 +918,7 @@ export default function DashboardPage() {
 
   const projectionStats = useMemo(() => {
     const today = new Date();
-    const projectionEnd =
-      period === "currentMonth"
-        ? endOfDay(new Date(today.getFullYear(), today.getMonth() + 1, 0))
-        : currentRange.end;
+    const projectionEnd = currentRange.end;
     const elapsedEnd =
       today < currentRange.start
         ? currentRange.start
@@ -861,7 +930,7 @@ export default function DashboardPage() {
       elapsedDays: getInclusiveDayCount(currentRange.start, elapsedEnd),
       projectionDays: getInclusiveDayCount(currentRange.start, projectionEnd),
     };
-  }, [currentRange, period]);
+  }, [currentRange]);
 
   const funnelMetrics = useMemo<FunnelMetricItem[]>(() => {
     const today = relativeDateKey(0);
@@ -1189,66 +1258,100 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
-            <div className="grid grid-cols-3 items-stretch gap-1 rounded-xl bg-white p-1 text-[11px] shadow-sm sm:inline-flex sm:items-center">
-              <button
-                type="button"
-                onClick={() => setPeriod("last7")}
-                className={cn(
-                  "rounded-lg px-3 py-1.5 text-center font-semibold transition-colors",
-                  period === "last7"
-                    ? "bg-[#006699] text-white"
-                    : "text-slate-600 hover:text-slate-900"
-                )}
-              >
-                Últimos 7 días
-              </button>
-              <button
-                type="button"
-                onClick={() => setPeriod("currentMonth")}
-                className={cn(
-                  "rounded-lg px-3 py-1.5 text-center font-semibold transition-colors",
-                  period === "currentMonth"
-                    ? "bg-[#006699] text-white"
-                    : "text-slate-600 hover:text-slate-900"
-                )}
-              >
-                Mes actual
-              </button>
-              <button
-                type="button"
-                onClick={() => setPeriod("custom")}
-                className={cn(
-                  "rounded-lg px-3 py-1.5 text-center font-semibold transition-colors",
-                  period === "custom"
-                    ? "bg-[#006699] text-white"
-                    : "text-slate-600 hover:text-slate-900"
-                )}
-              >
-                Rango personalizado
-              </button>
+            <div className="grid grid-cols-2 items-stretch gap-1 rounded-xl bg-white p-1 text-[11px] shadow-sm sm:grid-cols-3 xl:inline-grid xl:grid-cols-6">
+              {[
+                { value: "today" as const, label: "Hoy" },
+                { value: "yesterday" as const, label: "Ayer" },
+                { value: "last7" as const, label: "Últimos 7 días" },
+                { value: "last30" as const, label: "Últimos 30 días" },
+                { value: "currentMonth" as const, label: "Mes actual" },
+                { value: "custom" as const, label: "Rango personalizado" },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => {
+                    setPeriod(option.value);
+                    if (option.value === "custom") {
+                      setCustomCalendarOpen(true);
+                    }
+                  }}
+                  className={cn(
+                    "rounded-lg px-3 py-1.5 text-center font-semibold transition-colors",
+                    period === option.value
+                      ? "bg-[#006699] text-white"
+                      : "text-slate-600 hover:text-slate-900"
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
             </div>
 
             {period === "custom" && (
-              <div className="flex flex-col gap-2 text-[11px] text-white/90 sm:flex-row sm:items-center">
-                <label className="flex items-center gap-1.5">
-                  <span>Desde</span>
-                  <input
-                    type="date"
-                    value={customFrom}
-                    onChange={(e) => setCustomFrom(e.target.value)}
-                    className="h-8 min-w-0 flex-1 rounded-md border border-white/20 bg-white px-2 text-slate-900 shadow-sm outline-none sm:flex-none"
+              <Popover open={customCalendarOpen} onOpenChange={setCustomCalendarOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex h-9 w-full items-center justify-between gap-3 rounded-xl border border-white/20 bg-white px-3 text-left text-xs font-semibold text-slate-900 shadow-sm transition hover:bg-slate-50 sm:w-[320px]"
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <CalendarIcon className="h-4 w-4 shrink-0 text-[#006699]" />
+                      <span className="truncate">
+                        {formatRangeDisplay(customFrom, customTo)}
+                      </span>
+                    </span>
+                    <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-[10px] uppercase tracking-wide text-slate-500">
+                      Rango
+                    </span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="end"
+                  className="w-auto overflow-hidden rounded-xl border-slate-200 p-0 shadow-2xl"
+                >
+                  <div className="border-b border-slate-200 px-4 py-3">
+                    <div className="text-sm font-semibold text-slate-950">
+                      Rango personalizado
+                    </div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      Selecciona fecha de inicio y fin.
+                    </div>
+                  </div>
+
+                  <Calendar
+                    mode="range"
+                    selected={selectedCustomRange}
+                    onSelect={(range) => {
+                      setCustomFrom(range?.from ? dateInputValue(range.from) : "");
+                      setCustomTo(range?.to ? dateInputValue(range.to) : "");
+                    }}
+                    numberOfMonths={1}
+                    captionLayout="dropdown"
+                    className="p-3"
                   />
-                </label>
-                <label className="flex items-center gap-1.5">
-                  <span>Hasta</span>
-                  <input
-                    type="date"
-                    value={customTo}
-                    onChange={(e) => setCustomTo(e.target.value)}
-                    className="h-8 min-w-0 flex-1 rounded-md border border-white/20 bg-white px-2 text-slate-900 shadow-sm outline-none sm:flex-none"
-                  />
-                </label>
-              </div>
+
+                  <div className="flex items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomFrom("");
+                        setCustomTo("");
+                      }}
+                      className="rounded-lg px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-white hover:text-slate-900"
+                    >
+                      Borrar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCustomCalendarOpen(false)}
+                      className="rounded-lg bg-[#006699] px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-[#00557f]"
+                    >
+                      Aplicar
+                    </button>
+                  </div>
+                </PopoverContent>
+              </Popover>
             )}
           </div>
         </div>
