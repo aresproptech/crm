@@ -198,6 +198,17 @@ type LeadActivityEvent = {
 const NOTE_PREFIX = "[NOTA]";
 const HISTORY_PREFIX = "[HISTORIAL]";
 const SYSTEM_MEMO_PREFIXES = ["[VALORACION]", "[R.G.]", HISTORY_PREFIX];
+const LEGACY_ACTIVITY_STARTS = [
+  "agrego-una-valoracion",
+  "agrego-una-r-g",
+  "agrego-un-encargo",
+  "agrego-una-visita",
+  "edito",
+  "elimino",
+  "registro-llamada",
+  "llamo-al-lead",
+  "cambio",
+];
 
 function parseStoredMemo(memo: string) {
   const trimmed = memo.trim();
@@ -231,9 +242,8 @@ function stripSystemMemoPrefix(memo: string, prefix: string) {
   return memo.replace(prefix, "").trim();
 }
 
-function parseSystemMemoDetail(memo: string, prefix: string) {
+function parseSystemMemoFields(memo: string, prefix: string) {
   const detail = stripSystemMemoPrefix(memo, prefix);
-  const match = detail.match(/^(.*?):\s*([\s\S]*)$/);
   const reservedLabels = new Set([
     "medio",
     "hora",
@@ -244,24 +254,32 @@ function parseSystemMemoDetail(memo: string, prefix: string) {
     "fecha",
   ]);
 
-  if (!match) {
-    return {
-      createdBy: "",
-      text: detail,
-    };
+  let body = detail;
+  let createdBy = "";
+  const authorMatch = body.match(/^(.*?):\s*([\s\S]*)$/);
+  if (authorMatch) {
+    const possibleAuthor = cleanUserDisplayName(authorMatch[1].trim());
+    if (!reservedLabels.has(normalizeBadgeKey(possibleAuthor))) {
+      createdBy = possibleAuthor;
+      body = authorMatch[2].trim();
+    }
   }
 
-  const possibleAuthor = cleanUserDisplayName(match[1].trim());
-  if (reservedLabels.has(normalizeBadgeKey(possibleAuthor))) {
-    return {
-      createdBy: "",
-      text: detail,
-    };
-  }
+  const [summaryLine, ...memoLines] = body.split("\n");
+  const fields = summaryLine.split("|").reduce<Record<string, string>>((acc, part) => {
+    const separatorIndex = part.indexOf(":");
+    if (separatorIndex === -1) return acc;
+
+    const key = normalizeBadgeKey(part.slice(0, separatorIndex).trim());
+    const value = part.slice(separatorIndex + 1).trim();
+    if (key) acc[key] = value;
+    return acc;
+  }, {});
 
   return {
-    createdBy: possibleAuthor,
-    text: match[2].trim(),
+    createdBy,
+    fields,
+    memo: memoLines.join("\n").trim(),
   };
 }
 
@@ -270,12 +288,18 @@ function buildEventDateLabel(value: string | null | undefined) {
   return formatted && formatted !== "—" ? ` para el ${formatted}` : "";
 }
 
+function isLegacyActivityMemo(memo: string) {
+  const key = normalizeBadgeKey(memo.trim());
+  return LEGACY_ACTIVITY_STARTS.some((prefix) => key.startsWith(prefix));
+}
+
 function isManualNoteMemo(memo: string) {
   const trimmed = memo.trim();
   return (
     Boolean(trimmed) &&
-    (!SYSTEM_MEMO_PREFIXES.some((prefix) => trimmed.startsWith(prefix)) ||
-      trimmed.startsWith(NOTE_PREFIX))
+    (trimmed.startsWith(NOTE_PREFIX) ||
+      (!SYSTEM_MEMO_PREFIXES.some((prefix) => trimmed.startsWith(prefix)) &&
+        !isLegacyActivityMemo(trimmed)))
   );
 }
 
@@ -647,6 +671,43 @@ function statusValueFromLabel(label: string) {
   );
 }
 
+function historyDisplayValue(value: unknown) {
+  const displayed = displayValue(value);
+  return displayed === "—" ? "sin dato" : displayed;
+}
+
+function historyDateValue(value: string | null | undefined) {
+  const formatted = fmtDate(dateOnlyValue(value));
+  return formatted === "—" ? "sin fecha" : formatted;
+}
+
+function historyMoneyValue(value: unknown) {
+  const displayed = displayMoney(value);
+  return displayed === "—" ? "sin dato" : displayed;
+}
+
+function historyPercentValue(value: unknown) {
+  const displayed = percentageValue(value);
+  return displayed === "—" ? "sin dato" : displayed;
+}
+
+function buildHistoryChangeLines(
+  changes: Array<{
+    label: string;
+    before: unknown;
+    after: unknown;
+    format?: (value: unknown) => string;
+  }>
+) {
+  return changes.flatMap((change) => {
+    const formatter = change.format ?? historyDisplayValue;
+    const before = formatter(change.before);
+    const after = formatter(change.after);
+    if (before === after) return [];
+    return [`${change.label} cambió de ${before} a ${after}`];
+  });
+}
+
 
 function getPlanningLabel(dateValue: string | null | undefined) {
   if (!dateValue) return "Sin fecha";
@@ -717,9 +778,14 @@ function daysSince(value: string | null | undefined) {
 
 function lastCallLabel(days: number | null) {
   if (days === null) return "Sin llamadas";
-  if (days === 0) return "0 días";
-  if (days === 1) return "1 día";
-  return `${days} días`;
+  if (days === 0) return "Hoy";
+  if (days === 1) return "Ayer";
+  return `Hace ${days} días`;
+}
+
+function isCallActivityText(text: string) {
+  const key = normalizeBadgeKey(text);
+  return key.startsWith("llamo-al-lead") || key.startsWith("registro-llamada");
 }
 
 function monthValue(value: string | null | undefined) {
@@ -1408,31 +1474,56 @@ export function LeadDetailPanel({
         }
 
         if (memo.startsWith("[VALORACION]")) {
-          const detail = parseSystemMemoDetail(memo, "[VALORACION]");
+          const detail = parseSystemMemoFields(memo, "[VALORACION]");
+          const medio = detail.fields.medio || "";
+          const hora = detail.fields.hora || "";
+          const details = [medio, hora ? `Hora: ${hora}` : ""].filter(Boolean).join(" | ");
           return [
             {
               id: String(row.id),
               leadId,
               createdAt,
-              createdBy: detail.createdBy || currentUserName || parsed.createdBy,
+              createdBy: detail.createdBy || parsed.createdBy,
               text: `Agregó una valoración${buildEventDateLabel(row.fecha)}${
-                detail.text ? `: ${detail.text}` : ""
+                details ? `: ${details}` : ""
               }`,
             },
           ];
         }
 
         if (memo.startsWith("[R.G.]")) {
-          const detail = parseSystemMemoDetail(memo, "[R.G.]");
+          const detail = parseSystemMemoFields(memo, "[R.G.]");
+          const medio = detail.fields.medio || "";
+          const resultado = detail.fields.resultado || "";
+          const hora = detail.fields.hora || "";
+          const details = [
+            medio,
+            resultado ? `Resultado: ${resultado}` : "",
+            hora ? `Hora: ${hora}` : "",
+          ]
+            .filter(Boolean)
+            .join(" | ");
           return [
             {
               id: String(row.id),
               leadId,
               createdAt,
-              createdBy: detail.createdBy || currentUserName || parsed.createdBy,
+              createdBy: detail.createdBy || parsed.createdBy,
               text: `Agregó una R.G.${buildEventDateLabel(row.fecha)}${
-                detail.text ? `: ${detail.text}` : ""
+                details ? `: ${details}` : ""
               }`,
+            },
+          ];
+        }
+
+        if (isLegacyActivityMemo(memo)) {
+          return [
+            {
+              id: String(row.id),
+              leadId,
+              createdAt,
+              createdBy: parsed.createdBy,
+              text: memo,
             },
           ];
         }
@@ -1713,6 +1804,10 @@ export function LeadDetailPanel({
 
     setEncargoSaving(true);
     setEncargoError(null);
+    const wasEditing = Boolean(editingOrderId);
+    const previousOrder = wasEditing
+      ? orders.find((order) => String(persistedRowId(order.id)) === String(editingOrderId))
+      : null;
 
     const payload = {
       opportunity_id: Number(effectiveLead.id),
@@ -1741,10 +1836,67 @@ export function LeadDetailPanel({
       return;
     }
 
-    const wasEditing = Boolean(editingOrderId);
+    const encargoChanges = previousOrder
+      ? buildHistoryChangeLines([
+          {
+            label: "Fecha inicio",
+            before: previousOrder.fecha_inicio,
+            after: payload.fecha_inicio,
+            format: (value) => historyDateValue(value as string | null | undefined),
+          },
+          {
+            label: "Fecha fin",
+            before: previousOrder.fecha_fin,
+            after: payload.fecha_fin,
+            format: (value) => historyDateValue(value as string | null | undefined),
+          },
+          {
+            label: "PVP inicial",
+            before: previousOrder.pvp_inicial,
+            after: payload.pvp_inicial,
+            format: historyMoneyValue,
+          },
+          {
+            label: "PVP actual",
+            before: previousOrder.pvp_actual,
+            after: payload.pvp_actual,
+            format: historyMoneyValue,
+          },
+          {
+            label: "PVP estimado",
+            before: previousOrder.pvp_estimado,
+            after: payload.pvp_estimado,
+            format: historyMoneyValue,
+          },
+          {
+            label: "Comisión vendedor",
+            before: previousOrder.com_vendedor,
+            after: payload.com_vendedor,
+            format: historyPercentValue,
+          },
+          {
+            label: "Comisión comprador",
+            before: previousOrder.com_comprador,
+            after: payload.com_comprador,
+            format: historyPercentValue,
+          },
+          {
+            label: "Memo",
+            before: previousOrder.memo,
+            after: payload.memo,
+          },
+        ])
+      : [];
+
     resetEncargoForm();
     setOrderModalOpen(false);
-    await persistActivity(wasEditing ? "Editó un encargo" : "Agregó un encargo");
+    await persistActivity(
+      wasEditing
+        ? `Editó un encargo${
+            encargoChanges.length ? `:\n${encargoChanges.join("\n")}` : " sin cambios visibles"
+          }`
+        : "Agregó un encargo"
+    );
     await loadObservations(effectiveLead.id);
     await loadRelatedData(effectiveLead.id);
   }
@@ -1759,6 +1911,10 @@ export function LeadDetailPanel({
 
     setRgSaving(true);
     setRgError(null);
+    const wasEditing = Boolean(editingRgId);
+    const previousRg = wasEditing
+      ? rgHistoryEvents.find((event) => String(persistedRowId(event.id)) === String(editingRgId))
+      : null;
 
     const resultadoLabel =
       LEAD_DETAIL_STATUS_OPTIONS.find((option) => option.value === rgForm.resultado)
@@ -1790,11 +1946,29 @@ export function LeadDetailPanel({
       return;
     }
 
-    const wasEditing = Boolean(editingRgId);
+    const rgChanges = previousRg
+      ? buildHistoryChangeLines([
+          {
+            label: "Fecha",
+            before: previousRg.fecha,
+            after: rgForm.fecha,
+            format: (value) => historyDateValue(value as string | null | undefined),
+          },
+          { label: "Hora", before: previousRg.hora, after: rgForm.hora },
+          { label: "Medio", before: previousRg.medio, after: rgForm.medio || "—" },
+          { label: "Resultado", before: previousRg.resultado, after: resultadoLabel },
+          { label: "Memo", before: previousRg.memo, after: rgForm.memo.trim() },
+        ])
+      : [];
+
     resetRgForm();
     setRgModalOpen(false);
     if (wasEditing) {
-      await persistActivity("Editó una R.G.");
+      await persistActivity(
+        `Editó una R.G.${buildEventDateLabel(rgForm.fecha)}${
+          rgChanges.length ? `:\n${rgChanges.join("\n")}` : " sin cambios visibles"
+        }`
+      );
     }
     await loadRgEntries(effectiveLead.id);
     await loadObservations(effectiveLead.id);
@@ -1810,6 +1984,12 @@ export function LeadDetailPanel({
 
     setValuationSaving(true);
     setValuationError(null);
+    const wasEditing = Boolean(editingValuationId);
+    const previousValuation = wasEditing
+      ? valuationHistoryEvents.find(
+          (event) => String(persistedRowId(event.id)) === String(editingValuationId)
+        )
+      : null;
 
     const summaryLine = `[VALORACION] ${currentUserName || "Usuario"}: Medio: ${
       valuationForm.medio || "—"
@@ -1837,11 +2017,33 @@ export function LeadDetailPanel({
       return;
     }
 
-    const wasEditing = Boolean(editingValuationId);
+    const valuationChanges = previousValuation
+      ? buildHistoryChangeLines([
+          {
+            label: "Fecha",
+            before: previousValuation.fecha,
+            after: valuationForm.fecha,
+            format: (value) => historyDateValue(value as string | null | undefined),
+          },
+          { label: "Hora", before: previousValuation.hora, after: valuationForm.hora },
+          {
+            label: "Medio",
+            before: previousValuation.medio,
+            after: valuationForm.medio || "—",
+          },
+        ])
+      : [];
+
     resetValuationForm();
     setValuationModalOpen(false);
     if (wasEditing) {
-      await persistActivity("Editó una valoración");
+      await persistActivity(
+        `Editó una valoración${buildEventDateLabel(valuationForm.fecha)}${
+          valuationChanges.length
+            ? `:\n${valuationChanges.join("\n")}`
+            : " sin cambios visibles"
+        }`
+      );
     }
     await loadValuationEntries(effectiveLead.id);
     await loadObservations(effectiveLead.id);
@@ -1857,22 +2059,19 @@ export function LeadDetailPanel({
 
   const parsedRgEntries: RgHistoryEvent[] = rgEntries.map((row, index) => {
     const memoText = row.memo?.trim() || "";
-    const [summaryLine, ...rest] = memoText.split("\n");
-    const match = summaryLine.match(
-      /^\[R\.G\.\] Medio: (.*?) \| Resultado: (.*?)(?: \| Hora: (.*))?$/
-    );
+    const detail = parseSystemMemoFields(memoText, "[R.G.]");
 
     return {
       id: String(row.id),
       numero: rgEntries.length - index,
       fecha: row.fecha || row.created_at || "",
-      hora: match?.[3] || "",
-      medio: match?.[1] || "—",
-      resultado: match?.[2] || "—",
+      hora: detail.fields.hora || "",
+      medio: detail.fields.medio || "—",
+      resultado: detail.fields.resultado || "—",
       dominio: getLeadDominio(effectiveLead) || "—",
       planner: effectiveLead.planner || "—",
       owner: effectiveLead.owner || "—",
-      memo: rest.join("\n").trim(),
+      memo: detail.memo,
     };
   });
 
@@ -1899,21 +2098,19 @@ export function LeadDetailPanel({
   const parsedValuationEntries: ValuationHistoryEvent[] = valuationEntries.map(
     (row, index) => {
       const memoText = row.memo?.trim() || "";
-      const match = memoText.match(
-        /^\[VALORACION\] Medio: (.*?)(?: \| Hora: (.*))?$/
-      );
+      const detail = parseSystemMemoFields(memoText, "[VALORACION]");
 
       return {
         id: String(row.id),
         numero: valuationEntries.length - index,
         fecha: row.fecha || row.created_at || "",
-        hora: match?.[2] || "",
-        medio: match?.[1] || "—",
+        hora: detail.fields.hora || "",
+        medio: detail.fields.medio || "—",
         planner: effectiveLead.planner || "—",
         owner: effectiveLead.owner || "—",
         dominio: getLeadDominio(effectiveLead) || "—",
         resultado: statusLabel(effectiveLead.status),
-        memo: "",
+        memo: detail.memo,
       };
     }
   );
@@ -1941,10 +2138,8 @@ export function LeadDetailPanel({
     ...legacyValuationEvent,
   ];
 
-  const lastCallEvent =
-    activityEvents.find((event) =>
-      normalizeBadgeKey(event.text).startsWith("llamo-al-lead")
-    ) || null;
+  const callEvents = activityEvents.filter((event) => isCallActivityText(event.text));
+  const lastCallEvent = callEvents[0] || null;
   const lastCallDays = daysSince(lastCallEvent?.createdAt);
 
   return (
@@ -2120,6 +2315,12 @@ export function LeadDetailPanel({
                               {fmtDateTimeShort(lastCallEvent.createdAt)}
                             </span>
                           ) : null}
+                        </SmallDataCard>
+                        <SmallDataCard label="Llamadas realizadas">
+                          <span>{callEvents.length}</span>
+                          <span className="mt-1 block text-xs text-muted-foreground">
+                            {callEvents.length === 1 ? "registrada" : "registradas"}
+                          </span>
                         </SmallDataCard>
                         <SmallDataCard label="Valor">
                           {effectiveLead.valor || "—"}
