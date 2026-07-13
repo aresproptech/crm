@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Lead } from "@/lib/crm-data";
+import { parseOpportunityContactMemo } from "@/lib/opportunity-contact-memo";
 
 type CrmLeadRow = {
   id: number;
@@ -41,6 +42,26 @@ type PlanningItem = {
   owner: string;
 };
 
+type PlanningLead = Lead & {
+  dominio: string;
+};
+
+type ContactPlanningRow = {
+  id: number;
+  opportunity_id: number;
+  fecha: string | null;
+  memo: string | null;
+  created_at: string | null;
+};
+
+type VisitPlanningRow = {
+  id: number;
+  opportunity_id: number | null;
+  fecha_visita: string | null;
+  hora: string | null;
+  created_at: string | null;
+};
+
 function fmt(d: string) {
   if (!d) return "—";
   const parsed = new Date(d);
@@ -64,11 +85,8 @@ function normalizePhase(raw: string | null | undefined): Lead["phase"] {
   return "identificada";
 }
 
-function mapCrmLeadToLead(row: CrmLeadRow): Lead {
-  const ownerLabel =
-    row.comercial_name?.trim() ||
-    row.contact_name?.trim() ||
-    "Sin asignar";
+function mapCrmLeadToLead(row: CrmLeadRow): PlanningLead {
+  const ownerLabel = row.comercial_name?.trim() || "Sin asignar";
 
   const domicilio = row.domicilio?.trim() || "—";
   const distrito = row.distrito?.trim() || "—";
@@ -92,7 +110,7 @@ function mapCrmLeadToLead(row: CrmLeadRow): Lead {
     fechaContacto: "",
     fechaValoracion: row.fecha || row.created_at || "",
     hora: "",
-    planner: row.dominio_desc?.trim() || "—",
+    planner: row.contact_name?.trim() || "—",
     owner: ownerLabel,
     createdAt: row.created_at || "",
     assignedUser: ownerLabel,
@@ -102,6 +120,7 @@ function mapCrmLeadToLead(row: CrmLeadRow): Lead {
         : "—",
     notes: row.memo?.trim() || "",
     observaciones: [],
+    dominio: row.dominio_desc?.trim() || "—",
   };
 }
 
@@ -136,74 +155,107 @@ export default function PlanningPage() {
     async function loadPlanning() {
       setLoading(true);
 
-      const { data, error } = await supabase
-        .from("crm_leads_view")
-        .select("*")
-        .order("created_at", { ascending: false });
+      const [leadsResult, valuationsResult, rgResult, visitsResult] = await Promise.all([
+        supabase.from("crm_leads_view").select("*").order("created_at", { ascending: false }),
+        supabase
+          .from("opportunity_contacts")
+          .select("id, opportunity_id, fecha, memo, created_at")
+          .ilike("memo", "[VALORACION]%"),
+        supabase
+          .from("opportunity_contacts")
+          .select("id, opportunity_id, fecha, memo, created_at")
+          .ilike("memo", "[R.G.]%"),
+        supabase
+          .from("visitas")
+          .select("id, opportunity_id, fecha_visita, hora, created_at"),
+      ]);
 
-      if (error) {
-        console.error("Supabase planning error:", error);
+      if (leadsResult.error) {
+        console.error("Supabase planning leads error:", leadsResult.error);
         setLoading(false);
         return;
       }
 
-      const mapped = (data ?? []).map((row) =>
-        mapCrmLeadToLead(row as CrmLeadRow)
-      );
+      if (valuationsResult.error || rgResult.error || visitsResult.error) {
+        console.error("Supabase planning activity error:", {
+          valuations: valuationsResult.error,
+          rg: rgResult.error,
+          visits: visitsResult.error,
+        });
+        setLoading(false);
+        return;
+      }
+
+      const leadsMap = new Map<number, PlanningLead>();
+      for (const row of leadsResult.data ?? []) {
+        const lead = mapCrmLeadToLead(row as CrmLeadRow);
+        leadsMap.set(Number(lead.id), lead);
+      }
 
       const planningItems: PlanningItem[] = [];
 
-      mapped.forEach((lead) => {
-        if (lead.phase === "cualificada" || lead.phase === "valorada") {
-          planningItems.push({
-            id: `valoracion-${lead.id}`,
-            planning: getPlanningLabel(
-              lead.fechaValoracion || lead.fechaNoticia,
-              "Valoración"
-            ),
-            fecha: lead.fechaValoracion || lead.fechaNoticia,
-            hora: lead.hora || "",
-            tipo: "Valoración",
-            inmueble: lead.address,
-            propietario: lead.ownerName,
-            telefono: lead.phone,
-            equipo: lead.planner || "—",
-            planner: lead.planner || "—",
-            owner: lead.owner,
-          });
-        }
+      function addPlanningItem(
+        id: string,
+        opportunityId: number,
+        tipo: PlanningItem["tipo"],
+        fecha: string,
+        hora: string
+      ) {
+        const lead = leadsMap.get(opportunityId);
+        if (!lead) return;
 
-        if (lead.phase === "cualificada" || lead.phase === "encargo") {
-          planningItems.push({
-            id: `rg-${lead.id}`,
-            planning: getPlanningLabel(lead.fechaNoticia, "R.G."),
-            fecha: lead.fechaNoticia,
-            hora: lead.hora || "",
-            tipo: "R.G.",
-            inmueble: lead.address,
-            propietario: lead.ownerName,
-            telefono: lead.phone,
-            equipo: lead.planner || "—",
-            planner: lead.planner || "—",
-            owner: lead.owner,
-          });
-        }
+        planningItems.push({
+          id,
+          planning: getPlanningLabel(fecha, tipo),
+          fecha,
+          hora,
+          tipo,
+          inmueble: lead.address,
+          propietario: lead.ownerName,
+          telefono: lead.phone,
+          equipo: lead.dominio,
+          planner: lead.planner || "—",
+          owner: lead.owner,
+        });
+      }
 
-        if (lead.phase === "encargo") {
-          planningItems.push({
-            id: `visita-${lead.id}`,
-            planning: getPlanningLabel(lead.fechaNoticia, "Visita"),
-            fecha: lead.fechaNoticia,
-            hora: lead.hora || "",
-            tipo: "Visita",
-            inmueble: lead.address,
-            propietario: lead.ownerName,
-            telefono: lead.phone,
-            equipo: lead.planner || "—",
-            planner: lead.planner || "—",
-            owner: lead.owner,
-          });
-        }
+      for (const row of (valuationsResult.data ?? []) as ContactPlanningRow[]) {
+        const { fields } = parseOpportunityContactMemo(row.memo, "[VALORACION]");
+        addPlanningItem(
+          `valoracion-${row.id}`,
+          row.opportunity_id,
+          "Valoración",
+          row.fecha || row.created_at || "",
+          fields.hora || ""
+        );
+      }
+
+      for (const row of (rgResult.data ?? []) as ContactPlanningRow[]) {
+        const { fields } = parseOpportunityContactMemo(row.memo, "[R.G.]");
+        addPlanningItem(
+          `rg-${row.id}`,
+          row.opportunity_id,
+          "R.G.",
+          row.fecha || row.created_at || "",
+          fields.hora || ""
+        );
+      }
+
+      for (const row of (visitsResult.data ?? []) as VisitPlanningRow[]) {
+        if (row.opportunity_id === null) continue;
+        addPlanningItem(
+          `visita-${row.id}`,
+          row.opportunity_id,
+          "Visita",
+          row.fecha_visita || row.created_at || "",
+          row.hora || ""
+        );
+      }
+
+      planningItems.sort((a, b) => {
+        const aTime = new Date(a.fecha || 0).getTime();
+        const bTime = new Date(b.fecha || 0).getTime();
+        return aTime - bTime;
       });
 
       setItems(planningItems);

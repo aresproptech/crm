@@ -73,6 +73,74 @@ type EncargoItem = {
   memo: string;
 };
 
+function encargoDateValue(value: string | null) {
+  if (!value) return "—";
+  const parsed = new Date(`${value.slice(0, 10)}T00:00:00`);
+  if (isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString("es-ES");
+}
+
+function encargoMoneyValue(value: number | null) {
+  if (value === null) return "—";
+  return new Intl.NumberFormat("es-ES", {
+    style: "currency",
+    currency: "EUR",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function encargoPercentValue(value: number | null) {
+  return value === null ? "—" : `${value}%`;
+}
+
+function buildEncargoChangeLines(
+  previous: EncargoItem,
+  next: {
+    fecha_inicio: string | null;
+    fecha_fin: string | null;
+    pvp_inicial: number | null;
+    pvp_actual: number | null;
+    pvp_estimado: number | null;
+    com_vendedor: number | null;
+    com_comprador: number | null;
+    memo: string | null;
+    rebajas: number;
+  }
+) {
+  const changes: string[] = [];
+  const addChange = <T,>(label: string, before: T, after: T, format: (value: T) => string) => {
+    if (before === after) return;
+    changes.push(`${label}: de ${format(before)} a ${format(after)}`);
+  };
+
+  addChange(
+    "Fecha inicio",
+    previous.fecha_inicio || null,
+    next.fecha_inicio,
+    encargoDateValue
+  );
+  addChange("Fecha fin", previous.fecha_fin || null, next.fecha_fin, encargoDateValue);
+  addChange("PVP inicial", previous.pvp_inicial, next.pvp_inicial, encargoMoneyValue);
+  addChange("PVP actual", previous.pvp_actual, next.pvp_actual, encargoMoneyValue);
+  addChange("PVP estimado", previous.pvp_estimado, next.pvp_estimado, encargoMoneyValue);
+  addChange(
+    "Comisión vendedor",
+    previous.com_vendedor,
+    next.com_vendedor,
+    encargoPercentValue
+  );
+  addChange(
+    "Comisión comprador",
+    previous.com_comprador,
+    next.com_comprador,
+    encargoPercentValue
+  );
+  addChange("Memo", previous.memo || null, next.memo, (value) => value || "—");
+  addChange("Rebajas", previous.rebajas, next.rebajas, String);
+
+  return changes;
+}
+
 function getHealthConfig(health: number | null): { label: string; className: string } {
   if (health === null) {
     return {
@@ -701,6 +769,8 @@ export default function EncargosPage() {
       memo: editForm.memo.trim() || null,
       rebajas: nextRebajas,
     };
+    const isEditing = Boolean(selected && selected.orderId !== null);
+    const changes = isEditing ? buildEncargoChangeLines(activeItem, payload) : [];
 
     let error;
 
@@ -727,7 +797,11 @@ export default function EncargosPage() {
 
     await persistLeadActivity(
       activeItem.leadId,
-      selected && selected.orderId !== null ? "Editó un encargo" : "Agregó un encargo"
+      isEditing
+        ? `Editó un encargo${
+            changes.length ? `:\n${changes.join("\n")}` : " sin cambios visibles"
+          }`
+        : "Agregó un encargo"
     );
 
     setEditOpen(false);

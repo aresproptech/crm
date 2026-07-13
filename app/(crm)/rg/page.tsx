@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Lead } from "@/lib/crm-data";
+import { parseOpportunityContactMemo } from "@/lib/opportunity-contact-memo";
 
 type CrmLeadRow = {
   id: number;
@@ -132,15 +133,12 @@ type RgEntry = {
 };
 
 function parseRgMemo(memo: string | null | undefined) {
-  const text = (memo || "").trim();
-  const match = text.match(
-    /^\[R\.G\.\] Medio: (.*?) \| Resultado: (.*?)(?: \| Hora: (.*))?$/
-  );
+  const { fields } = parseOpportunityContactMemo(memo, "[R.G.]");
 
   return {
-    medio: match?.[1] && match[1] !== "—" ? match[1] : "",
-    resultado: match?.[2] && match[2] !== "—" ? match[2] : "",
-    hora: match?.[3] || "",
+    medio: fields.medio && fields.medio !== "—" ? fields.medio : "",
+    resultado: fields.resultado && fields.resultado !== "—" ? fields.resultado : "",
+    hora: fields.hora || "",
   };
 }
 

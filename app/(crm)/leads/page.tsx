@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { type Lead, PHASE_LABELS } from "@/lib/crm-data";
+import { useUser } from "@/lib/hooks/useUser";
 import {
   Dialog,
   DialogContent,
@@ -669,6 +670,7 @@ function mapCrmLeadToLead(row: CrmLeadRow): LeadTableRow {
 }
 
 export default function LeadsPage() {
+  const { userWithRole } = useUser();
   const [phaseIdMap, setPhaseIdMap] =
     useState<Partial<Record<Lead["phase"], number>>>({});
   const [modalOpen, setModalOpen] = useState(false);
@@ -752,10 +754,11 @@ export default function LeadsPage() {
   }
 
   async function persistLeadActivity(leadId: string, text: string) {
+    const createdBy = userWithRole?.crmUser.name?.trim() || "Usuario";
     const { error } = await supabase.from("opportunity_contacts").insert({
       opportunity_id: Number(leadId),
       fecha: new Date().toISOString().slice(0, 10),
-      memo: `${HISTORY_PREFIX} Usuario: ${text}`,
+      memo: `${HISTORY_PREFIX} ${createdBy}: ${text}`,
       resultado: true,
     });
 

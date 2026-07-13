@@ -596,6 +596,22 @@ function phaseLabel(value: string) {
 
 function fieldDisplayName(field: keyof LeadWithDominio): string {
   switch (field) {
+    case "ownerName":
+      return "Propietario";
+    case "phone":
+      return "Teléfono";
+    case "address":
+      return "Domicilio";
+    case "distrito":
+      return "Distrito";
+    case "municipio":
+      return "Municipio";
+    case "provincia":
+      return "Provincia";
+    case "cp":
+      return "CP";
+    case "source":
+      return "Origen";
     case "status":
       return "Estado";
     case "phase":
@@ -604,6 +620,8 @@ function fieldDisplayName(field: keyof LeadWithDominio): string {
       return "Valor";
     case "fechaNoticia":
       return "Fecha noticia";
+    case "fechaContacto":
+      return "Fecha contacto";
     case "fechaValoracion":
       return "Fecha valoración";
     case "hora":
@@ -618,6 +636,8 @@ function fieldDisplayName(field: keyof LeadWithDominio): string {
       return "En Venta";
     case "dominio":
       return "Dominio";
+    case "notes":
+      return "Notas";
     default:
       return String(field);
   }
@@ -627,7 +647,11 @@ function formatFieldValue(field: keyof LeadWithDominio, value: string) {
   if (!value) return "—";
   if (field === "status") return statusLabel(value);
   if (field === "phase") return phaseLabel(value);
-  if (field === "fechaNoticia" || field === "fechaValoracion") {
+  if (
+    field === "fechaNoticia" ||
+    field === "fechaContacto" ||
+    field === "fechaValoracion"
+  ) {
     return fmtShort(value);
   }
   return value;
@@ -1592,9 +1616,19 @@ export function LeadDetailPanel({
 
   function buildFieldChangeEvents(prev: LeadWithDominio, next: LeadWithDominio) {
     const tracked: Array<keyof LeadWithDominio> = [
+      "ownerName",
+      "phone",
+      "address",
+      "distrito",
+      "municipio",
+      "provincia",
+      "cp",
       "valor",
+      "source",
       "phase",
       "status",
+      "fechaNoticia",
+      "fechaContacto",
       "fechaValoracion",
       "hora",
       "medio",
@@ -1602,6 +1636,7 @@ export function LeadDetailPanel({
       "dominio",
       "owner",
       "enVenta",
+      "notes",
     ];
 
     return tracked.flatMap((field) => {

@@ -140,6 +140,36 @@ function visitaToForm(v: Visita): VisitaForm {
   };
 }
 
+function visitHistoryValue(field: keyof VisitaForm, value: string) {
+  if (!value) return "—";
+  if (field === "vende") return value === "si" ? "Sí" : value === "no" ? "No" : "—";
+  if (field === "fecha_visita") return fmt(value);
+  return value;
+}
+
+function buildVisitChangeLines(previous: VisitaForm, next: VisitaForm) {
+  const tracked: Array<{ field: keyof VisitaForm; label: string }> = [
+    { field: "fecha_visita", label: "Fecha" },
+    { field: "hora", label: "Hora" },
+    { field: "buyer", label: "Buyer" },
+    { field: "nombre_apellido", label: "Nombre y apellido" },
+    { field: "telefono", label: "Teléfono" },
+    { field: "dni", label: "DNI" },
+    { field: "vende", label: "Vende" },
+    { field: "observaciones_visita", label: "Observaciones" },
+  ];
+
+  return tracked.flatMap(({ field, label }) => {
+    const before = previous[field].trim();
+    const after = next[field].trim();
+    if (before === after) return [];
+
+    return [
+      `${label}: de ${visitHistoryValue(field, before)} a ${visitHistoryValue(field, after)}`,
+    ];
+  });
+}
+
 export default function VisitasPage() {
   const { userWithRole } = useUser();
   const [visitas, setVisitas] = useState<Visita[]>([]);
@@ -285,6 +315,7 @@ export default function VisitasPage() {
   async function handleUpdateVisita() {
     if (!selectedVisita) return;
     setSaving(true);
+    const changes = buildVisitChangeLines(visitaToForm(selectedVisita), editForm);
 
     const { error } = await supabase
       .from("visitas")
@@ -304,7 +335,12 @@ export default function VisitasPage() {
     if (error) { console.error("Error actualizando visita:", error); return; }
 
     if (selectedVisita.opportunity_id !== null) {
-      await persistLeadActivity(selectedVisita.opportunity_id, "Editó una visita");
+      await persistLeadActivity(
+        selectedVisita.opportunity_id,
+        `Editó una visita${
+          changes.length ? `:\n${changes.join("\n")}` : " sin cambios visibles"
+        }`
+      );
     }
     setEditModalOpen(false);
     setSelectedVisita(null);

@@ -146,6 +146,12 @@ type VisitActivityRow = {
   created_at: string | null;
 };
 
+type CrmProfileRow = {
+  name: string | null;
+  rol: string | null;
+  is_visitador: boolean | null;
+};
+
 type CommercialPerformance = {
   name: string;
   total: number;
@@ -744,6 +750,7 @@ export default function DashboardPage() {
   const [contacts, setContacts] = useState<OpportunityContactRow[]>([]);
   const [orders, setOrders] = useState<OpportunityOrderRow[]>([]);
   const [visits, setVisits] = useState<VisitActivityRow[]>([]);
+  const [visitadorKeys, setVisitadorKeys] = useState<Set<string>>(new Set());
   const [crmLeadsLoading, setCrmLeadsLoading] = useState(true);
 
   useEffect(() => {
@@ -814,6 +821,39 @@ export default function DashboardPage() {
     }
 
     fetchActivityData();
+  }, [userLoading, userWithRole]);
+
+  useEffect(() => {
+    async function fetchVisitadores() {
+      if (userLoading || !userWithRole?.crmUser) return;
+
+      const ownVisitadorKey = userWithRole.crmUser.is_visitador
+        ? normalizePersonKey(userWithRole.crmUser.name)
+        : "";
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("name, rol, is_visitador")
+        .eq("is_visitador", true);
+
+      if (error) {
+        console.error("Supabase visitadores error:", error);
+        setVisitadorKeys(new Set(ownVisitadorKey ? [ownVisitadorKey] : []));
+        return;
+      }
+
+      const keys = new Set<string>();
+      if (ownVisitadorKey) keys.add(ownVisitadorKey);
+
+      ((data ?? []) as CrmProfileRow[]).forEach((profile) => {
+        const key = normalizePersonKey(profile.name);
+        if (key) keys.add(key);
+      });
+
+      setVisitadorKeys(keys);
+    }
+
+    fetchVisitadores();
   }, [userLoading, userWithRole]);
 
   const currentRange = useMemo(() => {
@@ -1024,6 +1064,9 @@ export default function DashboardPage() {
   const excludedManagerKey = canViewTeamDashboard
     ? normalizePersonKey(userWithRole?.crmUser.name)
     : "";
+  const isExcludedCommercialKey = (key: string) =>
+    Boolean(key) &&
+    ((canViewTeamDashboard && key === excludedManagerKey) || visitadorKeys.has(key));
 
   useEffect(() => {
     if (!canViewTeamDashboard && activeDashboardTab === "commercials") {
@@ -1039,7 +1082,7 @@ export default function DashboardPage() {
       const key = normalizePersonKey(name);
 
       if (!key || key === "sin comercial") continue;
-      if (canViewTeamDashboard && key === excludedManagerKey) continue;
+      if (isExcludedCommercialKey(key)) continue;
 
       const row = map.get(key) ?? { name, activa: 0, caliente: 0, total: 0 };
       if (lead.status === "activa") row.activa += 1;
@@ -1049,7 +1092,7 @@ export default function DashboardPage() {
     }
 
     return [...map.values()].sort((a, b) => b.total - a.total);
-  }, [canViewTeamDashboard, currentLeads, excludedManagerKey]);
+  }, [currentLeads, excludedManagerKey, visitadorKeys]);
   const sourceStatusRows = useMemo<StatusBreakdownRow[]>(() => {
     const map = new Map<string, StatusBreakdownRow>();
 
@@ -1078,7 +1121,7 @@ export default function DashboardPage() {
       const name = lead.commercialName.trim();
       const key = normalizePersonKey(name);
 
-      if (!key || key === "sin comercial" || key === excludedManagerKey) continue;
+      if (!key || key === "sin comercial" || isExcludedCommercialKey(key)) continue;
 
       const row =
         map.get(key) ??
@@ -1107,7 +1150,7 @@ export default function DashboardPage() {
       if (b.valorada !== a.valorada) return b.valorada - a.valorada;
       return b.total - a.total;
     });
-  }, [canViewTeamDashboard, commercialLeads, excludedManagerKey]);
+  }, [canViewTeamDashboard, commercialLeads, excludedManagerKey, visitadorKeys]);
   const leadById = useMemo(() => {
     const map = new Map<string, DashboardLead>();
     allLeads.forEach((lead) => map.set(lead.id, lead));
@@ -1121,7 +1164,7 @@ export default function DashboardPage() {
         const name = lead.commercialName.trim();
         const key = normalizePersonKey(name);
 
-        if (!key || key === "sin comercial" || key === excludedManagerKey) return null;
+        if (!key || key === "sin comercial" || isExcludedCommercialKey(key)) return null;
         if (!matchesDomainFilter(lead.domain, commercialDomainFilter)) return null;
 
         const existing = rows.get(key);
@@ -1191,6 +1234,7 @@ export default function DashboardPage() {
     leadById,
     orders,
     visits,
+    visitadorKeys,
   ]);
   const todayActivityDate = relativeDateKey(0);
   const yesterdayActivityDate = relativeDateKey(-1);

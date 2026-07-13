@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { Search, Circle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PHASE_LABELS, type Lead } from "@/lib/crm-data";
+import { parseOpportunityContactMemo } from "@/lib/opportunity-contact-memo";
 
 type CrmLeadRow = {
   id: number;
@@ -62,11 +63,10 @@ type ValoracionEntry = {
 };
 
 function parseValuationMemo(memo: string | null | undefined) {
-  const text = (memo || "").trim();
-  const match = text.match(/^\[VALORACION\] Medio: (.*?)(?: \| Hora: (.*))?$/);
-  const medio = match?.[1] && match[1] !== "—" ? match[1] : "";
+  const { fields } = parseOpportunityContactMemo(memo, "[VALORACION]");
+  const medio = fields.medio && fields.medio !== "—" ? fields.medio : "";
 
-  return { medio, hora: match?.[2] || "" };
+  return { medio, hora: fields.hora || "" };
 }
 
 const STATUS_CONFIG: Record<string, { label: string; dot: string }> = {

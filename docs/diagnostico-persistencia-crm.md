@@ -75,19 +75,51 @@ La tabla `opportunity_contacts` guarda varias cosas distintas:
 - R.G.
 - Eventos generados por acciones.
 
-Funciona, pero a futuro puede volverse dificil de mantener porque una misma tabla representa varios tipos de informacion.
+Estado: revisado y corregido sin crear tablas ni modificar registros existentes.
 
-La mejora ideal seria separar o tipificar mejor los eventos, por ejemplo con un campo claro de tipo:
+Revision de los 36 registros existentes:
 
-- `note`
-- `valuation`
-- `rg`
-- `audit_event`
-- `call`
+- 2 observaciones con prefijo `[NOTA]`.
+- 4 valoraciones con prefijo `[VALORACION]`.
+- 3 R.G. con prefijo `[R.G.]`.
+- 27 observaciones antiguas en texto libre.
+- Todos tienen lead asociado, fecha funcional y fecha/hora de creacion.
+
+Reglas vigentes:
+
+- `[NOTA]` se muestra en Observaciones.
+- `[HISTORIAL]` se muestra en Historial.
+- `[VALORACION]` alimenta Valoraciones, Historial, Planning y metricas.
+- `[R.G.]` alimenta R.G., Historial, Planning y metricas.
+- Los textos libres antiguos se mantienen como observaciones heredadas.
+
+Correcciones realizadas:
+
+- Valoraciones y R.G. interpretan tanto el formato antiguo sin autor como el formato nuevo con autor.
+- Planning lee valoraciones, R.G. y visitas realmente persistidas, en lugar de inferirlas desde la fase actual del lead.
+- Se mantiene un parser compartido para evitar diferencias entre pantallas.
+
+Conclusion: el uso mixto es consistente mientras todos los nuevos registros mantengan estos prefijos. No es necesario crear otra tabla para el funcionamiento actual.
 
 ### 3. Historial de acciones
 
-El historial ya muestra acciones, pero conviene asegurar que todas las acciones importantes se registren de forma consistente:
+Estado: revisado, con correcciones pendientes.
+
+El historial ya muestra acciones y persiste en `opportunity_contacts`, pero no todas se registran con el mismo nivel de detalle.
+
+Revision del comportamiento actual:
+
+- El panel del lead registra llamadas con usuario real y fecha/hora de creacion.
+- Las observaciones guardan el usuario real y se mantienen separadas del historial.
+- Las valoraciones y R.G. guardan autor, fecha programada, hora, medio y resultado cuando corresponde.
+- Las ediciones realizadas desde el panel detallan los valores anteriores y nuevos de los campos controlados.
+- Los encargos editados desde el panel detallan fechas, importes, comisiones y memo anteriores/nuevos.
+- Corregido: las visitas y los encargos editados desde sus pantallas generales registran cada campo modificado con su valor anterior y nuevo.
+- Corregido: crear, importar, cambiar de fase o eliminar desde Oportunidades registra el nombre real del usuario autenticado.
+- Corregido: la edicion general del lead audita propietario, telefono, domicilio, ubicacion, CP, origen, fechas, asignacion, fase, estado, valor y notas.
+- No hay acciones de eliminacion para valoraciones, R.G., encargos o visitas en las pantallas revisadas.
+
+Acciones que deben mantenerse cubiertas:
 
 - Crear.
 - Editar.
@@ -108,21 +140,34 @@ Tambien conviene guardar siempre:
 - Valor anterior.
 - Valor nuevo.
 
+Conclusion: el historial es util y persistente, pero antes de considerarlo una auditoria completa hay que unificar el autor real y ampliar el detalle de las ediciones realizadas fuera del panel.
+
 ### 4. Campos descriptivos e IDs
 
-Hay campos que parecen guardar textos descriptivos, por ejemplo dominios, owners, planners u origenes.
+La aplicacion guarda y consume principalmente textos descriptivos para comerciales, planners y origenes. La vista `crm_leads_view` los expone correctamente aunque el ID relacionado este vacio.
 
-Esto puede estar bien para mostrar datos rapido, pero conviene revisar si tambien existe el ID real relacionado. Si solo se guarda texto, luego es mas dificil filtrar, agrupar o corregir nombres.
+Revision realizada sobre los 3316 leads activos:
+
+- 3034 muestran un comercial real, pero no tienen `comercial_user_id`.
+- 2999 muestran un planner/contacto real, pero no tienen `contact_user_id`.
+- 3310 muestran un origen real, pero no tienen `source_id`.
+- Cuando no existe un nombre, la vista devuelve textos de sustitucion como `Sin comercial` o `Sin contacto`.
+
+El front actual funciona porque lee `comercial_name`, `contact_name` y `source_name`. Tambien crea e importa leads guardando `comercial_user_desc`, `contact_user_desc` y `source_desc`, dejando sus IDs en `null`.
+
+Conclusion: los datos persisten y se muestran, pero la relacion no esta normalizada. Los filtros y metricas por comercial dependen de coincidencias exactas de texto, por lo que un cambio de nombre, una variante ortografica o un duplicado puede dividir resultados. No es un bloqueo para operar, pero si un riesgo de consistencia para reportes y permisos futuros.
 
 ### 5. Borrado logico
 
 Algunas operaciones pueden usar `deleted_at` en lugar de borrar fisicamente.
 
-Eso esta bien, pero hay que confirmar que:
+Revision realizada:
 
-- Las vistas no muestren registros eliminados.
-- Las metricas no cuenten registros eliminados.
-- El usuario pueda recuperar informacion si corresponde.
+- `opportunities` contiene registros con `deleted_at`.
+- `crm_leads_view` expone el campo `deleted_at`.
+- `crm_leads_view` no devuelve registros con `deleted_at` informado.
+
+Conclusion: las pantallas que leen desde `crm_leads_view` no deberian mostrar ni contar leads eliminados.
 
 ### 6. Dashboard sin snapshot historico
 
@@ -134,12 +179,11 @@ Sin snapshots, el dashboard puede recalcular datos historicos con informacion ac
 
 ## Recomendaciones priorizadas
 
-1. Revisar reglas de Supabase y permisos por rol.
-2. Confirmar que `crm_leads_view` excluye correctamente registros eliminados o no visibles.
-3. Estandarizar el historial de acciones para que siempre guarde usuario, fecha, accion y cambios.
-4. Revisar si `opportunity_contacts` deberia tener tipos mas claros o una estructura separada para auditoria.
-5. Evaluar snapshots diarios para metricas historicas del dashboard.
-6. Normalizar campos de comerciales, planners, dominios y origenes con IDs cuando sea necesario.
+1. Pendiente: revisar reglas de Supabase y permisos por rol.
+2. Estandarizar el historial de acciones para que siempre guarde usuario, fecha, accion y cambios.
+3. Mantener los prefijos estandarizados de `opportunity_contacts` en todos los nuevos flujos.
+4. Evaluar snapshots diarios para metricas historicas del dashboard.
+5. Normalizar progresivamente comerciales, planners y origenes con sus IDs, manteniendo los textos actuales para compatibilidad.
 
 ## Conclusion
 
@@ -150,4 +194,3 @@ Lo mas importante a mejorar no es el front, sino la trazabilidad fina y la segur
 - confirmar permisos,
 - ordenar mejor los eventos,
 - y decidir si el dashboard debe ser calculado en vivo o guardar cortes historicos diarios.
-

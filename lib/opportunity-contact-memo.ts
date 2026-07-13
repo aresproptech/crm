@@ -1,0 +1,52 @@
+const RESERVED_FIELD_NAMES = new Set([
+  "medio",
+  "hora",
+  "resultado",
+  "dominio",
+  "planner",
+  "owner",
+  "fecha",
+]);
+
+function normalizeFieldName(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+export function parseOpportunityContactMemo(
+  memo: string | null | undefined,
+  prefix: "[VALORACION]" | "[R.G.]"
+) {
+  const text = (memo || "").trim();
+  let body = text.startsWith(prefix) ? text.slice(prefix.length).trim() : text;
+  let author = "";
+
+  const authorMatch = body.match(/^([^:]+):\s*([\s\S]*)$/);
+  if (authorMatch) {
+    const possibleAuthor = authorMatch[1].trim();
+    if (!RESERVED_FIELD_NAMES.has(normalizeFieldName(possibleAuthor))) {
+      author = possibleAuthor;
+      body = authorMatch[2].trim();
+    }
+  }
+
+  const [summaryLine, ...memoLines] = body.split("\n");
+  const fields = summaryLine.split("|").reduce<Record<string, string>>((acc, part) => {
+    const separatorIndex = part.indexOf(":");
+    if (separatorIndex === -1) return acc;
+
+    const key = normalizeFieldName(part.slice(0, separatorIndex));
+    const value = part.slice(separatorIndex + 1).trim();
+    if (key) acc[key] = value;
+    return acc;
+  }, {});
+
+  return {
+    author,
+    fields,
+    memo: memoLines.join("\n").trim(),
+  };
+}
