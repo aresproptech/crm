@@ -19,8 +19,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 const HISTORY_PREFIX = "[HISTORIAL]";
-const MOBILE_VISIBLE_COLUMNS = new Set(["Health", "Domicilio", "Propietario", "Estado"]);
-
 type OpportunityOrderRow = {
   id: number;
   opportunity_id: number;
@@ -903,7 +901,7 @@ export default function EncargosPage() {
         )}
 
         <div className="relative flex-1 overflow-auto">
-          <table className="w-full table-fixed border-collapse text-sm md:min-w-[2320px] md:table-auto">
+          <table className="w-full min-w-[2320px] table-auto border-collapse text-sm">
             <thead className="sticky top-0 z-20 bg-card">
               <tr className="border-b border-border bg-card/95 text-left backdrop-blur">
                 {columns.map((col) => (
@@ -911,11 +909,10 @@ export default function EncargosPage() {
                     key={col}
                     className={cn(
                       "px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap md:px-3",
-                      !MOBILE_VISIBLE_COLUMNS.has(col) && "hidden md:table-cell",
-                      col === "Health" && "w-[15%]",
-                      col === "Domicilio" && "w-[35%]",
-                      col === "Propietario" && "w-[28%]",
-                      col === "Estado" && "w-[22%]"
+                      col === "Health" && "min-w-[92px]",
+                      col === "Domicilio" && "min-w-[220px]",
+                      col === "Propietario" && "min-w-[180px]",
+                      col === "Estado" && "min-w-[120px]"
                     )}
                   >
                     {col}
@@ -978,33 +975,33 @@ export default function EncargosPage() {
                       <td className="truncate whitespace-nowrap px-2 py-2.5 text-xs text-muted-foreground md:px-3">{item.domicilio}</td>
                       <td className="truncate whitespace-nowrap px-2 py-2.5 text-xs font-medium text-foreground md:px-3">{item.propietario}</td>
                       <td className="truncate whitespace-nowrap px-2 py-2.5 text-xs text-muted-foreground md:px-3">{item.estado}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{item.dominio}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{item.planner}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{item.owner}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{item.origen}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{fmt(item.fecha_inicio)}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{fmt(item.fecha_fin)}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{diasGestion !== null ? diasGestion : "—"}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{diasRestantes !== null ? diasRestantes : "—"}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{fmtMonth(item.fecha_inicio)}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{fmtMonth(item.fecha_fin)}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{item.com_vendedor !== null ? `${item.com_vendedor}%` : "—"}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{item.com_comprador !== null ? `${item.com_comprador}%` : "—"}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{fmtEuro(item.pvp_inicial)}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{fmtEuro(item.pvp_actual)}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{fmtEuro(item.pvp_estimado)}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{fmtEuro(pvpDesvio)}</td>
-                      <td className={cn("px-3 py-2.5 text-xs font-medium hidden md:table-cell", getAvanceColor(desvioPct))}>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{item.dominio}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{item.planner}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{item.owner}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{item.origen}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{fmt(item.fecha_inicio)}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{fmt(item.fecha_fin)}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{diasGestion !== null ? diasGestion : "—"}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{diasRestantes !== null ? diasRestantes : "—"}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{fmtMonth(item.fecha_inicio)}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{fmtMonth(item.fecha_fin)}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{item.com_vendedor !== null ? `${item.com_vendedor}%` : "—"}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{item.com_comprador !== null ? `${item.com_comprador}%` : "—"}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{fmtEuro(item.pvp_inicial)}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{fmtEuro(item.pvp_actual)}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{fmtEuro(item.pvp_estimado)}</td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{fmtEuro(pvpDesvio)}</td>
+                      <td className={cn("px-3 py-2.5 text-xs font-medium", getAvanceColor(desvioPct))}>
                         {fmtPct(desvioPct)}
                       </td>
-                      <td className={cn("px-3 py-2.5 text-xs font-medium hidden md:table-cell", getAvanceColor(avance))}>
+                      <td className={cn("px-3 py-2.5 text-xs font-medium", getAvanceColor(avance))}>
                         {avance !== null ? `${avance}%` : "—"}
                       </td>
-                      <td className={cn("px-3 py-2.5 text-xs font-medium hidden md:table-cell", getRebajasColor(item.rebajas))}>
+                      <td className={cn("px-3 py-2.5 text-xs font-medium", getRebajasColor(item.rebajas))}>
                         {item.rebajas}
                       </td>
-                      <td className={cn("px-3 py-2.5 text-xs font-medium hidden md:table-cell", getActivityColor(item.rg_15d))}>{item.rg_15d}</td>
-                      <td className={cn("px-3 py-2.5 text-xs font-medium hidden md:table-cell", getActivityColor(item.visitas_30d))}>{item.visitas_30d}</td>
+                      <td className={cn("px-3 py-2.5 text-xs font-medium", getActivityColor(item.rg_15d))}>{item.rg_15d}</td>
+                      <td className={cn("px-3 py-2.5 text-xs font-medium", getActivityColor(item.visitas_30d))}>{item.visitas_30d}</td>
                     </tr>
                   );
                 })
