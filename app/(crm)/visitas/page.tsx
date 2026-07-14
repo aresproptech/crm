@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Topbar } from "@/components/crm/topbar";
 import { supabase } from "@/lib/supabase";
-import { useUser } from "@/lib/hooks/useUser";
+import { canViewAllLeads, useUser } from "@/lib/hooks/useUser";
 import { Check, Copy, Search, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -28,6 +28,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 
 const HISTORY_PREFIX = "[HISTORIAL]";
+const DEFAULT_VISIT_BUYER = "Gonzalo";
 
 type Visita = {
   id: number;
@@ -209,17 +210,33 @@ export default function VisitasPage() {
 
   async function loadVisitas() {
     setLoading(true);
-    const rol = userWithRole?.crmUser.rol;
-    const nombre = userWithRole?.crmUser.name;
-    const isVisitador = userWithRole?.crmUser.is_visitador;
+    const crmUser = userWithRole?.crmUser;
+    if (!crmUser) {
+      setVisitas([]);
+      setLoading(false);
+      return;
+    }
 
     let query = supabase
       .from("visitas")
       .select("*")
       .order("fecha_visita", { ascending: false });
 
-    if (rol === "Comercial" && !isVisitador && nombre) {
-      query = query.or(`owner.eq.${nombre},planner.eq.${nombre}`);
+    if (!canViewAllLeads(crmUser)) {
+      const { data: ownLeads, error: ownLeadsError } = await supabase
+        .from("crm_leads_view")
+        .select("id")
+        .eq("comercial_name", crmUser.name);
+
+      if (ownLeadsError) {
+        console.error("Error cargando leads del comercial:", ownLeadsError);
+        setVisitas([]);
+        setLoading(false);
+        return;
+      }
+
+      const ownLeadIds = (ownLeads ?? []).map((lead) => Number(lead.id));
+      query = query.in("opportunity_id", ownLeadIds.length ? ownLeadIds : [0]);
     }
 
     const { data, error } = await query;
@@ -233,11 +250,23 @@ export default function VisitasPage() {
   }
 
   async function loadInmuebles() {
-    const { data, error } = await supabase
+    const crmUser = userWithRole?.crmUser;
+    if (!crmUser) {
+      setInmuebles([]);
+      return;
+    }
+
+    let query = supabase
       .from("crm_leads_view")
       .select("id, propietario, domicilio, comercial_name, dominio_desc, telefono, estado")
       .eq("fase_name", "Encargo")
       .order("propietario", { ascending: true });
+
+    if (!canViewAllLeads(crmUser)) {
+      query = query.eq("comercial_name", crmUser.name);
+    }
+
+    const { data, error } = await query;
 
     if (error) return;
 
@@ -272,7 +301,7 @@ export default function VisitasPage() {
       owner: inmueble?.owner || "",
       nombre_apellido: "",
       telefono: "",
-      buyer: userWithRole?.crmUser.name || "",
+      buyer: DEFAULT_VISIT_BUYER,
     }));
   }
 

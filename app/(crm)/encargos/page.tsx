@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Topbar } from "@/components/crm/topbar";
 import { supabase } from "@/lib/supabase";
-import { useUser } from "@/lib/hooks/useUser";
+import { canEditLeads, canViewAllLeads, useUser } from "@/lib/hooks/useUser";
 import { Plus, RefreshCw, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -435,6 +435,7 @@ function HealthBreakdownCard({ item }: { item: EncargoItem }) {
 
 export default function EncargosPage() {
   const { userWithRole } = useUser();
+  const canEdit = Boolean(userWithRole?.crmUser && canEditLeads(userWithRole.crmUser));
   const [items, setItems] = useState<EncargoItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string | null>(null);
@@ -534,7 +535,6 @@ export default function EncargosPage() {
     setLoading(true);
     setPageError(null);
 
-    const rol = userWithRole?.crmUser.rol;
     const nombre = userWithRole?.crmUser.name;
 
     const [phaseLeadsResult, ordersResult] = await Promise.all([
@@ -583,7 +583,7 @@ export default function EncargosPage() {
       .select("id, propietario, domicilio, estado, dominio_desc, contact_name, comercial_name, source_name")
       .in("id", safeLeadIds);
 
-    if (rol === "Comercial" && nombre) {
+    if (userWithRole?.crmUser && !canViewAllLeads(userWithRole.crmUser) && nombre) {
       leadsQuery = leadsQuery.eq("comercial_name", nombre);
     }
 
@@ -706,6 +706,7 @@ export default function EncargosPage() {
   }, [userWithRole]);
 
   function handleCreateClick() {
+    if (!canEdit) return;
     setFormError(null);
     setSelected(null);
     setCreateLeadId("");
@@ -714,6 +715,7 @@ export default function EncargosPage() {
   }
 
   function handleRowClick(item: EncargoItem) {
+    if (!canEdit) return;
     setFormError(null);
     setCreateLeadId("");
     setSelected(item);
@@ -731,6 +733,7 @@ export default function EncargosPage() {
   }
 
   async function handleSave() {
+    if (!canEdit) return;
     const activeItem =
       selected ?? items.find((item) => String(item.leadId) === createLeadId) ?? null;
 
@@ -875,14 +878,16 @@ export default function EncargosPage() {
               />
             </div>
           </div>
-          <button
-            type="button"
-            onClick={handleCreateClick}
-            className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90 sm:h-8 sm:w-auto"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Crear Encargo
-          </button>
+          {canEdit && (
+            <button
+              type="button"
+              onClick={handleCreateClick}
+              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90 sm:h-8 sm:w-auto"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Crear Encargo
+            </button>
+          )}
         </div>
 
         {pageError && (
@@ -952,9 +957,10 @@ export default function EncargosPage() {
                   return (
                     <tr
                       key={item.id}
-                      onClick={() => handleRowClick(item)}
+                      onClick={canEdit ? () => handleRowClick(item) : undefined}
                       className={cn(
-                        "cursor-pointer border-b border-border transition-colors hover:bg-accent/60",
+                        "border-b border-border transition-colors",
+                        canEdit && "cursor-pointer hover:bg-accent/60",
                         i % 2 === 0 ? "bg-card" : "bg-background"
                       )}
                     >

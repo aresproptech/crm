@@ -7,6 +7,7 @@ import { Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Lead } from "@/lib/crm-data";
 import { parseOpportunityContactMemo } from "@/lib/opportunity-contact-memo";
+import { canViewAllLeads, useUser } from "@/lib/hooks/useUser";
 
 type CrmLeadRow = {
   id: number;
@@ -165,11 +166,22 @@ function getPlanningLabel(dateStr: string) {
 }
 
 export default function RGPage() {
+  const { userWithRole, loading: userLoading } = useUser();
   const [items, setItems] = useState<RgEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
+    if (userLoading) return;
+    const crmUser = userWithRole?.crmUser;
+    if (!crmUser) {
+      setItems([]);
+      setLoading(false);
+      return;
+    }
+    const canSeeAllLeads = canViewAllLeads(crmUser);
+    const currentUserName = crmUser.name;
+
     async function loadRG() {
       setLoading(true);
 
@@ -198,6 +210,12 @@ export default function RGPage() {
 
       const leadsMap = new Map<number, Lead>();
       for (const row of leadsResult.data ?? []) {
+        if (
+          !canSeeAllLeads &&
+          row.comercial_name !== currentUserName
+        ) {
+          continue;
+        }
         const mapped = mapCrmLeadToLead(row as CrmLeadRow);
         leadsMap.set(Number(mapped.id), mapped);
       }
@@ -261,7 +279,7 @@ export default function RGPage() {
     }
 
     loadRG();
-  }, []);
+  }, [userLoading, userWithRole]);
 
   const filteredItems = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();

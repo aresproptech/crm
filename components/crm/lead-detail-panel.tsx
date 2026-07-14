@@ -81,6 +81,7 @@ interface LeadDetailPanelProps {
   lead: Lead | null;
   onClose: () => void;
   onSaveLead: (next: Lead) => Promise<void>;
+  readOnly?: boolean;
 }
 
 type LeadWithDominio = Lead & {
@@ -1294,6 +1295,7 @@ export function LeadDetailPanel({
   lead,
   onClose,
   onSaveLead,
+  readOnly = false,
 }: LeadDetailPanelProps) {
   const { userWithRole } = useUser();
   const [editOpen, setEditOpen] = useState(false);
@@ -1427,7 +1429,7 @@ export function LeadDetailPanel({
   }, [userWithRole]);
 
   async function persistActivity(text: string) {
-    if (!effectiveLead) return;
+    if (!effectiveLead || readOnly) return;
 
     const createdBy = currentUserName || "Usuario";
     const { error } = await supabase.from("opportunity_contacts").insert({
@@ -1443,7 +1445,7 @@ export function LeadDetailPanel({
   }
 
   async function handleCallLead() {
-    if (!effectiveLead) return;
+    if (!effectiveLead || readOnly) return;
 
     await persistActivity("Llamó al lead");
     await loadObservations(effectiveLead.id);
@@ -1660,7 +1662,7 @@ export function LeadDetailPanel({
   }
 
   async function handleSave(next: LeadWithDominio) {
-    if (!effectiveLead) return;
+    if (!effectiveLead || readOnly) return;
 
     const changes = buildFieldChangeEvents(effectiveLead, next);
     await onSaveLead(next);
@@ -1682,7 +1684,7 @@ export function LeadDetailPanel({
   }
 
   async function handleAddNote() {
-    if (!effectiveLead || !note.trim()) return;
+    if (!effectiveLead || readOnly || !note.trim()) return;
 
     const text = note.trim();
     setSavingNote(true);
@@ -1835,7 +1837,7 @@ export function LeadDetailPanel({
   }
 
   async function handleAddEncargo() {
-    if (!effectiveLead) return;
+    if (!effectiveLead || readOnly) return;
 
     setEncargoSaving(true);
     setEncargoError(null);
@@ -1937,7 +1939,7 @@ export function LeadDetailPanel({
   }
 
   async function handleAddRg() {
-    if (!effectiveLead) return;
+    if (!effectiveLead || readOnly) return;
 
     if (!rgForm.fecha) {
       setRgError("La fecha es obligatoria.");
@@ -2010,7 +2012,7 @@ export function LeadDetailPanel({
   }
 
   async function handleAddValuation() {
-    if (!effectiveLead) return;
+    if (!effectiveLead || readOnly) return;
 
     if (!valuationForm.fecha) {
       setValuationError("La fecha es obligatoria.");
@@ -2189,23 +2191,29 @@ export function LeadDetailPanel({
           </p>
 
           {effectiveLead.phone && effectiveLead.phone !== "—" && (
-            <>
-              <a
-                href={`tel:${effectiveLead.phone.replace(/[^+\d]/g, "")}`}
-                onClick={() => void handleCallLead()}
-                className="mx-auto mt-2 flex h-10 w-full items-center justify-center rounded-md bg-primary px-3 text-center text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90 md:hidden"
-              >
-                Llamar
-              </a>
-
-              <a
-                href={`tel:${effectiveLead.phone.replace(/[^+\d]/g, "")}`}
-                onClick={() => void handleCallLead()}
-                className="mt-1 hidden text-xs font-medium text-muted-foreground transition hover:text-foreground md:block"
-              >
+            readOnly ? (
+              <span className="mt-1 block text-xs font-medium text-muted-foreground">
                 {effectiveLead.phone}
-              </a>
-            </>
+              </span>
+            ) : (
+              <>
+                <a
+                  href={`tel:${effectiveLead.phone.replace(/[^+\d]/g, "")}`}
+                  onClick={() => void handleCallLead()}
+                  className="mx-auto mt-2 flex h-10 w-full items-center justify-center rounded-md bg-primary px-3 text-center text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90 md:hidden"
+                >
+                  Llamar
+                </a>
+
+                <a
+                  href={`tel:${effectiveLead.phone.replace(/[^+\d]/g, "")}`}
+                  onClick={() => void handleCallLead()}
+                  className="mt-1 hidden text-xs font-medium text-muted-foreground transition hover:text-foreground md:block"
+                >
+                  {effectiveLead.phone}
+                </a>
+              </>
+            )
           )}
         </div>
 
@@ -2326,15 +2334,17 @@ export function LeadDetailPanel({
                         <h4 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                           Datos generales
                         </h4>
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="h-8 gap-1.5 bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary/90"
-                          onClick={() => setEditOpen(true)}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                          Editar datos
-                        </Button>
+                        {!readOnly && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="h-8 gap-1.5 bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary/90"
+                            onClick={() => setEditOpen(true)}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            Editar datos
+                          </Button>
+                        )}
                       </div>
                       <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
                         <SmallDataCard label="Propietario">
@@ -2419,23 +2429,27 @@ export function LeadDetailPanel({
                       </Badge>
                     </div>
 
-                    <Textarea
-                      value={note}
-                      onChange={(e) => setNote(e.target.value)}
-                      placeholder="Escribe una observación..."
-                      className="min-h-[76px] resize-none text-sm"
-                    />
-                    <div className="mt-2 flex justify-end">
-                      <Button
-                        size="sm"
-                        className="h-8 gap-1.5 text-xs"
-                        onClick={handleAddNote}
-                        disabled={!note.trim() || savingNote}
-                      >
-                        <Send className="h-3.5 w-3.5" />
-                        Añadir
-                      </Button>
-                    </div>
+                    {!readOnly && (
+                      <>
+                        <Textarea
+                          value={note}
+                          onChange={(e) => setNote(e.target.value)}
+                          placeholder="Escribe una observación..."
+                          className="min-h-[76px] resize-none text-sm"
+                        />
+                        <div className="mt-2 flex justify-end">
+                          <Button
+                            size="sm"
+                            className="h-8 gap-1.5 text-xs"
+                            onClick={handleAddNote}
+                            disabled={!note.trim() || savingNote}
+                          >
+                            <Send className="h-3.5 w-3.5" />
+                            Añadir
+                          </Button>
+                        </div>
+                      </>
+                    )}
 
                     {noteError && (
                       <div className="mt-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive">
@@ -2514,14 +2528,16 @@ export function LeadDetailPanel({
     </Badge>
   </div>
 
-  <Button
-    type="button"
-    size="sm"
-    className="h-8 text-xs"
-    onClick={openNewValuationModal}
-  >
-    Agregar valoración
-  </Button>
+  {!readOnly && (
+    <Button
+      type="button"
+      size="sm"
+      className="h-8 text-xs"
+      onClick={openNewValuationModal}
+    >
+      Agregar valoración
+    </Button>
+  )}
 </div>
 
                   {valuationHistoryEvents.length === 0 ? (
@@ -2571,7 +2587,7 @@ export function LeadDetailPanel({
                                 </Badge>
                               </span>
                               <span className="flex items-center justify-end gap-2">
-                                {persistedRowId(event.id) ? (
+                                {!readOnly && (persistedRowId(event.id) ? (
                                   <span
                                     role="button"
                                     tabIndex={0}
@@ -2593,7 +2609,7 @@ export function LeadDetailPanel({
                                   </span>
                                 ) : (
                                   <Pencil className="h-3.5 w-3.5 text-muted-foreground/40" />
-                                )}
+                                ))}
                                 <ChevronDown
                                   className={cn(
                                     "h-4 w-4 text-muted-foreground transition-transform",
@@ -2660,14 +2676,16 @@ export function LeadDetailPanel({
     </Badge>
   </div>
 
-  <Button
-    type="button"
-    size="sm"
-    className="h-8 text-xs"
-    onClick={openNewEncargoModal}
-  >
-    Agregar encargo
-  </Button>
+  {!readOnly && (
+    <Button
+      type="button"
+      size="sm"
+      className="h-8 text-xs"
+      onClick={openNewEncargoModal}
+    >
+      Agregar encargo
+    </Button>
+  )}
 </div>
 
                   {relatedLoading ? (
@@ -2726,7 +2744,7 @@ export function LeadDetailPanel({
                                 </Badge>
                               </span>
                               <span className="flex items-center justify-end gap-2">
-                                {persistedRowId(order.id) ? (
+                                {!readOnly && (persistedRowId(order.id) ? (
                                   <span
                                     role="button"
                                     tabIndex={0}
@@ -2748,7 +2766,7 @@ export function LeadDetailPanel({
                                   </span>
                                 ) : (
                                   <Pencil className="h-3.5 w-3.5 text-muted-foreground/40" />
-                                )}
+                                ))}
                                 <ChevronDown
                                   className={cn(
                                     "h-4 w-4 text-muted-foreground transition-transform",
@@ -2880,14 +2898,16 @@ export function LeadDetailPanel({
                       </Badge>
                     </div>
 
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-8 text-xs"
-                      onClick={openNewRgModal}
-                    >
-                      Agregar R.G.
-                    </Button>
+                    {!readOnly && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-8 text-xs"
+                        onClick={openNewRgModal}
+                      >
+                        Agregar R.G.
+                      </Button>
+                    )}
                   </div>
 
                   {rgHistoryEvents.length === 0 ? (
@@ -2935,7 +2955,7 @@ export function LeadDetailPanel({
                               </span>
                               <span className="text-muted-foreground">{event.dominio}</span>
                               <span className="flex items-center justify-end gap-2">
-                                {persistedRowId(event.id) ? (
+                                {!readOnly && (persistedRowId(event.id) ? (
                                   <span
                                     role="button"
                                     tabIndex={0}
@@ -2957,7 +2977,7 @@ export function LeadDetailPanel({
                                   </span>
                                 ) : (
                                   <Pencil className="h-3.5 w-3.5 text-muted-foreground/40" />
-                                )}
+                                ))}
                                 <ChevronDown
                                   className={cn(
                                     "h-4 w-4 text-muted-foreground transition-transform",

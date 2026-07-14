@@ -58,10 +58,37 @@ Estos puntos no son un problema mientras el objetivo sea usarlos como ayudas de 
 
 Desde el codigo se ve que el front usa Supabase, pero no alcanza para confirmar todas las reglas de permisos.
 
+Matriz de permisos aplicada en el frontend:
+
+| Perfil | Visualizacion | Edicion |
+| --- | --- | --- |
+| Admin | Todos los registros y metricas | Todo el CRM |
+| Coordinador | Todos los registros y metricas | Todo el CRM |
+| Comercial | Solo sus leads y datos relacionados | Solo sus leads y datos relacionados |
+| Visitador | Todos los registros de todas las pestañas | Solo Visitas |
+
+Gonzalo mantiene `profiles.rol = 'Comercial'`, pero el frontend reconoce los nombres de perfil `Gonza` y `Gonzalo` como la excepcion de Visitador. En Oportunidades, Valoraciones, Encargos, R.G. y Planning dispone de acceso de solo lectura; en Visitas puede crear y editar registros asociados a cualquier inmueble. Tampoco se incluye como comercial en las comparativas de rendimiento.
+
+Estado: comportamiento visual y consultas del frontend corregidos. La proteccion definitiva a nivel de base de datos sigue pendiente de comprobar, porque los controles del navegador no sustituyen las politicas RLS.
+
+Auditoria de solo lectura realizada el 14 de julio de 2026 con la clave publica y sin iniciar sesion:
+
+- `crm_leads_view`: 3316 registros accesibles.
+- `opportunities`: 4785 registros accesibles.
+- `opportunity_contacts`: 38 registros accesibles.
+- `opportunity_orders`: consulta accesible.
+- `visitas`: 11 registros accesibles.
+- `profiles`: 14 registros accesibles.
+
+Conclusion de seguridad: actualmente un cliente anonimo puede consultar datos del CRM. Es un riesgo alto y confirma que los permisos visuales todavia no estan respaldados por Supabase.
+
+Se preparo `supabase/rls-role-permissions.sql`, sin crear ni eliminar tablas. El script revoca el acceso anonimo, activa RLS, aplica la matriz por rol y hace que `crm_leads_view` respete las politicas. Gonzalo conserva el rol Comercial y se contempla como una excepcion nominal. El script todavia no fue ejecutado en Supabase.
+
 Hay que revisar en Supabase:
 
-- Que cada comercial solo pueda ver y editar lo que corresponda.
-- Que coordinadores o admins puedan ver metricas globales.
+- Que cada Comercial solo pueda leer y modificar sus propios leads y datos relacionados.
+- Que Admin y Coordinador tengan acceso completo.
+- Que el Visitador pueda leer globalmente, pero escribir unicamente en Visitas.
 - Que no haya escrituras abiertas por error.
 - Que las tablas criticas tengan Row Level Security bien configurado.
 

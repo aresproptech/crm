@@ -43,9 +43,8 @@ const STATUS_BADGE: Record<UserStatus, { className: string }> = {
 
 const ROLE_BADGE: Record<UserRole, { className: string }> = {
   Admin: { className: "bg-primary/10 text-primary border-primary/20" },
+  Coordinador: { className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
   Comercial: { className: "bg-blue-50 text-blue-700 border-blue-200" },
-  Planner: { className: "bg-violet-50 text-violet-700 border-violet-200" },
-  Viewer: { className: "bg-muted text-muted-foreground border-border" },
 };
 
 export default function UsuariosPage() {

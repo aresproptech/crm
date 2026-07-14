@@ -7,6 +7,7 @@ import { Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Lead } from "@/lib/crm-data";
 import { parseOpportunityContactMemo } from "@/lib/opportunity-contact-memo";
+import { canViewAllLeads, useUser } from "@/lib/hooks/useUser";
 
 type CrmLeadRow = {
   id: number;
@@ -147,11 +148,22 @@ function getPlanningLabel(dateStr: string, tipo: PlanningItem["tipo"]) {
 }
 
 export default function PlanningPage() {
+  const { userWithRole, loading: userLoading } = useUser();
   const [items, setItems] = useState<PlanningItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
+    if (userLoading) return;
+    const crmUser = userWithRole?.crmUser;
+    if (!crmUser) {
+      setItems([]);
+      setLoading(false);
+      return;
+    }
+    const canSeeAllLeads = canViewAllLeads(crmUser);
+    const currentUserName = crmUser.name;
+
     async function loadPlanning() {
       setLoading(true);
 
@@ -188,6 +200,12 @@ export default function PlanningPage() {
 
       const leadsMap = new Map<number, PlanningLead>();
       for (const row of leadsResult.data ?? []) {
+        if (
+          !canSeeAllLeads &&
+          row.comercial_name !== currentUserName
+        ) {
+          continue;
+        }
         const lead = mapCrmLeadToLead(row as CrmLeadRow);
         leadsMap.set(Number(lead.id), lead);
       }
@@ -263,7 +281,7 @@ export default function PlanningPage() {
     }
 
     loadPlanning();
-  }, []);
+  }, [userLoading, userWithRole]);
 
   const filteredItems = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();

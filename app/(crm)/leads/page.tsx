@@ -26,7 +26,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { type Lead, PHASE_LABELS } from "@/lib/crm-data";
-import { useUser } from "@/lib/hooks/useUser";
+import { canEditLeads, canViewAllLeads, useUser } from "@/lib/hooks/useUser";
 import {
   Dialog,
   DialogContent,
@@ -670,7 +670,8 @@ function mapCrmLeadToLead(row: CrmLeadRow): LeadTableRow {
 }
 
 export default function LeadsPage() {
-  const { userWithRole } = useUser();
+  const { userWithRole, loading: userLoading } = useUser();
+  const canEdit = Boolean(userWithRole?.crmUser && canEditLeads(userWithRole.crmUser));
   const [phaseIdMap, setPhaseIdMap] =
     useState<Partial<Record<Lead["phase"], number>>>({});
   const [modalOpen, setModalOpen] = useState(false);
@@ -780,11 +781,16 @@ export default function LeadsPage() {
       setLoadingLeads(true);
     }
 
-    const { data, error, count } = await supabase
+    let query = supabase
       .from("crm_leads_view")
       .select("*", { count: "exact" })
-      .order("created_at", { ascending: false })
-      .range(from, to);
+      .order("created_at", { ascending: false });
+
+    if (userWithRole?.crmUser && !canViewAllLeads(userWithRole.crmUser)) {
+      query = query.eq("comercial_name", userWithRole.crmUser.name);
+    }
+
+    const { data, error, count } = await query.range(from, to);
 
     if (error) {
       console.error("Supabase leads error:", error);
@@ -817,6 +823,7 @@ export default function LeadsPage() {
   }
 
   async function handleImportCsv(importedLeads: Lead[]) {
+    if (!canEdit) return;
     setPageError(null);
     if (importedLeads.length === 0) return;
 
@@ -872,6 +879,7 @@ export default function LeadsPage() {
   }
 
   async function handleCreateLead(form: NewLeadFormData) {
+    if (!canEdit) return;
     setPageError(null);
 
     const resolvedPhaseId = await resolvePhaseId(form.phase as Lead["phase"]);
@@ -925,6 +933,7 @@ export default function LeadsPage() {
   }
 
   async function handleSaveLead(next: Lead) {
+    if (!canEdit) return;
     setPageError(null);
 
     const resolvedPhaseId = await resolvePhaseId(next.phase);
@@ -996,6 +1005,7 @@ export default function LeadsPage() {
   }
 
   async function handleMoveLead(leadId: string, nextPhase: Lead["phase"]) {
+    if (!canEdit) return;
     setPageError(null);
 
     const currentLead = leads.find((lead) => lead.id === leadId);
@@ -1037,6 +1047,7 @@ export default function LeadsPage() {
   }
 
   async function handleToggleFavorite(leadId: string) {
+    if (!canEdit) return;
     setPageError(null);
     const nextFavorite = !favoriteIds.has(leadId);
 
@@ -1066,9 +1077,10 @@ export default function LeadsPage() {
   }
 
   useEffect(() => {
+    if (userLoading || !userWithRole?.crmUser) return;
     void loadPhaseIdMap();
     void loadLeadsFromSupabase({ append: false });
-  }, []);
+  }, [userLoading, userWithRole]);
 
   function clearLeadFilters() {
     setSearchTerm("");
@@ -1260,6 +1272,7 @@ export default function LeadsPage() {
   }
 
   async function handleConfirmDelete() {
+    if (!canEdit) return;
     setPageError(null);
     const idsToDelete = Array.from(selectedIds).map((id) => Number(id));
 
@@ -1539,16 +1552,18 @@ export default function LeadsPage() {
               </button>
             </div>
 
-            <Button
-              size="sm"
-              variant="outline"
-              className="hidden h-7 gap-1.5 text-xs font-semibold sm:inline-flex"
-              onClick={() => setImportOpen(true)}
-            >
-              Importar CSV
-            </Button>
+            {canEdit && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="hidden h-7 gap-1.5 text-xs font-semibold sm:inline-flex"
+                onClick={() => setImportOpen(true)}
+              >
+                Importar CSV
+              </Button>
+            )}
 
-            {viewMode === "table" && (
+            {canEdit && viewMode === "table" && (
               <Button
                 size="sm"
                 className="hidden h-7 gap-1.5 text-xs font-semibold sm:inline-flex"
@@ -1565,14 +1580,16 @@ export default function LeadsPage() {
               </Button>
             )}
 
-            <Button
-              size="sm"
-              className="hidden h-7 gap-1.5 text-xs font-semibold sm:inline-flex"
-              onClick={() => setModalOpen(true)}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Nuevo lead
-            </Button>
+            {canEdit && (
+              <Button
+                size="sm"
+                className="hidden h-7 gap-1.5 text-xs font-semibold sm:inline-flex"
+                onClick={() => setModalOpen(true)}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Nuevo lead
+              </Button>
+            )}
           </div>
         </div>
 
@@ -1934,11 +1951,16 @@ export default function LeadsPage() {
                     <td className="px-2 py-2.5 md:px-3">
                       <button
                         type="button"
+                        disabled={!canEdit}
                         onClick={(e) => {
                           e.stopPropagation();
                           void handleToggleFavorite(lead.id);
                         }}
-                        className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                        className={cn(
+                          "inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition",
+                          canEdit && "hover:bg-muted hover:text-foreground",
+                          !canEdit && "cursor-default"
+                        )}
                         aria-label={
                           favoriteIds.has(lead.id)
                             ? "Quitar de favoritos"
@@ -2138,7 +2160,7 @@ export default function LeadsPage() {
                 VALID_PHASES.includes(lead.phase)
               )}
               onOpenLead={(lead) => setSelectedLead(lead)}
-              onMoveLead={handleMoveLead}
+              onMoveLead={canEdit ? handleMoveLead : undefined}
             />
           </div>
         )}
@@ -2160,6 +2182,7 @@ export default function LeadsPage() {
         lead={selectedLead}
         onClose={() => setSelectedLead(null)}
         onSaveLead={handleSaveLead}
+        readOnly={!canEdit}
       />
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>

@@ -9,7 +9,12 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
-import { canViewAllLeads, useUser } from "@/lib/hooks/useUser";
+import {
+  canViewAllLeads,
+  isVisitador,
+  useUser,
+  VISITADOR_PROFILE_NAMES,
+} from "@/lib/hooks/useUser";
 import { PHASE_LABELS } from "@/lib/crm-data";
 
 type PeriodOption =
@@ -144,12 +149,6 @@ type VisitActivityRow = {
   opportunity_id: number | null;
   fecha_visita: string | null;
   created_at: string | null;
-};
-
-type CrmProfileRow = {
-  name: string | null;
-  rol: string | null;
-  is_visitador: boolean | null;
 };
 
 type CommercialPerformance = {
@@ -824,36 +823,15 @@ export default function DashboardPage() {
   }, [userLoading, userWithRole]);
 
   useEffect(() => {
-    async function fetchVisitadores() {
-      if (userLoading || !userWithRole?.crmUser) return;
+    if (userLoading || !userWithRole?.crmUser) return;
 
-      const ownVisitadorKey = userWithRole.crmUser.is_visitador
-        ? normalizePersonKey(userWithRole.crmUser.name)
-        : "";
-
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("name, rol, is_visitador")
-        .eq("is_visitador", true);
-
-      if (error) {
-        console.error("Supabase visitadores error:", error);
-        setVisitadorKeys(new Set(ownVisitadorKey ? [ownVisitadorKey] : []));
-        return;
-      }
-
-      const keys = new Set<string>();
-      if (ownVisitadorKey) keys.add(ownVisitadorKey);
-
-      ((data ?? []) as CrmProfileRow[]).forEach((profile) => {
-        const key = normalizePersonKey(profile.name);
-        if (key) keys.add(key);
-      });
-
-      setVisitadorKeys(keys);
+    const keys = new Set(
+      VISITADOR_PROFILE_NAMES.map((name) => normalizePersonKey(name)).filter(Boolean)
+    );
+    if (isVisitador(userWithRole.crmUser)) {
+      keys.add(normalizePersonKey(userWithRole.crmUser.name));
     }
-
-    fetchVisitadores();
+    setVisitadorKeys(keys);
   }, [userLoading, userWithRole]);
 
   const currentRange = useMemo(() => {

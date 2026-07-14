@@ -7,6 +7,7 @@ import { Search, Circle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PHASE_LABELS, type Lead } from "@/lib/crm-data";
 import { parseOpportunityContactMemo } from "@/lib/opportunity-contact-memo";
+import { canViewAllLeads, useUser } from "@/lib/hooks/useUser";
 
 type CrmLeadRow = {
   id: number;
@@ -379,11 +380,22 @@ function mapCrmLeadToLead(row: CrmLeadRow): ValoracionLead {
 }
 
 export default function ValoracionesPage() {
+  const { userWithRole, loading: userLoading } = useUser();
   const [items, setItems] = useState<ValoracionEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
+    if (userLoading) return;
+    const crmUser = userWithRole?.crmUser;
+    if (!crmUser) {
+      setItems([]);
+      setLoading(false);
+      return;
+    }
+    const canSeeAllLeads = canViewAllLeads(crmUser);
+    const currentUserName = crmUser.name;
+
     async function loadValoraciones() {
       setLoading(true);
 
@@ -412,6 +424,12 @@ export default function ValoracionesPage() {
 
       const leadsMap = new Map<number, ValoracionLead>();
       for (const row of leadsResult.data ?? []) {
+        if (
+          !canSeeAllLeads &&
+          row.comercial_name !== currentUserName
+        ) {
+          continue;
+        }
         const mapped = mapCrmLeadToLead(row as CrmLeadRow);
         leadsMap.set(Number(mapped.id), mapped);
       }
@@ -475,7 +493,7 @@ export default function ValoracionesPage() {
     }
 
     loadValoraciones();
-  }, []);
+  }, [userLoading, userWithRole]);
 
   const filteredItems = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();

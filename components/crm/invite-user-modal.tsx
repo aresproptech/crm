@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-export type UserRole = "Admin" | "Comercial" | "Planner" | "Viewer";
+export type UserRole = "Admin" | "Coordinador" | "Comercial";
 export type UserStatus = "Pendiente" | "Activo" | "Inactivo";
 
 export type InviteUserFormData = {
@@ -170,9 +170,8 @@ export function InviteUserModal({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Admin">Admin</SelectItem>
+                  <SelectItem value="Coordinador">Coordinador</SelectItem>
                   <SelectItem value="Comercial">Comercial</SelectItem>
-                  <SelectItem value="Planner">Planner</SelectItem>
-                  <SelectItem value="Viewer">Viewer</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -207,4 +206,3 @@ export function InviteUserModal({
     </Dialog>
   );
 }
-
