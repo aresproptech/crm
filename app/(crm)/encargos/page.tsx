@@ -400,15 +400,15 @@ function HealthBreakdownCard({ item }: { item: EncargoItem }) {
   ];
 
   return (
-    <div className="col-span-2 rounded-lg border border-border bg-muted/20 p-4">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div>
+    <div className="rounded-lg border border-border bg-muted/20 p-3 sm:col-span-2 sm:p-4">
+      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Health del encargo</p>
           <p className="mt-1 text-xs text-muted-foreground">Desglose informativo del score calculado.</p>
         </div>
         <span
           className={cn(
-            "inline-flex min-w-12 items-center justify-center rounded-full border px-3 py-1.5 text-sm font-bold",
+            "inline-flex w-fit min-w-12 items-center justify-center rounded-full border px-3 py-1.5 text-sm font-bold",
             healthCfg.className
           )}
         >
@@ -416,7 +416,7 @@ function HealthBreakdownCard({ item }: { item: EncargoItem }) {
         </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {rows.map((row) => (
           <div key={row.label} className="rounded-md border border-border bg-background px-3 py-2">
             <div className="flex items-center justify-between gap-2">
@@ -1012,26 +1012,26 @@ export default function EncargosPage() {
       </main>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-2xl gap-3 overflow-y-auto p-4 sm:max-h-[90vh] sm:w-full sm:gap-4 sm:p-6">
           <DialogHeader>
-            <DialogTitle className="text-base font-semibold">
+            <DialogTitle className="pr-8 text-left text-base font-semibold">
               {selected ? "Editar encargo" : "Crear encargo"}
             </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">
+            <DialogDescription className="break-words pr-8 text-left text-xs text-muted-foreground">
               {selected
                 ? `${selected.domicilio} — ${selected.propietario}`
                 : "Seleccioná una oportunidad y cargá los datos del encargo."}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid grid-cols-2 gap-x-4 gap-y-4 py-2">
+          <div className="grid grid-cols-1 gap-3 py-1 sm:grid-cols-2 sm:gap-x-4 sm:gap-y-4 sm:py-2">
             {!selected && (
-              <div className="col-span-2 flex flex-col gap-1.5">
+              <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-2">
                 <Label className="text-xs font-medium">Oportunidad</Label>
                 <select
                   value={createLeadId}
                   onChange={(e) => setCreateLeadId(e.target.value)}
-                  className="h-8 rounded-md border border-border bg-background px-3 text-sm outline-none"
+                  className="h-10 min-w-0 rounded-md border border-border bg-background px-3 text-sm outline-none sm:h-8"
                 >
                   <option value="">Seleccionar oportunidad...</option>
                   {leadOptions.map((item) => (
@@ -1050,12 +1050,12 @@ export default function EncargosPage() {
               if (!activeItem) return null;
 
               return (
-                <div className="col-span-2 grid grid-cols-3 gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3 text-xs">
-                  <div><span className="text-muted-foreground">Estado: </span><span className="font-medium">{activeItem.estado}</span></div>
-                  <div><span className="text-muted-foreground">Dominio: </span><span className="font-medium">{activeItem.dominio}</span></div>
-                  <div><span className="text-muted-foreground">Owner: </span><span className="font-medium">{activeItem.owner}</span></div>
-                  <div><span className="text-muted-foreground">Origen: </span><span className="font-medium">{activeItem.origen}</span></div>
-                  <div><span className="text-muted-foreground">Planner: </span><span className="font-medium">{activeItem.planner}</span></div>
+                <div className="grid grid-cols-1 gap-2 rounded-lg border border-border bg-muted/30 px-3 py-3 text-xs sm:col-span-2 sm:grid-cols-3 sm:gap-3 sm:px-4">
+                  <div className="min-w-0 break-words"><span className="text-muted-foreground">Estado: </span><span className="font-medium">{activeItem.estado}</span></div>
+                  <div className="min-w-0 break-words"><span className="text-muted-foreground">Dominio: </span><span className="font-medium">{activeItem.dominio}</span></div>
+                  <div className="min-w-0 break-words"><span className="text-muted-foreground">Owner: </span><span className="font-medium">{activeItem.owner}</span></div>
+                  <div className="min-w-0 break-words"><span className="text-muted-foreground">Origen: </span><span className="font-medium">{activeItem.origen}</span></div>
+                  <div className="min-w-0 break-words"><span className="text-muted-foreground">Planner: </span><span className="font-medium">{activeItem.planner}</span></div>
                 </div>
               );
             })()}
@@ -1067,7 +1067,7 @@ export default function EncargosPage() {
               return activeItem ? <HealthBreakdownCard item={activeItem} /> : null;
             })()}
             {formError && (
-              <div className="col-span-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 sm:col-span-2">
                 {formError}
               </div>
             )}
@@ -1077,7 +1077,7 @@ export default function EncargosPage() {
               <Input
                 value={editForm.com_vendedor}
                 onChange={(e) => setField("com_vendedor", e.target.value)}
-                className="h-8 text-sm"
+                className="h-10 text-sm sm:h-8"
                 placeholder="Ej: 3.5"
                 type="number"
                 step="0.1"
@@ -1089,7 +1089,7 @@ export default function EncargosPage() {
               <Input
                 value={editForm.com_comprador}
                 onChange={(e) => setField("com_comprador", e.target.value)}
-                className="h-8 text-sm"
+                className="h-10 text-sm sm:h-8"
                 placeholder="Ej: 2.5"
                 type="number"
                 step="0.1"
@@ -1102,7 +1102,7 @@ export default function EncargosPage() {
                 type="date"
                 value={editForm.fecha_inicio}
                 onChange={(e) => setField("fecha_inicio", e.target.value)}
-                className="h-8 text-sm"
+                className="h-10 text-sm sm:h-8"
               />
             </div>
 
@@ -1112,7 +1112,7 @@ export default function EncargosPage() {
                 type="date"
                 value={editForm.fecha_fin}
                 onChange={(e) => setField("fecha_fin", e.target.value)}
-                className="h-8 text-sm"
+                className="h-10 text-sm sm:h-8"
               />
             </div>
 
@@ -1121,7 +1121,7 @@ export default function EncargosPage() {
               <Input
                 value={editForm.pvp_inicial}
                 onChange={(e) => setField("pvp_inicial", e.target.value)}
-                className="h-8 text-sm"
+                className="h-10 text-sm sm:h-8"
                 placeholder="Ej: 250000"
                 type="number"
               />
@@ -1132,7 +1132,7 @@ export default function EncargosPage() {
               <Input
                 value={editForm.pvp_actual}
                 onChange={(e) => setField("pvp_actual", e.target.value)}
-                className="h-8 text-sm"
+                className="h-10 text-sm sm:h-8"
                 placeholder="Ej: 240000"
                 type="number"
               />
@@ -1140,7 +1140,7 @@ export default function EncargosPage() {
 
             <div className="flex flex-col gap-1.5">
               <Label className="text-xs font-medium">Rebajas acumuladas</Label>
-              <div className="flex h-8 items-center rounded-md border border-border bg-muted/40 px-3 text-sm text-muted-foreground">
+              <div className="flex h-10 items-center rounded-md border border-border bg-muted/40 px-3 text-sm text-muted-foreground sm:h-8">
                 {(selected ?? items.find((item) => String(item.leadId) === createLeadId))?.rebajas ?? 0}
               </div>
             </div>
@@ -1150,23 +1150,23 @@ export default function EncargosPage() {
               <Input
                 value={editForm.pvp_estimado}
                 onChange={(e) => setField("pvp_estimado", e.target.value)}
-                className="h-8 text-sm"
+                className="h-10 text-sm sm:h-8"
                 placeholder="Ej: 235000"
                 type="number"
               />
             </div>
-            <div className="col-span-2 flex flex-col gap-1.5">
+            <div className="flex flex-col gap-1.5 sm:col-span-2">
               <Label className="text-xs font-medium">Memo del encargo</Label>
               <Textarea
                 value={editForm.memo}
                 onChange={(e) => setField("memo", e.target.value)}
-                className="min-h-[90px] resize-none text-sm"
+                className="min-h-[104px] resize-none text-sm sm:min-h-[90px]"
                 placeholder="Notas internas del encargo, condiciones pactadas, límites de precio, contexto comercial..."
               />
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="gap-2">
             <button
               type="button"
               onClick={() => {
@@ -1176,7 +1176,7 @@ export default function EncargosPage() {
                 resetEditForm();
               }}
               disabled={saving}
-              className="inline-flex h-8 items-center rounded-md border border-border bg-background px-3 text-xs font-medium hover:bg-accent"
+              className="inline-flex h-10 w-full items-center justify-center rounded-md border border-border bg-background px-3 text-xs font-medium hover:bg-accent sm:h-8 sm:w-auto"
             >
               Cancelar
             </button>
@@ -1184,7 +1184,7 @@ export default function EncargosPage() {
               type="button"
               onClick={() => void handleSave()}
               disabled={saving}
-              className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+              className="inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90 sm:h-8 sm:w-auto"
             >
               {saving ? "Guardando..." : "Guardar cambios"}
             </button>
