@@ -52,6 +52,9 @@ type OpportunityContactRow = {
   fecha: string | null;
   memo: string | null;
   created_at: string | null;
+  event_type: string | null;
+  effective_at: string | null;
+  metadata: unknown;
 };
 
 type ValoracionEntry = {
@@ -77,10 +80,11 @@ type ValoracionEntry = {
   owner: string;
 };
 
-function parseValuationMemo(memo: string | null | undefined) {
+function parseValuationMemo(row: OpportunityContactRow) {
   const { author, fields, memo: notes } = parseOpportunityContactMemo(
-    memo,
-    "[VALORACION]"
+    row.memo,
+    "[VALORACION]",
+    row.metadata
   );
   const medio = fields.medio && fields.medio !== "—" ? fields.medio : "";
 
@@ -469,8 +473,10 @@ export default function ValoracionesPage() {
       const [contactsResult, leadsResult] = await Promise.all([
         supabase
           .from("opportunity_contacts")
-          .select("id, opportunity_id, fecha, memo, created_at")
-          .ilike("memo", "[VALORACION]%")
+          .select(
+            "id, opportunity_id, fecha, memo, created_at, event_type, effective_at, metadata"
+          )
+          .eq("event_type", "valuation")
           .order("fecha", { ascending: false }),
         supabase.from("crm_leads_view").select("*").order("created_at", { ascending: false }),
       ]);
@@ -503,7 +509,7 @@ export default function ValoracionesPage() {
 
       const entries: ValoracionEntry[] = contactRows.map((row) => {
         const lead = leadsMap.get(row.opportunity_id);
-        const { medio, hora, createdBy, notes } = parseValuationMemo(row.memo);
+        const { medio, hora, createdBy, notes } = parseValuationMemo(row);
 
         return {
           id: String(row.id),

@@ -9,6 +9,7 @@ import {
 import { LeadDetailPanel } from "@/components/crm/lead-detail-panel";
 import { ImportLeadsCsvModal } from "@/components/crm/import-leads-csv-modal";
 import { KanbanBoard } from "@/components/crm/kanban-board";
+import { MaskedPhone } from "@/components/crm/masked-phone";
 import {
   Plus,
   Circle,
@@ -53,7 +54,6 @@ type DateFilterField = "fechaNoticia";
 type DateQuickFilterValue = "all" | "last7" | "last30" | "custom";
 
 const LEADS_PAGE_SIZE = 100;
-const HISTORY_PREFIX = "[HISTORIAL]";
 
 type CrmLeadRow = {
   id: number;
@@ -90,6 +90,16 @@ type CrmLeadRow = {
 type PhaseRow = {
   id: number;
   name: string | null;
+};
+
+type ProfileLookupRow = {
+  id: number;
+  name: string | null;
+};
+
+type SourceLookupRow = {
+  id: number;
+  code: string | null;
 };
 
 const VALID_PHASES: Lead["phase"][] = [
@@ -646,6 +656,7 @@ function mapCrmLeadToLead(row: CrmLeadRow): LeadTableRow {
     valor: normalizeValor(row.tasacion),
     phone: row.telefono?.trim() || "—",
     source: row.source_name?.trim() || "Sin origen",
+    sourceId: row.source_id,
     phase: normalizePhase(row.fase_name, row.fase_id),
     status: normalizeStatus(row.estado),
     fechaNoticia,
@@ -653,7 +664,9 @@ function mapCrmLeadToLead(row: CrmLeadRow): LeadTableRow {
     fechaValoracion: normalizeDate(row.fecha_valoracion),
     hora: row.hora ? row.hora.slice(0, 5) : "",
     planner: plannerLabel,
+    plannerId: row.contact_user_id,
     owner: ownerLabel,
+    ownerId: row.comercial_user_id,
     createdAt: row.created_at || "",
     assignedUser: ownerLabel,
     propertyAddress:
@@ -672,8 +685,17 @@ function mapCrmLeadToLead(row: CrmLeadRow): LeadTableRow {
 export default function LeadsPage() {
   const { userWithRole, loading: userLoading } = useUser();
   const canEdit = Boolean(userWithRole?.crmUser && canEditLeads(userWithRole.crmUser));
+  const currentRole = String(userWithRole?.crmUser.rol || "").trim().toLowerCase();
   const [phaseIdMap, setPhaseIdMap] =
     useState<Partial<Record<Lead["phase"], number>>>({});
+  const [profileIdByName, setProfileIdByName] = useState<Map<string, number>>(
+    new Map()
+  );
+  const [sourceIdByCode, setSourceIdByCode] = useState<Map<string, number>>(
+    new Map()
+  );
+  const [profileOptions, setProfileOptions] = useState<string[]>([]);
+  const [sourceOptions, setSourceOptions] = useState<string[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
@@ -721,6 +743,53 @@ export default function LeadsPage() {
     setPhaseIdMap(nextMap);
   }
 
+  async function loadRelationIdMaps() {
+    const [profilesResponse, sourcesResponse] = await Promise.all([
+      supabase.rpc("crm_profile_assignment_options"),
+      supabase.from("sources").select("id, code").eq("enabled", true),
+    ]);
+
+    if (profilesResponse.error || sourcesResponse.error) {
+      console.error("Error cargando catálogos relacionales:", {
+        profilesError: profilesResponse.error,
+        sourcesError: sourcesResponse.error,
+      });
+      return;
+    }
+
+    const profiles = ((profilesResponse.data ?? []) as ProfileLookupRow[]).filter(
+      (row): row is ProfileLookupRow & { name: string } => Boolean(row.name?.trim())
+    );
+    const sources = ((sourcesResponse.data ?? []) as SourceLookupRow[]).filter(
+      (row): row is SourceLookupRow & { code: string } => Boolean(row.code?.trim())
+    );
+
+    setProfileIdByName(
+      new Map(
+        profiles.map((row) => [normalizeLookupText(row.name), row.id])
+      )
+    );
+    setSourceIdByCode(
+      new Map(
+        sources.map((row) => [normalizeLookupText(row.code), row.id])
+      )
+    );
+    setProfileOptions(
+      profiles.map((row) => row.name).sort((a, b) => a.localeCompare(b, "es"))
+    );
+    setSourceOptions(
+      sources.map((row) => row.code).sort((a, b) => a.localeCompare(b, "es"))
+    );
+  }
+
+  function profileIdFor(name: string | null | undefined) {
+    return profileIdByName.get(normalizeLookupText(name)) ?? null;
+  }
+
+  function sourceIdFor(code: string | null | undefined) {
+    return sourceIdByCode.get(normalizeLookupText(code)) ?? null;
+  }
+
   async function resolvePhaseId(phase: Lead["phase"]) {
     const cached = phaseIdMap[phase];
     if (cached) return cached;
@@ -754,13 +823,16 @@ export default function LeadsPage() {
     return resolved ?? PHASE_ID_MAP[phase] ?? 1;
   }
 
-  async function persistLeadActivity(leadId: string, text: string) {
-    const createdBy = userWithRole?.crmUser.name?.trim() || "Usuario";
-    const { error } = await supabase.from("opportunity_contacts").insert({
-      opportunity_id: Number(leadId),
-      fecha: new Date().toISOString().slice(0, 10),
-      memo: `${HISTORY_PREFIX} ${createdBy}: ${text}`,
-      resultado: true,
+  async function persistLeadActivity(
+    leadId: string,
+    text: string,
+    eventType: "lead_created" | "lead_imported"
+  ) {
+    const { error } = await supabase.rpc("crm_add_contact_activity", {
+      p_opportunity_id: Number(leadId),
+      p_event_type: eventType,
+      p_text: text,
+      p_metadata: { lead_id: Number(leadId) },
     });
 
     if (error) {
@@ -822,10 +894,10 @@ export default function LeadsPage() {
     setLoadingMoreLeads(false);
   }
 
-  async function handleImportCsv(importedLeads: Lead[]) {
-    if (!canEdit) return;
+  async function handleImportCsv(importedLeads: Lead[]): Promise<string | null> {
+    if (!canEdit) return "No tenés permisos para importar leads.";
     setPageError(null);
-    if (importedLeads.length === 0) return;
+    if (importedLeads.length === 0) return "No hay filas válidas para importar.";
 
     const phaseIds = new Map<Lead["phase"], number>();
     const uniquePhases = Array.from(new Set(importedLeads.map((lead) => lead.phase)));
@@ -851,9 +923,9 @@ export default function LeadsPage() {
       memo: cleanNullable(lead.notes),
       en_venta: null,
       medio: cleanNullable(lead.medio),
-      source_id: null,
-      comercial_user_id: null,
-      contact_user_id: null,
+      source_id: sourceIdFor(lead.source),
+      comercial_user_id: profileIdFor(lead.owner),
+      contact_user_id: profileIdFor(lead.planner),
       team_id: null,
       deleted_at: null,
     }));
@@ -865,21 +937,27 @@ export default function LeadsPage() {
 
     if (error) {
       console.error("Error importing CSV to Supabase:", error);
-      setPageError("No se pudieron importar los leads. Revisá el archivo e intentá nuevamente.");
-      return;
+      const message = "No se pudieron importar los leads. Revisá el archivo e intentá nuevamente.";
+      setPageError(message);
+      return message;
     }
 
     await Promise.all(
       (insertedRows ?? []).map((row) =>
-        persistLeadActivity(String(row.id), "Importó el lead por CSV")
+        persistLeadActivity(
+          String(row.id),
+          "Importó el lead por CSV",
+          "lead_imported"
+        )
       )
     );
 
     await loadLeadsFromSupabase({ append: false });
+    return null;
   }
 
-  async function handleCreateLead(form: NewLeadFormData) {
-    if (!canEdit) return;
+  async function handleCreateLead(form: NewLeadFormData): Promise<string | null> {
+    if (!canEdit) return "No tenés permisos para crear leads.";
     setPageError(null);
 
     const resolvedPhaseId = await resolvePhaseId(form.phase as Lead["phase"]);
@@ -905,9 +983,9 @@ export default function LeadsPage() {
         memo: cleanNullable(form.notes),
         en_venta: cleanNullable(form.enVenta),
         medio: cleanNullable(form.medio),
-        source_id: null,
-        comercial_user_id: null,
-        contact_user_id: null,
+        source_id: sourceIdFor(form.source),
+        comercial_user_id: profileIdFor(form.owner),
+        contact_user_id: profileIdFor(form.planner),
         team_id: null,
         deleted_at: null,
       },
@@ -920,16 +998,18 @@ export default function LeadsPage() {
 
     if (error) {
       console.error("Error creating lead in Supabase:", error);
-      setPageError("No se pudo crear el lead. Revisá los datos e intentá nuevamente.");
-      return;
+      const message = "No se pudo crear el lead. Revisá los datos e intentá nuevamente.";
+      setPageError(message);
+      return message;
     }
 
     const insertedId = insertedRows?.[0]?.id;
     if (insertedId) {
-      await persistLeadActivity(String(insertedId), "Creó el lead");
+      await persistLeadActivity(String(insertedId), "Creó el lead", "lead_created");
     }
 
     await loadLeadsFromSupabase({ append: false });
+    return null;
   }
 
   async function handleSaveLead(next: Lead) {
@@ -960,6 +1040,9 @@ export default function LeadsPage() {
       en_venta: cleanNullable(next.enVenta),
       fase_id: resolvedPhaseId,
       postal_id: normalizePostalId(next.cp),
+      source_id: sourceIdFor(next.source),
+      comercial_user_id: profileIdFor(next.owner),
+      contact_user_id: profileIdFor(next.planner),
     };
 
     const { data: updatedRows, error } = await supabase
@@ -1028,10 +1111,10 @@ export default function LeadsPage() {
       )
     );
 
-    const { error } = await supabase
-      .from("opportunities")
-      .update({ fase_id: resolvedPhaseId })
-      .eq("id", Number(leadId));
+    const { error } = await supabase.rpc("crm_change_lead_phase_with_activity", {
+      p_opportunity_id: Number(leadId),
+      p_phase_id: resolvedPhaseId,
+    });
 
     if (error) {
       console.error("Error actualizando fase del lead:", error);
@@ -1040,10 +1123,6 @@ export default function LeadsPage() {
       return;
     }
 
-    await persistLeadActivity(
-      leadId,
-      `Cambió fase de ${PHASE_LABELS[currentLead.phase]} a ${PHASE_LABELS[nextPhase]}`
-    );
   }
 
   async function handleToggleFavorite(leadId: string) {
@@ -1079,6 +1158,7 @@ export default function LeadsPage() {
   useEffect(() => {
     if (userLoading || !userWithRole?.crmUser) return;
     void loadPhaseIdMap();
+    void loadRelationIdMaps();
     void loadLeadsFromSupabase({ append: false });
   }, [userLoading, userWithRole]);
 
@@ -1145,6 +1225,12 @@ export default function LeadsPage() {
     if (fromDate) return `Desde ${formatDateInputLabel(fromDate)}`;
     return `Hasta ${formatDateInputLabel(toDate)}`;
   }, [dateQuickFilter, dateFromFilter, dateToFilter]);
+
+  const ownerOptions = useMemo(() => {
+    if (currentRole !== "comercial") return profileOptions;
+    const currentName = userWithRole?.crmUser.name?.trim();
+    return currentName ? [currentName] : [];
+  }, [currentRole, profileOptions, userWithRole?.crmUser.name]);
 
   function handleSort(key: SortKey) {
     if (sortKey === key) {
@@ -1276,22 +1362,15 @@ export default function LeadsPage() {
     setPageError(null);
     const idsToDelete = Array.from(selectedIds).map((id) => Number(id));
 
-    const { error } = await supabase
-      .from("opportunities")
-      .update({ deleted_at: new Date().toISOString() })
-      .in("id", idsToDelete);
+    const { error } = await supabase.rpc("crm_soft_delete_leads", {
+      lead_ids: idsToDelete,
+    });
 
     if (error) {
       console.error("Error soft deleting leads:", error);
       setPageError("No se pudieron eliminar los leads seleccionados. Intentá nuevamente.");
       return;
     }
-
-    await Promise.all(
-      Array.from(selectedIds).map((id) =>
-        persistLeadActivity(id, "Eliminó el lead")
-      )
-    );
 
     setLeads((prev) => prev.filter((lead) => !selectedIds.has(lead.id)));
 
@@ -2109,7 +2188,7 @@ export default function LeadsPage() {
                     </td>
 
                     <td className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground hidden md:table-cell">
-                      {lead.phone}
+                      <MaskedPhone value={lead.phone} />
                     </td>
 
                     <td className="px-3 py-2.5 hidden md:table-cell">
@@ -2170,6 +2249,9 @@ export default function LeadsPage() {
         open={modalOpen}
         onOpenChange={setModalOpen}
         onSubmit={handleCreateLead}
+        ownerOptions={ownerOptions}
+        plannerOptions={profileOptions}
+        sourceOptions={sourceOptions}
       />
 
       <ImportLeadsCsvModal
@@ -2183,6 +2265,8 @@ export default function LeadsPage() {
         onClose={() => setSelectedLead(null)}
         onSaveLead={handleSaveLead}
         readOnly={!canEdit}
+        ownerOptions={ownerOptions}
+        plannerOptions={profileOptions}
       />
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>

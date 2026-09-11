@@ -117,6 +117,9 @@ type OpportunityContactRow = {
   fecha: string | null;
   memo: string | null;
   created_at: string | null;
+  event_type: string | null;
+  effective_at: string | null;
+  metadata: unknown;
 };
 
 type RgEntry = {
@@ -133,8 +136,12 @@ type RgEntry = {
   owner: string;
 };
 
-function parseRgMemo(memo: string | null | undefined) {
-  const { fields } = parseOpportunityContactMemo(memo, "[R.G.]");
+function parseRgMemo(row: OpportunityContactRow) {
+  const { fields } = parseOpportunityContactMemo(
+    row.memo,
+    "[R.G.]",
+    row.metadata
+  );
 
   return {
     medio: fields.medio && fields.medio !== "—" ? fields.medio : "",
@@ -188,8 +195,10 @@ export default function RGPage() {
       const [contactsResult, leadsResult] = await Promise.all([
         supabase
           .from("opportunity_contacts")
-          .select("id, opportunity_id, fecha, memo, created_at")
-          .ilike("memo", "[R.G.]%")
+          .select(
+            "id, opportunity_id, fecha, memo, created_at, event_type, effective_at, metadata"
+          )
+          .eq("event_type", "rg")
           .order("fecha", { ascending: false }),
         supabase.from("crm_leads_view").select("*").order("created_at", { ascending: false }),
       ]);
@@ -222,7 +231,7 @@ export default function RGPage() {
 
       const entries: RgEntry[] = contactRows.map((row) => {
         const lead = leadsMap.get(row.opportunity_id);
-        const { medio, hora, resultado } = parseRgMemo(row.memo);
+        const { medio, hora, resultado } = parseRgMemo(row);
 
         return {
           id: String(row.id),

@@ -35,7 +35,7 @@ Las acciones principales del negocio si tienen respaldo en backend:
 - Las R.G. se guardan como contactos tipo R.G. en `opportunity_contacts`.
 - Los encargos se guardan en `opportunity_orders`.
 - Las visitas se guardan en `visitas`.
-- El dashboard calcula metricas desde datos reales de `opportunities`, `opportunity_contacts`, `opportunity_orders` y `visitas`.
+- El dashboard calcula metricas desde datos reales de `opportunities`, `opportunity_contacts` y `visitas`; las altas de encargos se cuentan mediante eventos `order_created`.
 
 En resumen: las acciones operativas importantes no quedan solo en el front. La mayoria se escriben o se leen desde Supabase.
 
@@ -69,9 +69,9 @@ Matriz de permisos aplicada en el frontend:
 
 Gonzalo mantiene `profiles.rol = 'Comercial'`, pero el frontend reconoce los nombres de perfil `Gonza` y `Gonzalo` como la excepcion de Visitador. En Oportunidades, Valoraciones, Encargos, R.G. y Planning dispone de acceso de solo lectura; en Visitas puede crear y editar registros asociados a cualquier inmueble. Tampoco se incluye como comercial en las comparativas de rendimiento.
 
-Estado: comportamiento visual y consultas del frontend corregidos. La proteccion definitiva a nivel de base de datos sigue pendiente de comprobar, porque los controles del navegador no sustituyen las politicas RLS.
+Estado actualizado el 9 de septiembre: políticas RLS aplicadas en la base de prueba y aislamiento comprobado mediante SQL. Quedan las pruebas completas de navegador; ver `fase-0-seguridad-supabase.md`.
 
-Auditoria de solo lectura realizada el 14 de julio de 2026 con la clave publica y sin iniciar sesion:
+Situación histórica detectada en la auditoría de solo lectura del 14 de julio de 2026, antes de aplicar las correcciones:
 
 - `crm_leads_view`: 3316 registros accesibles.
 - `opportunities`: 4785 registros accesibles.
@@ -80,11 +80,11 @@ Auditoria de solo lectura realizada el 14 de julio de 2026 con la clave publica 
 - `visitas`: 11 registros accesibles.
 - `profiles`: 14 registros accesibles.
 
-Conclusion de seguridad: actualmente un cliente anonimo puede consultar datos del CRM. Es un riesgo alto y confirma que los permisos visuales todavia no estan respaldados por Supabase.
+Conclusión histórica: un cliente anónimo podía consultar datos del CRM. Ese riesgo crítico quedó corregido en la Fase 0.
 
-Se preparo `supabase/rls-role-permissions.sql`, sin crear ni eliminar tablas. El script revoca el acceso anonimo, activa RLS, aplica la matriz por rol y hace que `crm_leads_view` respete las politicas. Gonzalo conserva el rol Comercial y se contempla como una excepcion nominal. El script todavia no fue ejecutado en Supabase.
+El 8 de septiembre de 2026 se confirmó y cerró el acceso anónimo mediante las migraciones versionadas. El usuario autorizó aplicarlas directamente a la base de prueba sin backup. Gonzalo conserva temporalmente el rol Comercial con una excepción nominal. La sonda API y las pruebas SQL por usuario pasan; el alcance y los pendientes constan en `fase-0-seguridad-supabase.md`.
 
-Hay que revisar en Supabase:
+Controles aplicados y comprobados en Supabase mediante pruebas SQL:
 
 - Que cada Comercial solo pueda leer y modificar sus propios leads y datos relacionados.
 - Que Admin y Coordinador tengan acceso completo.
@@ -102,31 +102,39 @@ La tabla `opportunity_contacts` guarda varias cosas distintas:
 - R.G.
 - Eventos generados por acciones.
 
-Estado: revisado y corregido sin crear tablas ni modificar registros existentes.
+Estado: estructurado sobre la misma tabla, sin crear una tabla nueva ni eliminar
+los memos existentes.
 
-Revision de los 36 registros existentes:
+Clasificación de los 55 registros existentes al aplicar la migración:
 
-- 2 observaciones con prefijo `[NOTA]`.
-- 4 valoraciones con prefijo `[VALORACION]`.
+- 3 observaciones con prefijo `[NOTA]`.
+- 5 valoraciones con prefijo `[VALORACION]`.
 - 3 R.G. con prefijo `[R.G.]`.
 - 27 observaciones antiguas en texto libre.
+- 17 actividades de auditoría tipificadas, entre llamadas, cambios de fase,
+  encargos, ediciones y actividades generales.
 - Todos tienen lead asociado, fecha funcional y fecha/hora de creacion.
 
 Reglas vigentes:
 
-- `[NOTA]` se muestra en Observaciones.
-- `[HISTORIAL]` se muestra en Historial.
-- `[VALORACION]` alimenta Valoraciones, Historial, Planning y metricas.
-- `[R.G.]` alimenta R.G., Historial, Planning y metricas.
+- `event_type = note` se muestra en Observaciones.
+- Los tipos de auditoria se muestran en Historial.
+- `event_type = valuation` alimenta Valoraciones, Historial, Planning y metricas.
+- `event_type = rg` alimenta R.G., Historial, Planning y metricas.
 - Los textos libres antiguos se mantienen como observaciones heredadas.
 
 Correcciones realizadas:
 
-- Valoraciones y R.G. interpretan tanto el formato antiguo sin autor como el formato nuevo con autor.
+- Todos los registros tienen un tipo estructurado; los 27 textos libres antiguos
+  se mantienen como `legacy`.
+- Valoraciones y R.G. guardan campos operativos en `metadata` y conservan el
+  formato antiguo como respaldo legible.
 - Planning lee valoraciones, R.G. y visitas realmente persistidas, en lugar de inferirlas desde la fase actual del lead.
-- Se mantiene un parser compartido para evitar diferencias entre pantallas.
+- Se mantiene un parser compartido sólo para compatibilidad histórica.
+- Las políticas de escritura ya no buscan palabras dentro del `memo`.
 
-Conclusion: el uso mixto es consistente mientras todos los nuevos registros mantengan estos prefijos. No es necesario crear otra tabla para el funcionamiento actual.
+Conclusion: `opportunity_contacts` continúa siendo la tabla única, pero la
+clasificación y las métricas ya no dependen de prefijos.
 
 ### 3. Historial de acciones
 
@@ -182,7 +190,7 @@ Revision realizada sobre los 3316 leads activos:
 
 El front actual funciona porque lee `comercial_name`, `contact_name` y `source_name`. Tambien crea e importa leads guardando `comercial_user_desc`, `contact_user_desc` y `source_desc`, dejando sus IDs en `null`.
 
-Conclusion: los datos persisten y se muestran, pero la relacion no esta normalizada. Los filtros y metricas por comercial dependen de coincidencias exactas de texto, por lo que un cambio de nombre, una variante ortografica o un duplicado puede dividir resultados. No es un bloqueo para operar, pero si un riesgo de consistencia para reportes y permisos futuros.
+Estado actualizado el 9 de septiembre: las coincidencias únicas fueron normalizadas mediante IDs y el frontend guarda las relaciones nuevas por ID. RLS también prioriza `comercial_user_id`. Los valores ambiguos conservan el texto heredado y están detallados en `fase-1-integridad-datos.md`; requieren una decisión de negocio antes de migrarlos.
 
 ### 5. Borrado logico
 
@@ -206,18 +214,18 @@ Sin snapshots, el dashboard puede recalcular datos historicos con informacion ac
 
 ## Recomendaciones priorizadas
 
-1. Pendiente: revisar reglas de Supabase y permisos por rol.
+1. Completar las pruebas de navegador por cada rol; las reglas RLS y el bloqueo anónimo ya están aplicados y comprobados mediante SQL.
 2. Estandarizar el historial de acciones para que siempre guarde usuario, fecha, accion y cambios.
 3. Mantener los prefijos estandarizados de `opportunity_contacts` en todos los nuevos flujos.
 4. Evaluar snapshots diarios para metricas historicas del dashboard.
-5. Normalizar progresivamente comerciales, planners y origenes con sus IDs, manteniendo los textos actuales para compatibilidad.
+5. Resolver manualmente los valores ambiguos restantes de comerciales, planners y orígenes; las coincidencias únicas y las nuevas escrituras ya usan IDs.
 
 ## Conclusion
 
 El CRM tiene una base de persistencia correcta para empezar a operar: leads, visitas, valoraciones, R.G., encargos, observaciones e historial tienen conexion con Supabase.
 
-Lo mas importante a mejorar no es el front, sino la trazabilidad fina y la seguridad de datos:
+La seguridad crítica de datos quedó reforzada en la Fase 0. Antes de producción todavía hay que completar las pruebas funcionales por rol, normalizar asignaciones y mejorar la trazabilidad:
 
-- confirmar permisos,
+- confirmar los recorridos de cada perfil en el navegador,
 - ordenar mejor los eventos,
 - y decidir si el dashboard debe ser calculado en vivo o guardar cortes historicos diarios.

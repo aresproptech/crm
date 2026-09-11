@@ -16,10 +16,41 @@ function normalizeFieldName(value: string) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
+export type OpportunityContactMetadata = Record<string, unknown>;
+
+export function readOpportunityContactMetadata(
+  value: unknown
+): OpportunityContactMetadata {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as OpportunityContactMetadata;
+}
+
+export function opportunityContactMetadataText(
+  value: unknown,
+  key: string
+) {
+  const metadata = readOpportunityContactMetadata(value);
+  const field = metadata[key];
+  return typeof field === "string" ? field.trim() : "";
+}
+
+export function matchesOpportunityContactEvent(
+  eventType: string | null | undefined,
+  memo: string | null | undefined,
+  expectedType: string,
+  legacyPrefix: string
+) {
+  if (eventType === expectedType) return true;
+  if (eventType && eventType !== "legacy") return false;
+  return (memo || "").trim().startsWith(legacyPrefix);
+}
+
 export function parseOpportunityContactMemo(
   memo: string | null | undefined,
-  prefix: "[VALORACION]" | "[R.G.]"
+  prefix: "[VALORACION]" | "[R.G.]",
+  metadataValue?: unknown
 ) {
+  const metadata = readOpportunityContactMetadata(metadataValue);
   const text = (memo || "").trim();
   let body = text.startsWith(prefix) ? text.slice(prefix.length).trim() : text;
   let author = "";
@@ -44,9 +75,25 @@ export function parseOpportunityContactMemo(
     return acc;
   }, {});
 
+  for (const key of RESERVED_FIELD_NAMES) {
+    const value = metadata[key];
+    if (typeof value === "string" && value.trim()) {
+      fields[normalizeFieldName(key)] = value.trim();
+    }
+  }
+
+  const metadataAuthor =
+    typeof metadata.actor_name === "string" ? metadata.actor_name.trim() : "";
+  const metadataMemo =
+    typeof metadata.notes === "string"
+      ? metadata.notes.trim()
+      : typeof metadata.text === "string"
+        ? metadata.text.trim()
+        : "";
+
   return {
-    author,
+    author: metadataAuthor || author,
     fields,
-    memo: memoLines.join("\n").trim(),
+    memo: metadataMemo || memoLines.join("\n").trim(),
   };
 }

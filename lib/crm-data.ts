@@ -27,6 +27,7 @@ export interface Lead {
   valor: string;
   phone: string;
   source: string;
+  sourceId?: number | null;
   medio?: string;
   enVenta?: string;
   phase: LeadPhase;
@@ -36,7 +37,9 @@ export interface Lead {
   fechaValoracion: string;
   hora: string;
   planner?: string;
+  plannerId?: number | null;
   owner: string;
+  ownerId?: number | null;
   createdAt: string;
   assignedUser: string;
   propertyAddress: string;

@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { AlertTriangle, FileUp, Table2 } from "lucide-react";
+import { AlertTriangle, FileUp, Loader2, Table2 } from "lucide-react";
 import type { Lead } from "@/lib/crm-data";
 
 type Step = 1 | 2 | 3 | 4;
@@ -67,7 +67,7 @@ export function ImportLeadsCsvModal({
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  onImport: (leads: Lead[]) => void;
+  onImport: (leads: Lead[]) => Promise<string | null>;
 }) {
   const [step, setStep] = React.useState<Step>(1);
   const [file, setFile] = React.useState<File | null>(null);
@@ -78,6 +78,7 @@ export function ImportLeadsCsvModal({
   const [editedRows, setEditedRows] = React.useState<MappedCsvLeadRow[]>([]);
   const [previewFilter, setPreviewFilter] = React.useState<PreviewFilter>("all");
   const [error, setError] = React.useState<string | null>(null);
+  const [isImporting, setIsImporting] = React.useState(false);
 
   const mappedRows = React.useMemo(() => {
     if (editedRows.length > 0) return editedRows;
@@ -230,17 +231,38 @@ export function ImportLeadsCsvModal({
     return true;
   }
 
-  function doImport() {
+  async function doImport() {
+    if (isImporting) return;
+
     const validMapped = validation.results
       .filter((r) => r.valid)
       .map((r) => r.mapped);
     const leads = validMapped.map(buildLeadFromMapped);
-    onImport(leads);
-    onOpenChange(false);
+
+    setIsImporting(true);
+    setError(null);
+    try {
+      const errorMessage = await onImport(leads);
+      if (errorMessage) {
+        setError(errorMessage);
+        return;
+      }
+      onOpenChange(false);
+    } catch (importError) {
+      console.error("Error inesperado importando leads:", importError);
+      setError("No se pudieron importar los leads. Intentá nuevamente.");
+    } finally {
+      setIsImporting(false);
+    }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!isImporting) onOpenChange(nextOpen);
+      }}
+    >
       <DialogContent className="h-[92vh] w-[96vw] max-w-[96vw] overflow-hidden p-0 sm:max-w-[96vw] lg:max-w-[96vw] xl:max-w-[96vw]">
         <div className="flex h-full flex-col">
           <DialogHeader className="shrink-0 border-b border-border px-5 py-4">
@@ -415,11 +437,11 @@ export function ImportLeadsCsvModal({
                       <Button
                         type="button"
                         size="sm"
-                        disabled={validation.valid === 0}
-                        onClick={doImport}
+                        disabled={validation.valid === 0 || isImporting}
+                        onClick={() => void doImport()}
                         className="h-10 w-full max-w-[420px] text-xs font-semibold"
                       >
-                        Aceptar e importar {validation.valid} leads válidos
+                        {isImporting ? "Importando..." : `Aceptar e importar ${validation.valid} leads válidos`}
                       </Button>
                     </div>
                   </div>
@@ -517,11 +539,11 @@ export function ImportLeadsCsvModal({
                     <Button
                       type="button"
                       size="sm"
-                      disabled={validation.valid === 0}
-                      onClick={doImport}
+                      disabled={validation.valid === 0 || isImporting}
+                      onClick={() => void doImport()}
                       className="h-10 w-full text-xs font-semibold"
                     >
-                      Aceptar e importar {validation.valid} leads válidos
+                      {isImporting ? "Importando..." : `Aceptar e importar ${validation.valid} leads válidos`}
                     </Button>
 
                     <div className="text-xs text-muted-foreground">
@@ -545,6 +567,7 @@ export function ImportLeadsCsvModal({
               variant="outline"
               size="sm"
               onClick={() => onOpenChange(false)}
+              disabled={isImporting}
             >
               Cerrar
             </Button>
@@ -554,7 +577,7 @@ export function ImportLeadsCsvModal({
                 type="button"
                 variant="outline"
                 size="sm"
-                disabled={step === 1}
+                disabled={step === 1 || isImporting}
                 onClick={() => setStep((s) => (s > 1 ? ((s - 1) as Step) : s))}
               >
                 Atrás
@@ -601,11 +624,18 @@ export function ImportLeadsCsvModal({
                 <Button
                   type="button"
                   size="sm"
-                  disabled={validation.valid === 0}
-                  onClick={doImport}
+                  disabled={validation.valid === 0 || isImporting}
+                  onClick={() => void doImport()}
                   className="h-9 min-w-[320px] text-xs font-semibold"
                 >
-                  Aceptar e importar {validation.valid} leads válidos
+                  {isImporting ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Importando...
+                    </>
+                  ) : (
+                    `Aceptar e importar ${validation.valid} leads válidos`
+                  )}
                 </Button>
               )}
             </div>

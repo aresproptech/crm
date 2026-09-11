@@ -321,10 +321,10 @@ export function LeadDocumentationTab({
     };
   }, [leadId]);
 
-  async function persistState(nextState: DocumentationState) {
+  async function persistState(nextState: DocumentationState): Promise<boolean> {
     setState(nextState);
     latestState.current = nextState;
-    if (readOnly || schemaMissing) return;
+    if (readOnly || schemaMissing) return true;
 
     setSaving(true);
     setError(null);
@@ -340,8 +340,13 @@ export function LeadDocumentationTab({
         { onConflict: "opportunity_id" }
       );
 
-    if (saveError) setError(`No se pudieron guardar los cambios: ${saveError.message}`);
+    if (saveError) {
+      setError(`No se pudieron guardar los cambios: ${saveError.message}`);
+      setSaving(false);
+      return false;
+    }
     setSaving(false);
+    return true;
   }
 
   function updateOwner(index: number, key: keyof OwnerDocumentation, value: string, persist = false) {
@@ -771,8 +776,8 @@ export function LeadDocumentationTab({
       setConfigurationOpen(false);
       return;
     }
-    await persistState(configurationDraft);
-    setConfigurationOpen(false);
+    const saved = await persistState(configurationDraft);
+    if (saved) setConfigurationOpen(false);
   }
 
   function renderRequirement(requirement: Requirement) {
@@ -1010,7 +1015,12 @@ export function LeadDocumentationTab({
         })}
       </Accordion>
 
-      <Dialog open={configurationOpen} onOpenChange={setConfigurationOpen}>
+      <Dialog
+        open={configurationOpen}
+        onOpenChange={(nextOpen) => {
+          if (!saving) setConfigurationOpen(nextOpen);
+        }}
+      >
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
             <DialogTitle>Configurar documentación</DialogTitle>
@@ -1094,6 +1104,11 @@ export function LeadDocumentationTab({
                 Modo de prueba: la configuración se aplicará durante esta sesión, pero todavía no se guardará en Supabase.
               </p>
             )}
+            {error && !schemaMissing && (
+              <p role="alert" aria-live="polite" className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                {error}
+              </p>
+            )}
           </div>
 
           <DialogFooter className="flex-row justify-between sm:justify-between">
@@ -1105,6 +1120,7 @@ export function LeadDocumentationTab({
                   ? setConfigurationOpen(false)
                   : setConfigurationStep((current) => current - 1)
               }
+              disabled={saving}
             >
               {configurationStep === 0 ? "Cancelar" : "Anterior"}
             </Button>
@@ -1112,12 +1128,15 @@ export function LeadDocumentationTab({
               <Button
                 type="button"
                 onClick={() => setConfigurationStep((current) => current + 1)}
+                disabled={saving}
               >
                 Siguiente
               </Button>
             ) : (
-              <Button type="button" onClick={() => void saveConfiguration()}>
-                {readOnly
+              <Button type="button" onClick={() => void saveConfiguration()} disabled={saving}>
+                {saving
+                  ? "Guardando..."
+                  : readOnly
                   ? "Cerrar"
                   : schemaMissing
                     ? "Aplicar configuración"

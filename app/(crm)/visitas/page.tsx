@@ -27,7 +27,6 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
-const HISTORY_PREFIX = "[HISTORIAL]";
 const DEFAULT_VISIT_BUYER = "Gonzalo";
 
 type Visita = {
@@ -175,6 +174,8 @@ export default function VisitasPage() {
   const { userWithRole } = useUser();
   const [visitas, setVisitas] = useState<Visita[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -186,20 +187,6 @@ export default function VisitasPage() {
   const [phoneCopyStatus, setPhoneCopyStatus] = useState<"idle" | "copied">("idle");
   const [selectedPhoneIds, setSelectedPhoneIds] = useState<Set<number>>(new Set());
 
-  async function persistLeadActivity(leadId: number, text: string) {
-    const createdBy = userWithRole?.crmUser.name ?? "Usuario";
-    const { error } = await supabase.from("opportunity_contacts").insert({
-      opportunity_id: leadId,
-      fecha: new Date().toISOString().slice(0, 10),
-      memo: `${HISTORY_PREFIX} ${createdBy}: ${text}`,
-      resultado: true,
-    });
-
-    if (error) {
-      console.error("Error guardando historial de visita:", error);
-    }
-  }
-
   function setField(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
@@ -210,6 +197,7 @@ export default function VisitasPage() {
 
   async function loadVisitas() {
     setLoading(true);
+    setPageError(null);
     const crmUser = userWithRole?.crmUser;
     if (!crmUser) {
       setVisitas([]);
@@ -230,6 +218,7 @@ export default function VisitasPage() {
 
       if (ownLeadsError) {
         console.error("Error cargando leads del comercial:", ownLeadsError);
+        setPageError("No se pudieron cargar las visitas. Intentá actualizar la página.");
         setVisitas([]);
         setLoading(false);
         return;
@@ -242,6 +231,7 @@ export default function VisitasPage() {
     const { data, error } = await query;
     if (error) {
       console.error("Error cargando visitas:", error);
+      setPageError("No se pudieron cargar las visitas. Intentá actualizar la página.");
       setLoading(false);
       return;
     }
@@ -268,7 +258,11 @@ export default function VisitasPage() {
 
     const { data, error } = await query;
 
-    if (error) return;
+    if (error) {
+      console.error("Error cargando inmuebles para visitas:", error);
+      setPageError("No se pudieron cargar los inmuebles disponibles para crear visitas.");
+      return;
+    }
 
     setInmuebles((data ?? []).map((row) => ({
       id: row.id as number,
@@ -306,36 +300,47 @@ export default function VisitasPage() {
   }
 
   function handleRowClick(v: Visita) {
+    setFormError(null);
     setSelectedVisita(v);
     setEditForm(visitaToForm(v));
     setEditModalOpen(true);
   }
 
   async function handleSaveVisita() {
-    if (!form.opportunity_id) return;
+    if (!form.opportunity_id) {
+      setFormError("Seleccioná un inmueble antes de guardar la visita.");
+      return;
+    }
     setSaving(true);
+    setFormError(null);
 
-    const { error } = await supabase.from("visitas").insert({
-      opportunity_id: Number(form.opportunity_id),
-      estado: form.estado || null,
-      dominio: form.dominio || null,
-      planner: form.planner || null,
-      owner: form.owner || null,
-      fecha_visita: form.fecha_visita || null,
-      hora: form.hora || null,
-      buyer: form.buyer || null,
-      nombre_apellido: form.nombre_apellido || null,
-      telefono: form.telefono || null,
-      dni: form.dni || null,
-      vende: form.vende === "si" ? true : form.vende === "no" ? false : null,
-      observaciones_visita: form.observaciones_visita || null,
-      created_by: userWithRole?.crmUser.name ?? "Sistema",
+    const { error } = await supabase.rpc("crm_save_visit_with_activity", {
+      p_visit_id: null,
+      p_opportunity_id: Number(form.opportunity_id),
+      p_data: {
+        estado: form.estado || null,
+        dominio: form.dominio || null,
+        planner: form.planner || null,
+        owner: form.owner || null,
+        fecha_visita: form.fecha_visita || null,
+        hora: form.hora || null,
+        buyer: form.buyer || null,
+        nombre_apellido: form.nombre_apellido || null,
+        telefono: form.telefono || null,
+        dni: form.dni || null,
+        vende: form.vende === "si" ? true : form.vende === "no" ? false : null,
+        observaciones_visita: form.observaciones_visita || null,
+      },
+      p_change_details: null,
     });
 
     setSaving(false);
-    if (error) { console.error("Error guardando visita:", error); return; }
+    if (error) {
+      console.error("Error guardando visita:", error);
+      setFormError("No se pudo guardar la visita. Revisá los datos e intentá nuevamente.");
+      return;
+    }
 
-    await persistLeadActivity(Number(form.opportunity_id), "Agregó una visita");
     setAddModalOpen(false);
     setForm(EMPTY_FORM);
     void loadVisitas();
@@ -344,11 +349,13 @@ export default function VisitasPage() {
   async function handleUpdateVisita() {
     if (!selectedVisita) return;
     setSaving(true);
+    setFormError(null);
     const changes = buildVisitChangeLines(visitaToForm(selectedVisita), editForm);
 
-    const { error } = await supabase
-      .from("visitas")
-      .update({
+    const { error } = await supabase.rpc("crm_save_visit_with_activity", {
+      p_visit_id: selectedVisita.id,
+      p_opportunity_id: selectedVisita.opportunity_id,
+      p_data: {
         fecha_visita: editForm.fecha_visita || null,
         hora: editForm.hora || null,
         nombre_apellido: editForm.nombre_apellido || null,
@@ -357,20 +364,19 @@ export default function VisitasPage() {
         dni: editForm.dni || null,
         vende: editForm.vende === "si" ? true : editForm.vende === "no" ? false : null,
         observaciones_visita: editForm.observaciones_visita || null,
-      })
-      .eq("id", selectedVisita.id);
+      },
+      p_change_details: changes.length
+        ? `:\n${changes.join("\n")}`
+        : " sin cambios visibles",
+    });
 
     setSaving(false);
-    if (error) { console.error("Error actualizando visita:", error); return; }
-
-    if (selectedVisita.opportunity_id !== null) {
-      await persistLeadActivity(
-        selectedVisita.opportunity_id,
-        `Editó una visita${
-          changes.length ? `:\n${changes.join("\n")}` : " sin cambios visibles"
-        }`
-      );
+    if (error) {
+      console.error("Error actualizando visita:", error);
+      setFormError("No se pudieron guardar los cambios. Intentá nuevamente.");
+      return;
     }
+
     setEditModalOpen(false);
     setSelectedVisita(null);
     void loadVisitas();
@@ -466,13 +472,22 @@ export default function VisitasPage() {
             <Button
               size="sm"
               className="h-10 w-full gap-1.5 text-xs font-semibold sm:h-7 sm:w-auto"
-              onClick={() => setAddModalOpen(true)}
+              onClick={() => {
+                setFormError(null);
+                setAddModalOpen(true);
+              }}
             >
               <Plus className="h-3.5 w-3.5" />
               Agregar Visita
             </Button>
           </div>
         </div>
+
+        {pageError && (
+          <div role="alert" className="shrink-0 border-b border-destructive/30 bg-destructive/5 px-6 py-2 text-xs text-destructive">
+            {pageError}
+          </div>
+        )}
 
         {loading && (
           <div className="shrink-0 border-b border-border bg-muted/40 px-6 py-2 text-xs text-muted-foreground">
@@ -582,6 +597,12 @@ export default function VisitasPage() {
             </DialogDescription>
           </DialogHeader>
 
+          {formError && (
+            <div role="alert" aria-live="polite" className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+              {formError}
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-x-4 gap-y-4 py-2">
             <div className="col-span-2 flex flex-col gap-1.5">
               <Label className="text-xs font-medium">Inmueble (Encargo) *</Label>
@@ -684,6 +705,12 @@ export default function VisitasPage() {
               {inmuebles.find((im) => im.id === selectedVisita?.opportunity_id)?.label || "Visita"}
             </DialogDescription>
           </DialogHeader>
+
+          {formError && (
+            <div role="alert" aria-live="polite" className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+              {formError}
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-x-4 gap-y-4 py-2">
             <div className="flex flex-col gap-1.5">

@@ -26,7 +26,7 @@ import {
   STATUS_OPTIONS,
   SOURCE_OPTIONS,
 } from "@/lib/crm-data";
-import { LocateFixed, Loader2 } from "lucide-react";
+import { AlertTriangle, LocateFixed, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface NewLeadFormData {
@@ -112,17 +112,25 @@ async function fetchPostalCode(cp: string): Promise<PostalCodeResult | null> {
 interface NewLeadModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit?: (data: NewLeadFormData) => void;
+  onSubmit?: (data: NewLeadFormData) => Promise<string | null>;
+  ownerOptions?: string[];
+  plannerOptions?: string[];
+  sourceOptions?: string[];
 }
 
 export function NewLeadModal({
   open,
   onOpenChange,
   onSubmit,
+  ownerOptions = AGENT_OPTIONS,
+  plannerOptions = AGENT_OPTIONS,
+  sourceOptions = SOURCE_OPTIONS,
 }: NewLeadModalProps) {
   const [form, setForm] = useState<NewLeadFormData>(EMPTY_FORM);
   const [cpLoading, setCpLoading] = useState(false);
   const [cpAutoFilled, setCpAutoFilled] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   function handleField(field: keyof NewLeadFormData, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -156,17 +164,37 @@ export function NewLeadModal({
     }
   }, []);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    onSubmit?.(form);
+    if (!onSubmit || submitting) return;
+
+    setSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      const errorMessage = await onSubmit(form);
+      if (errorMessage) {
+        setSubmitError(errorMessage);
+        return;
+      }
+    } catch (error) {
+      console.error("Error inesperado creando el lead:", error);
+      setSubmitError("No se pudo crear el lead. Intentá nuevamente.");
+      return;
+    } finally {
+      setSubmitting(false);
+    }
+
     setForm(EMPTY_FORM);
     setCpAutoFilled(false);
     onOpenChange(false);
   }
 
   function handleCancel() {
+    if (submitting) return;
     setForm(EMPTY_FORM);
     setCpAutoFilled(false);
+    setSubmitError(null);
     onOpenChange(false);
   }
 
@@ -179,7 +207,12 @@ export function NewLeadModal({
     form.phase;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!submitting) onOpenChange(nextOpen);
+      }}
+    >
       <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-base font-semibold">
@@ -191,6 +224,16 @@ export function NewLeadModal({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="mt-1 flex flex-col gap-5">
+          {submitError && (
+            <div
+              role="alert"
+              aria-live="polite"
+              className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+            >
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{submitError}</span>
+            </div>
+          )}
           <div className="grid gap-3 md:grid-cols-2">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="ownerName" className="text-xs font-medium">
@@ -361,7 +404,7 @@ export function NewLeadModal({
                   <SelectValue placeholder="Seleccionar origen" />
                 </SelectTrigger>
                 <SelectContent>
-                  {SOURCE_OPTIONS.map((opt) => (
+                  {sourceOptions.map((opt) => (
                     <SelectItem key={opt} value={opt}>
                       {opt}
                     </SelectItem>
@@ -441,7 +484,7 @@ export function NewLeadModal({
                   <SelectValue placeholder="Seleccionar agente" />
                 </SelectTrigger>
                 <SelectContent>
-                  {AGENT_OPTIONS.map((agent) => (
+                  {ownerOptions.map((agent) => (
                     <SelectItem key={agent} value={agent}>
                       {agent}
                     </SelectItem>
@@ -462,7 +505,7 @@ export function NewLeadModal({
                   <SelectValue placeholder="Seleccionar planner" />
                 </SelectTrigger>
                 <SelectContent>
-                  {AGENT_OPTIONS.map((agent) => (
+                  {plannerOptions.map((agent) => (
                     <SelectItem key={agent} value={agent}>
                       {agent}
                     </SelectItem>
@@ -491,11 +534,19 @@ export function NewLeadModal({
               variant="outline"
               size="sm"
               onClick={handleCancel}
+              disabled={submitting}
             >
               Cancelar
             </Button>
-            <Button type="submit" size="sm" disabled={!isValid}>
-              Crear lead
+            <Button type="submit" size="sm" disabled={!isValid || submitting}>
+              {submitting ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                "Crear lead"
+              )}
             </Button>
           </DialogFooter>
         </form>

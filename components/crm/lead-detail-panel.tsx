@@ -34,6 +34,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { LeadDocumentationTab } from "@/components/crm/lead-documentation-tab";
+import { MaskedPhone } from "@/components/crm/masked-phone";
 import {
   Select,
   SelectContent,
@@ -47,9 +48,13 @@ import {
   PHASE_LABELS,
   PHASE_OPTIONS,
   STATUS_OPTIONS,
-  SOURCE_OPTIONS,
   AGENT_OPTIONS,
 } from "@/lib/crm-data";
+import {
+  matchesOpportunityContactEvent,
+  opportunityContactMetadataText,
+  parseOpportunityContactMemo,
+} from "@/lib/opportunity-contact-memo";
 
 const STATUS_CONFIG = {
   activa: {
@@ -83,6 +88,8 @@ interface LeadDetailPanelProps {
   onClose: () => void;
   onSaveLead: (next: Lead) => Promise<void>;
   readOnly?: boolean;
+  ownerOptions?: string[];
+  plannerOptions?: string[];
 }
 
 type LeadWithDominio = Lead & {
@@ -195,6 +202,7 @@ type LeadActivityEvent = {
   createdAt: string;
   createdBy: string;
   text: string;
+  eventType?: string;
 };
 
 const NOTE_PREFIX = "[NOTA]";
@@ -240,48 +248,16 @@ function parseStoredMemo(memo: string) {
   };
 }
 
-function stripSystemMemoPrefix(memo: string, prefix: string) {
-  return memo.replace(prefix, "").trim();
-}
-
-function parseSystemMemoFields(memo: string, prefix: string) {
-  const detail = stripSystemMemoPrefix(memo, prefix);
-  const reservedLabels = new Set([
-    "medio",
-    "hora",
-    "resultado",
-    "dominio",
-    "planner",
-    "owner",
-    "fecha",
-  ]);
-
-  let body = detail;
-  let createdBy = "";
-  const authorMatch = body.match(/^(.*?):\s*([\s\S]*)$/);
-  if (authorMatch) {
-    const possibleAuthor = cleanUserDisplayName(authorMatch[1].trim());
-    if (!reservedLabels.has(normalizeBadgeKey(possibleAuthor))) {
-      createdBy = possibleAuthor;
-      body = authorMatch[2].trim();
-    }
-  }
-
-  const [summaryLine, ...memoLines] = body.split("\n");
-  const fields = summaryLine.split("|").reduce<Record<string, string>>((acc, part) => {
-    const separatorIndex = part.indexOf(":");
-    if (separatorIndex === -1) return acc;
-
-    const key = normalizeBadgeKey(part.slice(0, separatorIndex).trim());
-    const value = part.slice(separatorIndex + 1).trim();
-    if (key) acc[key] = value;
-    return acc;
-  }, {});
-
+function parseSystemMemoFields(
+  memo: string,
+  prefix: "[VALORACION]" | "[R.G.]",
+  metadata?: unknown
+) {
+  const parsed = parseOpportunityContactMemo(memo, prefix, metadata);
   return {
-    createdBy,
-    fields,
-    memo: memoLines.join("\n").trim(),
+    createdBy: cleanUserDisplayName(parsed.author),
+    fields: parsed.fields,
+    memo: parsed.memo,
   };
 }
 
@@ -338,6 +314,11 @@ type OpportunityContactRow = {
   fecha?: string | null;
   memo?: string | null;
   resultado?: boolean | null;
+  event_type?: string | null;
+  actor_profile_id?: number | null;
+  effective_at?: string | null;
+  metadata?: unknown;
+  parent_event_id?: number | string | null;
 };
 
 type OpportunityOrderRow = {
@@ -893,6 +874,8 @@ interface EditLeadModalProps {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   onSave: (next: LeadWithDominio) => Promise<void>;
+  ownerOptions: string[];
+  plannerOptions: string[];
 }
 
 function EditLeadModal({
@@ -900,6 +883,8 @@ function EditLeadModal({
   open,
   onOpenChange,
   onSave,
+  ownerOptions,
+  plannerOptions,
 }: EditLeadModalProps) {
   const [form, setForm] = useState({
     ...lead,
@@ -1224,7 +1209,13 @@ function EditLeadModal({
                           <SelectValue placeholder="Seleccionar planner" />
                         </SelectTrigger>
                         <SelectContent>
-                          {AGENT_OPTIONS.map((agent) => (
+                          {Array.from(
+                            new Set(
+                              [...plannerOptions, form.planner]
+                                .map((value) => value?.trim())
+                                .filter((value): value is string => Boolean(value) && value !== "—")
+                            )
+                          ).map((agent) => (
                             <SelectItem key={agent} value={agent} className="text-sm">
                               {agent}
                             </SelectItem>
@@ -1259,7 +1250,13 @@ function EditLeadModal({
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {AGENT_OPTIONS.map((a) => (
+                          {Array.from(
+                            new Set(
+                              [...ownerOptions, form.owner]
+                                .map((value) => value?.trim())
+                                .filter((value): value is string => Boolean(value) && value !== "—")
+                            )
+                          ).map((a) => (
                             <SelectItem key={a} value={a} className="text-sm">
                               {a}
                             </SelectItem>
@@ -1304,6 +1301,8 @@ export function LeadDetailPanel({
   onClose,
   onSaveLead,
   readOnly = false,
+  ownerOptions = AGENT_OPTIONS,
+  plannerOptions = AGENT_OPTIONS,
 }: LeadDetailPanelProps) {
   const { userWithRole } = useUser();
   const [editOpen, setEditOpen] = useState(false);
@@ -1436,15 +1435,18 @@ export function LeadDetailPanel({
     return cleanUserDisplayName(raw);
   }, [userWithRole]);
 
-  async function persistActivity(text: string) {
+  async function persistActivity(
+    text: string,
+    eventType: "activity" | "call" | "lead_updated" = "lead_updated",
+    metadata: Record<string, unknown> = {}
+  ) {
     if (!effectiveLead || readOnly) return;
 
-    const createdBy = currentUserName || "Usuario";
-    const { error } = await supabase.from("opportunity_contacts").insert({
-      opportunity_id: Number(effectiveLead.id),
-      fecha: new Date().toISOString().slice(0, 10),
-      memo: `${HISTORY_PREFIX} ${createdBy}: ${text}`,
-      resultado: true,
+    const { error } = await supabase.rpc("crm_add_contact_activity", {
+      p_opportunity_id: Number(effectiveLead.id),
+      p_event_type: eventType,
+      p_text: text,
+      p_metadata: metadata,
     });
 
     if (error) {
@@ -1455,14 +1457,18 @@ export function LeadDetailPanel({
   async function handleCallLead() {
     if (!effectiveLead || readOnly) return;
 
-    await persistActivity("Llamó al lead");
+    await persistActivity("Llamó al lead", "call", {
+      phone: effectiveLead.phone,
+    });
     await loadObservations(effectiveLead.id);
   }
 
   async function loadObservations(leadId: string) {
     const { data, error } = await supabase
       .from("opportunity_contacts")
-      .select("id, created_at, fecha, memo, resultado")
+      .select(
+        "id, created_at, fecha, memo, resultado, event_type, actor_profile_id, effective_at, metadata, parent_event_id"
+      )
       .eq("opportunity_id", Number(leadId))
       .order("created_at", { ascending: false });
 
@@ -1478,14 +1484,27 @@ export function LeadDetailPanel({
 
     const notes: LeadHistoryEvent[] = rows
       .filter((row) => Boolean(row.memo?.trim()))
-      .filter((row) => isManualNoteMemo(row.memo || ""))
+      .filter((row) =>
+        matchesOpportunityContactEvent(
+          row.event_type,
+          row.memo,
+          "note",
+          NOTE_PREFIX
+        ) ||
+        ((!row.event_type || row.event_type === "legacy") &&
+          isManualNoteMemo(row.memo || ""))
+      )
       .map((row) => ({
         id: String(row.id),
         leadId,
         type: "note",
         createdAt: row.created_at || toHistoryCreatedAt(row.fecha || ""),
-        createdBy: parseStoredMemo(row.memo || "").createdBy,
-        noteText: parseStoredMemo(row.memo || "").text,
+        createdBy:
+          opportunityContactMetadataText(row.metadata, "actor_name") ||
+          parseStoredMemo(row.memo || "").createdBy,
+        noteText:
+          opportunityContactMetadataText(row.metadata, "text") ||
+          parseStoredMemo(row.memo || "").text,
       }));
 
     const activities: LeadActivityEvent[] = rows
@@ -1494,21 +1513,44 @@ export function LeadDetailPanel({
         const memo = row.memo?.trim() || "";
         const parsed = parseStoredMemo(memo);
         const createdAt = row.created_at || toHistoryCreatedAt(row.fecha || "");
+        const eventType = row.event_type || "legacy";
+        const actorName =
+          opportunityContactMetadataText(row.metadata, "actor_name") ||
+          parsed.createdBy;
 
-        if (parsed.kind === "history") {
+        if (
+          eventType !== "legacy" &&
+          eventType !== "note" &&
+          eventType !== "valuation" &&
+          eventType !== "rg"
+        ) {
           return [
             {
               id: String(row.id),
               leadId,
               createdAt,
-              createdBy: parsed.createdBy,
-              text: parsed.text,
+              createdBy: actorName,
+              eventType,
+              text:
+                opportunityContactMetadataText(row.metadata, "text") ||
+                parsed.text,
             },
           ];
         }
 
-        if (memo.startsWith("[VALORACION]")) {
-          const detail = parseSystemMemoFields(memo, "[VALORACION]");
+        if (
+          matchesOpportunityContactEvent(
+            row.event_type,
+            memo,
+            "valuation",
+            "[VALORACION]"
+          )
+        ) {
+          const detail = parseSystemMemoFields(
+            memo,
+            "[VALORACION]",
+            row.metadata
+          );
           const medio = detail.fields.medio || "";
           const hora = detail.fields.hora || "";
           const details = [medio, hora ? `Hora: ${hora}` : ""].filter(Boolean).join(" | ");
@@ -1518,6 +1560,7 @@ export function LeadDetailPanel({
               leadId,
               createdAt,
               createdBy: detail.createdBy || parsed.createdBy,
+              eventType: "valuation",
               text: `Agregó una valoración${buildEventDateLabel(row.fecha)}${
                 details ? `: ${details}` : ""
               }`,
@@ -1525,8 +1568,15 @@ export function LeadDetailPanel({
           ];
         }
 
-        if (memo.startsWith("[R.G.]")) {
-          const detail = parseSystemMemoFields(memo, "[R.G.]");
+        if (
+          matchesOpportunityContactEvent(
+            row.event_type,
+            memo,
+            "rg",
+            "[R.G.]"
+          )
+        ) {
+          const detail = parseSystemMemoFields(memo, "[R.G.]", row.metadata);
           const medio = detail.fields.medio || "";
           const resultado = detail.fields.resultado || "";
           const hora = detail.fields.hora || "";
@@ -1543,6 +1593,7 @@ export function LeadDetailPanel({
               leadId,
               createdAt,
               createdBy: detail.createdBy || parsed.createdBy,
+              eventType: "rg",
               text: `Agregó una R.G.${buildEventDateLabel(row.fecha)}${
                 details ? `: ${details}` : ""
               }`,
@@ -1550,14 +1601,15 @@ export function LeadDetailPanel({
           ];
         }
 
-        if (isLegacyActivityMemo(memo)) {
+        if (parsed.kind === "history" || isLegacyActivityMemo(memo)) {
           return [
             {
               id: String(row.id),
               leadId,
               createdAt,
               createdBy: parsed.createdBy,
-              text: memo,
+              eventType,
+              text: parsed.kind === "history" ? parsed.text : memo,
             },
           ];
         }
@@ -1573,8 +1625,11 @@ export function LeadDetailPanel({
   async function loadRgEntries(leadId: string) {
     const { data, error } = await supabase
       .from("opportunity_contacts")
-      .select("id, created_at, fecha, memo, resultado")
+      .select(
+        "id, created_at, fecha, memo, resultado, event_type, actor_profile_id, effective_at, metadata, parent_event_id"
+      )
       .eq("opportunity_id", Number(leadId))
+      .eq("event_type", "rg")
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -1583,18 +1638,17 @@ export function LeadDetailPanel({
       return;
     }
 
-    const rows = ((data ?? []) as OpportunityContactRow[]).filter((row) =>
-      row.memo?.trim().startsWith("[R.G.]")
-    );
-
-    setRgEntries(rows);
+    setRgEntries((data ?? []) as OpportunityContactRow[]);
   }
 
   async function loadValuationEntries(leadId: string) {
     const { data, error } = await supabase
       .from("opportunity_contacts")
-      .select("id, created_at, fecha, memo, resultado")
+      .select(
+        "id, created_at, fecha, memo, resultado, event_type, actor_profile_id, effective_at, metadata, parent_event_id"
+      )
       .eq("opportunity_id", Number(leadId))
+      .eq("event_type", "valuation")
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -1603,11 +1657,7 @@ export function LeadDetailPanel({
       return;
     }
 
-    const rows = ((data ?? []) as OpportunityContactRow[]).filter((row) =>
-      row.memo?.trim().startsWith("[VALORACION]")
-    );
-
-    setValuationEntries(rows);
+    setValuationEntries((data ?? []) as OpportunityContactRow[]);
   }
 
   useEffect(() => {
@@ -1698,15 +1748,15 @@ export function LeadDetailPanel({
     setSavingNote(true);
     setNoteError(null);
 
-    const { data: insertedRows, error: insertError } = await supabase
-      .from("opportunity_contacts")
-      .insert({
-        opportunity_id: Number(effectiveLead.id),
-        fecha: new Date().toISOString().slice(0, 10),
-        memo: `${NOTE_PREFIX} ${currentUserName || "Usuario"}: ${text}`,
-        resultado: true,
-      })
-      .select("id, created_at, fecha, memo, resultado");
+    const { data: insertedId, error: insertError } = await supabase.rpc(
+      "crm_add_contact_activity",
+      {
+        p_opportunity_id: Number(effectiveLead.id),
+        p_event_type: "note",
+        p_text: text,
+        p_metadata: {},
+      }
+    );
 
     if (insertError) {
       console.error("Error guardando observación:", insertError);
@@ -1715,9 +1765,7 @@ export function LeadDetailPanel({
       return;
     }
 
-    const insertedRow = insertedRows?.[0] as OpportunityContactRow | undefined;
-
-    if (!insertedRow?.id) {
+    if (!insertedId) {
       setSavingNote(false);
       setNoteError(
         "La observación no devolvió ID al guardarse. Revisá permisos/RLS de opportunity_contacts."
@@ -1727,8 +1775,10 @@ export function LeadDetailPanel({
 
     const { data: persistedRow, error: readBackError } = await supabase
       .from("opportunity_contacts")
-      .select("id, created_at, fecha, memo, resultado")
-      .eq("id", insertedRow.id)
+      .select(
+        "id, created_at, fecha, memo, resultado, event_type, actor_profile_id, effective_at, metadata, parent_event_id"
+      )
+      .eq("id", insertedId)
       .maybeSingle();
 
     if (readBackError) {
@@ -1864,22 +1914,8 @@ export function LeadDetailPanel({
       com_vendedor: encargoForm.com_vendedor ? Number(encargoForm.com_vendedor) : null,
       com_comprador: encargoForm.com_comprador ? Number(encargoForm.com_comprador) : null,
       memo: encargoForm.memo.trim() || null,
+      rebajas: Number(previousOrder?.rebajas ?? 0),
     };
-
-    const { error } = editingOrderId
-      ? await supabase
-          .from("opportunity_orders")
-          .update(payload)
-          .eq("id", editingOrderId)
-      : await supabase.from("opportunity_orders").insert(payload);
-
-    setEncargoSaving(false);
-
-    if (error) {
-      console.error("Error guardando encargo:", error);
-      setEncargoError(`No se pudo guardar el encargo: ${error.message}`);
-      return;
-    }
 
     const encargoChanges = previousOrder
       ? buildHistoryChangeLines([
@@ -1933,15 +1969,27 @@ export function LeadDetailPanel({
         ])
       : [];
 
+    const { error } = await supabase.rpc("crm_save_order_with_activity", {
+      p_order_id: editingOrderId ?? null,
+      p_opportunity_id: Number(effectiveLead.id),
+      p_data: payload,
+      p_change_details: wasEditing
+        ? encargoChanges.length
+          ? `:\n${encargoChanges.join("\n")}`
+          : " sin cambios visibles"
+        : null,
+    });
+
+    setEncargoSaving(false);
+
+    if (error) {
+      console.error("Error guardando encargo:", error);
+      setEncargoError(`No se pudo guardar el encargo: ${error.message}`);
+      return;
+    }
+
     resetEncargoForm();
     setOrderModalOpen(false);
-    await persistActivity(
-      wasEditing
-        ? `Editó un encargo${
-            encargoChanges.length ? `:\n${encargoChanges.join("\n")}` : " sin cambios visibles"
-          }`
-        : "Agregó un encargo"
-    );
     await loadObservations(effectiveLead.id);
     await loadRelatedData(effectiveLead.id);
   }
@@ -1965,32 +2013,6 @@ export function LeadDetailPanel({
       LEAD_DETAIL_STATUS_OPTIONS.find((option) => option.value === rgForm.resultado)
         ?.label || "—";
 
-    const summaryLine = `[R.G.] ${currentUserName || "Usuario"}: Medio: ${
-      rgForm.medio || "—"
-    } | Resultado: ${resultadoLabel}${rgForm.hora ? ` | Hora: ${rgForm.hora}` : ""}`;
-    const memo = rgForm.memo.trim()
-      ? `${summaryLine}\n${rgForm.memo.trim()}`
-      : summaryLine;
-
-    const payload = {
-      opportunity_id: Number(effectiveLead.id),
-      fecha: rgForm.fecha,
-      memo,
-      resultado: true,
-    };
-
-    const { error } = editingRgId
-      ? await supabase.from("opportunity_contacts").update(payload).eq("id", editingRgId)
-      : await supabase.from("opportunity_contacts").insert(payload);
-
-    setRgSaving(false);
-
-    if (error) {
-      console.error("Error guardando R.G.:", error);
-      setRgError(`No se pudo guardar la R.G.: ${error.message}`);
-      return;
-    }
-
     const rgChanges = previousRg
       ? buildHistoryChangeLines([
           {
@@ -2006,15 +2028,35 @@ export function LeadDetailPanel({
         ])
       : [];
 
+    const { error } = await supabase.rpc("crm_save_rg_with_activity", {
+      p_contact_id: editingRgId ?? null,
+      p_opportunity_id: Number(effectiveLead.id),
+      p_data: {
+        fecha: rgForm.fecha,
+        hora: rgForm.hora || null,
+        medio: rgForm.medio || null,
+        resultado: resultadoLabel,
+        notes: rgForm.memo.trim() || null,
+      },
+      p_change_details: wasEditing
+        ? `${buildEventDateLabel(rgForm.fecha)}${
+            rgChanges.length
+              ? `:\n${rgChanges.join("\n")}`
+              : " sin cambios visibles"
+          }`
+        : null,
+    });
+
+    setRgSaving(false);
+
+    if (error) {
+      console.error("Error guardando R.G.:", error);
+      setRgError(`No se pudo guardar la R.G.: ${error.message}`);
+      return;
+    }
+
     resetRgForm();
     setRgModalOpen(false);
-    if (wasEditing) {
-      await persistActivity(
-        `Editó una R.G.${buildEventDateLabel(rgForm.fecha)}${
-          rgChanges.length ? `:\n${rgChanges.join("\n")}` : " sin cambios visibles"
-        }`
-      );
-    }
     await loadRgEntries(effectiveLead.id);
     await loadObservations(effectiveLead.id);
   }
@@ -2036,32 +2078,6 @@ export function LeadDetailPanel({
         )
       : null;
 
-    const summaryLine = `[VALORACION] ${currentUserName || "Usuario"}: Medio: ${
-      valuationForm.medio || "—"
-    }${valuationForm.hora ? ` | Hora: ${valuationForm.hora}` : ""}`;
-
-    const payload = {
-      opportunity_id: Number(effectiveLead.id),
-      fecha: valuationForm.fecha,
-      memo: summaryLine,
-      resultado: true,
-    };
-
-    const { error } = editingValuationId
-      ? await supabase
-          .from("opportunity_contacts")
-          .update(payload)
-          .eq("id", editingValuationId)
-      : await supabase.from("opportunity_contacts").insert(payload);
-
-    setValuationSaving(false);
-
-    if (error) {
-      console.error("Error guardando valoración:", error);
-      setValuationError(`No se pudo guardar la valoración: ${error.message}`);
-      return;
-    }
-
     const valuationChanges = previousValuation
       ? buildHistoryChangeLines([
           {
@@ -2079,17 +2095,33 @@ export function LeadDetailPanel({
         ])
       : [];
 
+    const { error } = await supabase.rpc("crm_save_valuation_with_activity", {
+      p_contact_id: editingValuationId ?? null,
+      p_opportunity_id: Number(effectiveLead.id),
+      p_data: {
+        fecha: valuationForm.fecha,
+        hora: valuationForm.hora || null,
+        medio: valuationForm.medio || null,
+      },
+      p_change_details: wasEditing
+        ? `${buildEventDateLabel(valuationForm.fecha)}${
+            valuationChanges.length
+              ? `:\n${valuationChanges.join("\n")}`
+              : " sin cambios visibles"
+          }`
+        : null,
+    });
+
+    setValuationSaving(false);
+
+    if (error) {
+      console.error("Error guardando valoración:", error);
+      setValuationError(`No se pudo guardar la valoración: ${error.message}`);
+      return;
+    }
+
     resetValuationForm();
     setValuationModalOpen(false);
-    if (wasEditing) {
-      await persistActivity(
-        `Editó una valoración${buildEventDateLabel(valuationForm.fecha)}${
-          valuationChanges.length
-            ? `:\n${valuationChanges.join("\n")}`
-            : " sin cambios visibles"
-        }`
-      );
-    }
     await loadValuationEntries(effectiveLead.id);
     await loadObservations(effectiveLead.id);
   }
@@ -2104,7 +2136,7 @@ export function LeadDetailPanel({
 
   const parsedRgEntries: RgHistoryEvent[] = rgEntries.map((row, index) => {
     const memoText = row.memo?.trim() || "";
-    const detail = parseSystemMemoFields(memoText, "[R.G.]");
+    const detail = parseSystemMemoFields(memoText, "[R.G.]", row.metadata);
 
     return {
       id: String(row.id),
@@ -2143,7 +2175,11 @@ export function LeadDetailPanel({
   const parsedValuationEntries: ValuationHistoryEvent[] = valuationEntries.map(
     (row, index) => {
       const memoText = row.memo?.trim() || "";
-      const detail = parseSystemMemoFields(memoText, "[VALORACION]");
+      const detail = parseSystemMemoFields(
+        memoText,
+        "[VALORACION]",
+        row.metadata
+      );
 
       return {
         id: String(row.id),
@@ -2183,7 +2219,9 @@ export function LeadDetailPanel({
     ...legacyValuationEvent,
   ];
 
-  const callEvents = activityEvents.filter((event) => isCallActivityText(event.text));
+  const callEvents = activityEvents.filter(
+    (event) => event.eventType === "call" || isCallActivityText(event.text)
+  );
   const lastCallEvent = callEvents[0] || null;
   const lastCallDays = daysSince(lastCallEvent?.createdAt);
 
@@ -2200,9 +2238,10 @@ export function LeadDetailPanel({
 
           {effectiveLead.phone && effectiveLead.phone !== "—" && (
             readOnly ? (
-              <span className="mt-1 block text-xs font-medium text-muted-foreground">
-                {effectiveLead.phone}
-              </span>
+              <MaskedPhone
+                value={effectiveLead.phone}
+                className="mt-1 text-xs font-medium text-muted-foreground"
+              />
             ) : (
               <>
                 <a
@@ -2214,9 +2253,10 @@ export function LeadDetailPanel({
                 </a>
 
                 <div className="mt-2 hidden items-center gap-3 md:flex">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    {effectiveLead.phone}
-                  </span>
+                  <MaskedPhone
+                    value={effectiveLead.phone}
+                    className="text-xs font-medium text-muted-foreground"
+                  />
                   <a
                     href={`tel:${effectiveLead.phone.replace(/[^+\d]/g, "")}`}
                     onClick={() => void handleCallLead()}
@@ -2365,7 +2405,7 @@ export function LeadDetailPanel({
                           {effectiveLead.ownerName || "—"}
                         </SmallDataCard>
                         <SmallDataCard label="Teléfono">
-                          {effectiveLead.phone || "—"}
+                          <MaskedPhone value={effectiveLead.phone} />
                         </SmallDataCard>
                         <SmallDataCard label="Última llamada">
                           <span>{lastCallLabel(lastCallDays)}</span>
@@ -3107,7 +3147,9 @@ export function LeadDetailPanel({
                                 {displayValue(visit.nombre_apellido || visit.buyer)}
                               </span>
                               <span className="text-muted-foreground">
-                                {displayValue(visit.telefono_comprador || visit.telefono)}
+                                <MaskedPhone
+                                  value={visit.telefono_comprador || visit.telefono}
+                                />
                               </span>
                               <span>
                                 <Badge variant="outline" className="rounded-md text-[11px]">
@@ -3149,7 +3191,9 @@ export function LeadDetailPanel({
                                       {displayValue(visit.nombre_apellido)}
                                     </SmallDataCard>
                                     <SmallDataCard label="Teléfono">
-                                      {displayValue(visit.telefono_comprador || visit.telefono)}
+                                      <MaskedPhone
+                                        value={visit.telefono_comprador || visit.telefono}
+                                      />
                                     </SmallDataCard>
                                     <SmallDataCard label="DNI">
                                       {displayValue(visit.dni)}
@@ -3560,6 +3604,8 @@ export function LeadDetailPanel({
         open={editOpen}
         onOpenChange={setEditOpen}
         onSave={handleSave}
+        ownerOptions={ownerOptions}
+        plannerOptions={plannerOptions}
       />
     </aside>
   );

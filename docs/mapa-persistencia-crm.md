@@ -10,7 +10,7 @@ Documento auditado desde el front actual. Indica que acciones leen o escriben da
 |---|---|---:|---:|
 | `opportunities` | Registro base de oportunidades/leads | Si | Indirectamente via vista |
 | `crm_leads_view` | Vista enriquecida de leads para tablas, paneles y metricas | No | Si |
-| `opportunity_contacts` | Observaciones, historial, llamadas, valoraciones y R.G. | Si | Si |
+| `opportunity_contacts` | Actividades tipificadas: observaciones, historial, llamadas, valoraciones y R.G. | Si, mediante RPC | Si |
 | `opportunity_orders` | Encargos | Si | Si |
 | `visitas` | Visitas y compradores | Si | Si |
 | `phases` | Resolver IDs de fase | No | Si |
@@ -26,9 +26,9 @@ Documento auditado desde el front actual. Indica que acciones leen o escriben da
 | Crear lead manual | `opportunities` | `insert` | `propietario`, `domicilio`, `telefono`, `tasacion`, `estado`, `fecha`, `fecha_contacto`, `fecha_valoracion`, `hora`, `source_desc`, `comercial_user_desc`, `contact_user_desc`, `dominio_desc`, `postal_id`, `fase_id`, `created_at`, `memo`, `en_venta`, `medio`, IDs relacionales null | Guarda | `app/(crm)/leads/page.tsx` |
 | Editar lead | `opportunities` | `update` | `propietario`, `domicilio`, `telefono`, `tasacion`, `estado`, `fecha`, `fecha_contacto`, `fecha_valoracion`, `hora`, `source_desc`, `comercial_user_desc`, `contact_user_desc`, `dominio_desc`, `memo`, `medio`, `en_venta`, `fase_id`, `postal_id` | Guarda | `app/(crm)/leads/page.tsx` |
 | Leer lead actualizado | `crm_leads_view` | `select` | `*` por `id` | Solo lectura | `app/(crm)/leads/page.tsx` |
-| Mover en Kanban / cambiar fase | `opportunities` | `update` | `fase_id` | Guarda | `app/(crm)/leads/page.tsx` |
+| Mover en Kanban / cambiar fase | `opportunities` + `opportunity_contacts` | RPC transaccional | `fase_id` + evento `phase_changed` | Guarda | `app/(crm)/leads/page.tsx` |
 | Marcar favorito | `opportunities` | `update` | `is_favorite` | Guarda | `app/(crm)/leads/page.tsx` |
-| Eliminar seleccionados | `opportunities` | `update` soft delete | `deleted_at` | Guarda | `app/(crm)/leads/page.tsx` |
+| Eliminar seleccionados | `opportunities` + `opportunity_contacts` | RPC transaccional | `deleted_at` + evento `lead_deleted` | Guarda | `app/(crm)/leads/page.tsx` |
 | Resolver fase | `phases` | `select` | `id`, `name` | Solo lectura | `app/(crm)/leads/page.tsx` |
 | Filtros, busqueda, orden, seleccion | Estado React local | N/A | No aplica | No guarda | `app/(crm)/leads/page.tsx` |
 
@@ -36,23 +36,23 @@ Documento auditado desde el front actual. Indica que acciones leen o escriben da
 
 | Accion en front | Tabla | Operacion | Columnas usadas | Persistencia | Observacion |
 |---|---|---|---|---|---|
-| Registrar actividad general | `opportunity_contacts` | `insert` | `opportunity_id`, `fecha`, `memo`, `resultado` | Guarda | Memo con prefijo `[HISTORIAL] Nombre: texto` |
-| Agregar observacion manual | `opportunity_contacts` | `insert` + `select` verificacion | `opportunity_id`, `fecha`, `memo`, `resultado` | Guarda | Memo con prefijo `[NOTA] Nombre: texto` |
-| Cargar observaciones e historial | `opportunity_contacts` | `select` | `id`, `created_at`, `fecha`, `memo`, `resultado` | Solo lectura | Filtra por `opportunity_id` |
-| Click en llamar | `opportunity_contacts` | `insert` | `opportunity_id`, `fecha`, `memo`, `resultado` | Guarda | Guarda `[HISTORIAL] Nombre: Llamo al lead` |
-| Contador ultima llamada | `opportunity_contacts` | lectura/calculo | `created_at`, `memo` | No guarda contador | Se calcula desde historial |
+| Registrar actividad general | `opportunity_contacts` | RPC `crm_add_contact_activity` | `event_type`, actor, fecha efectiva, `metadata`, `memo` | Guarda | El prefijo queda sólo como texto legible |
+| Agregar observacion manual | `opportunity_contacts` | RPC + `select` verificacion | tipo `note`, actor, texto estructurado | Guarda | El autor se deriva de la sesión |
+| Cargar observaciones e historial | `opportunity_contacts` | `select` | campos base + `event_type`, actor y `metadata` | Solo lectura | Filtra por `opportunity_id` y tipo |
+| Click en llamar | `opportunity_contacts` | RPC | evento `call` con teléfono en `metadata` | Guarda | No depende de buscar “Llamó” en el memo |
+| Contador ultima llamada | `opportunity_contacts` | lectura/calculo | `created_at`, `event_type` | No guarda contador | Se calcula desde eventos `call` |
 | Cambios en campos del panel | `opportunities` + `opportunity_contacts` | `update` + `insert historial` | Campos del lead + memo historial | Guarda | Edicion real via `onSaveLead`; auditoria en historial |
 
 ## Valoraciones
 
 | Accion en front | Tabla / vista | Operacion | Columnas usadas | Persistencia | Archivo |
 |---|---|---|---|---|---|
-| Agregar valoracion desde panel | `opportunity_contacts` | `insert` | `opportunity_id`, `fecha`, `memo`, `resultado` | Guarda | `components/crm/lead-detail-panel.tsx` |
-| Editar valoracion desde panel | `opportunity_contacts` | `update` | `opportunity_id`, `fecha`, `memo`, `resultado` por `id` | Guarda | `components/crm/lead-detail-panel.tsx` |
-| Listar historial de valoraciones en panel | `opportunity_contacts` | `select` | `id`, `created_at`, `fecha`, `memo`, `resultado` | Solo lectura | `components/crm/lead-detail-panel.tsx` |
-| Listar pagina Valoraciones | `opportunity_contacts` | `select` | `id`, `opportunity_id`, `fecha`, `memo`, `created_at` con `memo ilike '[VALORACION]%'` | Solo lectura | `app/(crm)/valoraciones/page.tsx` |
+| Agregar valoracion desde panel | `opportunity_contacts` | RPC transaccional | tipo `valuation`, fecha efectiva, actor y `metadata` | Guarda | `components/crm/lead-detail-panel.tsx` |
+| Editar valoracion desde panel | `opportunity_contacts` | RPC transaccional | actualiza `valuation` y agrega `valuation_updated` | Guarda | Conserva `before` y `after` |
+| Listar historial de valoraciones en panel | `opportunity_contacts` | `select` | campos estructurados con tipo `valuation` | Solo lectura | `components/crm/lead-detail-panel.tsx` |
+| Listar pagina Valoraciones | `opportunity_contacts` | `select` | `event_type = valuation` | Solo lectura | `app/(crm)/valoraciones/page.tsx` |
 | Enriquecer pagina Valoraciones | `crm_leads_view` | `select` | `*` | Solo lectura | `app/(crm)/valoraciones/page.tsx` |
-| Impacto en dashboard comercial | `opportunity_contacts` | lectura/calculo | `memo`, `fecha`, `created_at`, `opportunity_id` | No guarda metrica | Cuenta memos `[VALORACION]` |
+| Impacto en dashboard comercial | `opportunity_contacts` | lectura/calculo | `event_type`, `fecha`, `created_at`, `opportunity_id` | No guarda metrica | Cuenta tipos `valuation` |
 
 Formato actual de memo: `[VALORACION] Nombre: Medio: X | Hora: HH:mm`.
 
@@ -60,12 +60,12 @@ Formato actual de memo: `[VALORACION] Nombre: Medio: X | Hora: HH:mm`.
 
 | Accion en front | Tabla / vista | Operacion | Columnas usadas | Persistencia | Archivo |
 |---|---|---|---|---|---|
-| Agregar R.G. desde panel | `opportunity_contacts` | `insert` | `opportunity_id`, `fecha`, `memo`, `resultado` | Guarda | `components/crm/lead-detail-panel.tsx` |
-| Editar R.G. desde panel | `opportunity_contacts` | `update` | `opportunity_id`, `fecha`, `memo`, `resultado` por `id` | Guarda | `components/crm/lead-detail-panel.tsx` |
-| Listar historial R.G. en panel | `opportunity_contacts` | `select` | `id`, `created_at`, `fecha`, `memo`, `resultado` | Solo lectura | `components/crm/lead-detail-panel.tsx` |
-| Listar pagina R.G. | `opportunity_contacts` | `select` | `id`, `opportunity_id`, `fecha`, `memo`, `created_at` con `memo ilike '[R.G.]%'` | Solo lectura | `app/(crm)/rg/page.tsx` |
+| Agregar R.G. desde panel | `opportunity_contacts` | RPC transaccional | tipo `rg`, fecha efectiva, actor y `metadata` | Guarda | `components/crm/lead-detail-panel.tsx` |
+| Editar R.G. desde panel | `opportunity_contacts` | RPC transaccional | actualiza `rg` y agrega `rg_updated` | Guarda | Conserva `before` y `after` |
+| Listar historial R.G. en panel | `opportunity_contacts` | `select` | campos estructurados con tipo `rg` | Solo lectura | `components/crm/lead-detail-panel.tsx` |
+| Listar pagina R.G. | `opportunity_contacts` | `select` | `event_type = rg` | Solo lectura | `app/(crm)/rg/page.tsx` |
 | Enriquecer pagina R.G. | `crm_leads_view` | `select` | `*` | Solo lectura | `app/(crm)/rg/page.tsx` |
-| Impacto en dashboard comercial | `opportunity_contacts` | lectura/calculo | `memo`, `fecha`, `created_at`, `opportunity_id` | No guarda metrica | Cuenta memos `[R.G.]` |
+| Impacto en dashboard comercial | `opportunity_contacts` | lectura/calculo | `event_type`, `fecha`, `created_at`, `opportunity_id` | No guarda metrica | Cuenta tipos `rg` |
 
 Formato actual de memo: `[R.G.] Nombre: Medio: X | Resultado: Y | Hora: HH:mm`.
 
@@ -102,8 +102,8 @@ Formato actual de memo: `[R.G.] Nombre: Medio: X | Resultado: Y | Hora: HH:mm`.
 |---|---|---|---|---|---|
 | Metricas generales | `crm_leads_view` | `select` | `*` | No | Calcula fases, estados, origen, comercial |
 | Actividad comerciales | `crm_leads_view` | `select` | `id`, fechas, fase, estado, comercial, dominio, origen | No | Base para atribuir acciones |
-| Valoraciones/R.G. dashboard | `opportunity_contacts` | `select` | `id`, `opportunity_id`, `fecha`, `memo`, `created_at` | No | Cuenta memos por prefijo |
-| Encargos dashboard | `opportunity_orders` | `select` | `id`, `opportunity_id`, `created_at` | No | Cuenta por fecha de creacion |
+| Valoraciones/R.G. dashboard | `opportunity_contacts` | `select` | `id`, `opportunity_id`, `fecha`, `event_type`, `created_at` | No | Cuenta actividades por tipo |
+| Encargos dashboard | `opportunity_contacts` | `select` | eventos `order_created` por `event_type` y fecha efectiva | No | Cuenta el alta auditada del encargo; `opportunity_orders` no tiene `created_at` |
 | Visitas dashboard | `visitas` | `select` | `id`, `opportunity_id`, `fecha_visita`, `created_at` | No | Cuenta por fecha de visita/creacion |
 | Periodos del dashboard | Estado React local | N/A | `period`, `customFrom`, `customTo` | No | Solo filtro visual |
 | Promedio, proyectado, gap, ratios | Calculo frontend | N/A | Datos leidos | No | No persiste resultados |
@@ -143,7 +143,7 @@ Pendiente de confirmar en backend:
 
 | Elemento | Donde se calcula | Fuente |
 |---|---|---|
-| Contador ultima llamada | Panel lead | `opportunity_contacts.memo` con `Llamo al lead` |
+| Contador ultima llamada | Panel lead | `opportunity_contacts.event_type = call` |
 | Promedios/proyecciones/gaps | Dashboard | Leads/contactos/encargos/visitas |
 | Seleccion de filas | Estado React | Navegador |
 | Busquedas y filtros | Estado React | Navegador |
@@ -156,7 +156,7 @@ Pendiente de confirmar en backend:
 | Riesgo | Motivo | Recomendacion |
 |---|---|---|
 | Auditoria de autor en registros antiguos | Algunos memos antiguos no guardaban nombre real | Migrar o aceptar fallback visual |
-| Historial en `opportunity_contacts` mezcla notas, R.G., valoraciones y eventos | Se distingue por prefijos en `memo` | Mantener convencion estricta de prefijos |
+| Registros históricos en texto libre | Se mantienen como `legacy` | Conservar el parser sólo como compatibilidad |
 | Dashboard no guarda snapshots | Todo se recalcula al abrir | Si se necesita historico fijo, crear tabla de snapshots |
 | Seguridad depende de RLS | El front filtra, pero no alcanza como seguridad fuerte | Auditar policies Supabase |
 | Campos `_desc` vs IDs relacionales | El front inserta muchos IDs como null y guarda descripciones | Confirmar triggers/vista o normalizar |

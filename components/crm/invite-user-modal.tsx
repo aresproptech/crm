@@ -164,7 +164,7 @@ export function InviteUserModal({
               <Label className="text-xs font-medium">
                 Rol <span className="text-destructive">*</span>
               </Label>
-              <Select value={form.rol} onValueChange={(v) => set("rol", v as any)}>
+              <Select value={form.rol} onValueChange={(v) => set("rol", v as UserRole)}>
                 <SelectTrigger className="h-8 text-sm">
                   <SelectValue placeholder="Seleccionar" />
                 </SelectTrigger>
@@ -180,7 +180,7 @@ export function InviteUserModal({
               <Label className="text-xs font-medium">
                 Estado <span className="text-destructive">*</span>
               </Label>
-              <Select value={form.estado} onValueChange={(v) => set("estado", v as any)}>
+              <Select value={form.estado} onValueChange={(v) => set("estado", v as UserStatus)}>
                 <SelectTrigger className="h-8 text-sm">
                   <SelectValue placeholder="Seleccionar" />
                 </SelectTrigger>

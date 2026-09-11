@@ -53,6 +53,9 @@ type ContactPlanningRow = {
   fecha: string | null;
   memo: string | null;
   created_at: string | null;
+  event_type: string | null;
+  effective_at: string | null;
+  metadata: unknown;
 };
 
 type VisitPlanningRow = {
@@ -171,12 +174,16 @@ export default function PlanningPage() {
         supabase.from("crm_leads_view").select("*").order("created_at", { ascending: false }),
         supabase
           .from("opportunity_contacts")
-          .select("id, opportunity_id, fecha, memo, created_at")
-          .ilike("memo", "[VALORACION]%"),
+          .select(
+            "id, opportunity_id, fecha, memo, created_at, event_type, effective_at, metadata"
+          )
+          .eq("event_type", "valuation"),
         supabase
           .from("opportunity_contacts")
-          .select("id, opportunity_id, fecha, memo, created_at")
-          .ilike("memo", "[R.G.]%"),
+          .select(
+            "id, opportunity_id, fecha, memo, created_at, event_type, effective_at, metadata"
+          )
+          .eq("event_type", "rg"),
         supabase
           .from("visitas")
           .select("id, opportunity_id, fecha_visita, hora, created_at"),
@@ -238,7 +245,11 @@ export default function PlanningPage() {
       }
 
       for (const row of (valuationsResult.data ?? []) as ContactPlanningRow[]) {
-        const { fields } = parseOpportunityContactMemo(row.memo, "[VALORACION]");
+        const { fields } = parseOpportunityContactMemo(
+          row.memo,
+          "[VALORACION]",
+          row.metadata
+        );
         addPlanningItem(
           `valoracion-${row.id}`,
           row.opportunity_id,
@@ -249,7 +260,11 @@ export default function PlanningPage() {
       }
 
       for (const row of (rgResult.data ?? []) as ContactPlanningRow[]) {
-        const { fields } = parseOpportunityContactMemo(row.memo, "[R.G.]");
+        const { fields } = parseOpportunityContactMemo(
+          row.memo,
+          "[R.G.]",
+          row.metadata
+        );
         addPlanningItem(
           `rg-${row.id}`,
           row.opportunity_id,

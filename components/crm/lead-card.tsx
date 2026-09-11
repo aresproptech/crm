@@ -1,6 +1,7 @@
 import { Circle, MapPin, Phone, Tag } from "lucide-react";
 import { type Lead } from "@/lib/crm-data";
 import { cn } from "@/lib/utils";
+import { MaskedPhone } from "@/components/crm/masked-phone";
 
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   activa: {
@@ -81,7 +82,7 @@ export function LeadCard({ lead, onClick }: LeadCardProps) {
       <div className="mb-3 flex flex-col gap-1.5 text-xs text-muted-foreground">
         <span className="flex min-w-0 items-center gap-1.5">
           <Phone className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate font-mono">{lead.phone || "—"}</span>
+          <MaskedPhone value={lead.phone} />
         </span>
         <span className="flex min-w-0 items-center gap-1.5">
           <MapPin className="h-3.5 w-3.5 shrink-0" />

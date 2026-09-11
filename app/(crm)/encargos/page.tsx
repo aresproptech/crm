@@ -18,7 +18,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
-const HISTORY_PREFIX = "[HISTORIAL]";
 type OpportunityOrderRow = {
   id: number;
   opportunity_id: number;
@@ -444,19 +443,6 @@ export default function EncargosPage() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  async function persistLeadActivity(leadId: number, text: string) {
-    const createdBy = userWithRole?.crmUser.name ?? "Usuario";
-    const { error } = await supabase.from("opportunity_contacts").insert({
-      opportunity_id: leadId,
-      fecha: new Date().toISOString().slice(0, 10),
-      memo: `${HISTORY_PREFIX} ${createdBy}: ${text}`,
-      resultado: true,
-    });
-
-    if (error) {
-      console.error("Error guardando historial del encargo:", error);
-    }
-  }
   const [editForm, setEditForm] = useState({
     fecha_inicio: "",
     fecha_fin: "",
@@ -610,6 +596,7 @@ export default function EncargosPage() {
         .from("opportunity_contacts")
         .select("opportunity_id, fecha")
         .in("opportunity_id", safeFinalLeadIds)
+        .eq("event_type", "rg")
         .gte("fecha", formatDate(fifteenDaysAgo)),
       supabase
         .from("visitas")
@@ -773,20 +760,16 @@ export default function EncargosPage() {
     const isEditing = Boolean(selected && selected.orderId !== null);
     const changes = isEditing ? buildEncargoChangeLines(activeItem, payload) : [];
 
-    let error;
-
-    if (selected && selected.orderId !== null) {
-      const result = await supabase
-        .from("opportunity_orders")
-        .update(payload)
-        .eq("id", selected.orderId);
-      error = result.error;
-    } else {
-      const result = await supabase
-        .from("opportunity_orders")
-        .insert(payload);
-      error = result.error;
-    }
+    const { error } = await supabase.rpc("crm_save_order_with_activity", {
+      p_order_id: selected?.orderId ?? null,
+      p_opportunity_id: activeItem.leadId,
+      p_data: payload,
+      p_change_details: isEditing
+        ? changes.length
+          ? `:\n${changes.join("\n")}`
+          : " sin cambios visibles"
+        : null,
+    });
 
     setSaving(false);
 
@@ -795,15 +778,6 @@ export default function EncargosPage() {
       setFormError("No se pudo guardar el encargo. Revisá los datos e intentá nuevamente.");
       return;
     }
-
-    await persistLeadActivity(
-      activeItem.leadId,
-      isEditing
-        ? `Editó un encargo${
-            changes.length ? `:\n${changes.join("\n")}` : " sin cambios visibles"
-          }`
-        : "Agregó un encargo"
-    );
 
     setEditOpen(false);
     setSelected(null);

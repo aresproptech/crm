@@ -136,12 +136,7 @@ type OpportunityContactRow = {
   fecha: string | null;
   memo: string | null;
   created_at: string | null;
-};
-
-type OpportunityOrderRow = {
-  id: number;
-  opportunity_id: number | null;
-  created_at: string | null;
+  event_type: string | null;
 };
 
 type VisitActivityRow = {
@@ -747,7 +742,6 @@ export default function DashboardPage() {
     useState<CommercialDomainFilter>("all");
   const [crmLeads, setCrmLeads] = useState<CrmLeadRow[]>([]);
   const [contacts, setContacts] = useState<OpportunityContactRow[]>([]);
-  const [orders, setOrders] = useState<OpportunityOrderRow[]>([]);
   const [visits, setVisits] = useState<VisitActivityRow[]>([]);
   const [visitadorKeys, setVisitadorKeys] = useState<Set<string>>(new Set());
   const [crmLeadsLoading, setCrmLeadsLoading] = useState(true);
@@ -792,11 +786,10 @@ export default function DashboardPage() {
     async function fetchActivityData() {
       if (userLoading || !userWithRole?.crmUser) return;
 
-      const [contactsResponse, ordersResponse, visitsResponse] = await Promise.all([
+      const [contactsResponse, visitsResponse] = await Promise.all([
         supabase
           .from("opportunity_contacts")
-          .select("id, opportunity_id, fecha, memo, created_at"),
-        supabase.from("opportunity_orders").select("id, opportunity_id, created_at"),
+          .select("id, opportunity_id, fecha, memo, created_at, event_type"),
         supabase.from("visitas").select("id, opportunity_id, fecha_visita, created_at"),
       ]);
 
@@ -804,12 +797,6 @@ export default function DashboardPage() {
         console.error("Supabase contacts activity error:", contactsResponse.error);
       } else {
         setContacts((contactsResponse.data ?? []) as OpportunityContactRow[]);
-      }
-
-      if (ordersResponse.error) {
-        console.error("Supabase orders activity error:", ordersResponse.error);
-      } else {
-        setOrders((ordersResponse.data ?? []) as OpportunityOrderRow[]);
       }
 
       if (visitsResponse.error) {
@@ -1178,18 +1165,13 @@ export default function DashboardPage() {
       });
 
       contacts.forEach((contact) => {
-        const memo = contact.memo?.trim() || "";
         const lead = leadById.get(String(contact.opportunity_id));
         const eventDate = dateKey(contact.fecha || contact.created_at);
 
         if (eventDate !== targetDate) return;
-        if (memo.startsWith("[VALORACION]")) add(lead, "valoraciones");
-        if (memo.startsWith("[R.G.]")) add(lead, "rg");
-      });
-
-      orders.forEach((order) => {
-        const lead = leadById.get(String(order.opportunity_id));
-        if (dateKey(order.created_at) === targetDate) add(lead, "encargos");
+        if (contact.event_type === "valuation") add(lead, "valoraciones");
+        if (contact.event_type === "rg") add(lead, "rg");
+        if (contact.event_type === "order_created") add(lead, "encargos");
       });
 
       visits.forEach((visit) => {
@@ -1210,7 +1192,6 @@ export default function DashboardPage() {
     contacts,
     excludedManagerKey,
     leadById,
-    orders,
     visits,
     visitadorKeys,
   ]);

@@ -1,0 +1,50 @@
+CREATE OR REPLACE FUNCTION public.crm_soft_delete_leads (
+  lead_ids bigint[]
+)
+  RETURNS void
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO ''
+  AS $function$
+declare
+  target_id bigint;
+begin
+  if auth.uid() is null or public.crm_current_role() is null then
+    raise exception 'Sesión no válida' using errcode = '42501';
+  end if;
+
+  if lead_ids is null or cardinality(lead_ids) = 0 then
+    return;
+  end if;
+
+  perform 1
+  from public.opportunities
+  where id = any(lead_ids)
+    and deleted_at is null
+  order by id
+  for update;
+
+  foreach target_id in array lead_ids loop
+    if not public.crm_can_write_opportunity(target_id) then
+      raise exception 'No tienes permiso para eliminar uno de los leads' using errcode = '42501';
+    end if;
+  end loop;
+
+  update public.opportunities
+  set deleted_at = now()
+  where id = any(lead_ids);
+
+  foreach target_id in array lead_ids loop
+    perform public.crm_record_system_activity(
+      target_id,
+      'lead_deleted',
+      'Eliminó el lead',
+      jsonb_build_object('lead_id', target_id)
+    );
+  end loop;
+end
+$function$;
+
+GRANT EXECUTE ON FUNCTION "public"."crm_soft_delete_leads"(bigint[]) TO "authenticated", "postgres", "service_role";
+
+REVOKE ALL ON FUNCTION "public"."crm_soft_delete_leads"(bigint[]) FROM PUBLIC;
