@@ -32,7 +32,8 @@ CREATE TABLE "public"."opportunities" (
   CONSTRAINT "opportunities_postal_id_fkey" FOREIGN KEY (postal_id) REFERENCES public.postal(id),
   CONSTRAINT "opportunities_comercial_user_id_fkey" FOREIGN KEY (comercial_user_id) REFERENCES public.profiles(id),
   CONSTRAINT "opportunities_contact_user_id_fkey" FOREIGN KEY (contact_user_id) REFERENCES public.profiles(id),
-  CONSTRAINT "opportunities_source_id_fkey" FOREIGN KEY (source_id) REFERENCES public.sources(id)
+  CONSTRAINT "opportunities_source_id_fkey" FOREIGN KEY (source_id) REFERENCES public.sources(id),
+  CONSTRAINT "opportunities_fase_id_fkey" FOREIGN KEY (fase_id) REFERENCES public.phases(id)
 );
 
 ALTER TABLE "public"."opportunities"

@@ -1,6 +1,6 @@
 # Fase 2 — fiabilidad funcional
 
-Actualizado: 10 de septiembre de 2026. Proyecto de prueba: `rzgedcknhcoprcpdtrki`.
+Actualizado: 11 de septiembre de 2026. Proyecto de prueba: `rzgedcknhcoprcpdtrki`.
 
 ## Objetivo
 
@@ -25,6 +25,25 @@ datos del formulario ante un fallo y hacer visibles los errores operativos.
   proceso y permanece abierto con el CSV intacto si Supabase devuelve un error.
 - El resultado de la persistencia se devuelve explícitamente al diálogo en lugar
   de depender de un error que sólo aparecía en la consola.
+- La importación completa se ejecuta ahora con
+  `crm_import_leads_with_activity`: si falla una sola fila, PostgreSQL revierte
+  todo el archivo, incluidos los eventos de historial ya creados.
+- Las fechas de contacto, valoración y hora del CSV se conservan en la nueva
+  operación; antes se validaban en el frontend pero no se enviaban a la tabla.
+
+### Leads e historial atómicos
+
+- El alta manual usa `crm_create_lead_with_activity` y confirma el lead junto
+  con el evento `lead_created` en una sola transacción.
+- La edición general usa `crm_update_lead_with_activity`; guarda el cambio y un
+  único evento `lead_updated` con el detalle legible y los estados completos
+  `before` y `after` en `metadata`.
+- Una edición sin diferencias no genera ruido en el historial.
+- Las tres RPC usan los permisos RLS del usuario autenticado. Comerciales sólo
+  pueden crear o editar sus oportunidades; visitadores y perfiles sin permiso
+  quedan bloqueados.
+- `opportunities.fase_id` tiene ahora una clave foránea real a `phases.id`. La
+  auditoría previa confirmó que las 3316 oportunidades existentes eran válidas.
 
 ### Configuración documental
 
@@ -84,35 +103,23 @@ datos del formulario ante un fallo y hacer visibles los errores operativos.
 
 ## Riesgos todavía abiertos
 
-### 1. Acción de negocio e historial no atómicos
-
-Varias acciones realizan primero el cambio principal y después insertan una o
-varias líneas en `opportunity_contacts`:
-
-- crear o importar leads;
-- editar campos generales del lead.
-
-Si la primera escritura funciona y el historial falla, el dato queda guardado
-pero la auditoría queda incompleta. Reintentar toda la acción puede duplicar el
-registro principal. La solución recomendada es mover cada operación compuesta a
-una función transaccional de PostgreSQL y devolver un único resultado al front.
-
-### 2. Eliminación documental en dos sistemas
+### 1. Eliminación documental en dos sistemas
 
 Eliminar un documento requiere borrar el objeto de Storage y luego su fila de
 metadatos. No existe una transacción única entre ambos servicios. Si el segundo
 paso falla puede quedar una referencia a un archivo ya eliminado. Hace falta un
 flujo de borrado recuperable o una tarea de conciliación.
 
-### 3. Usuarios no conectados
+### 2. Usuarios no conectados
 
 La pestaña Usuarios es todavía una maqueta local. Muestra un usuario fijo y el
 botón `Invitar usuario` sólo agrega una fila al estado de React; al recargar se
 pierde y no crea una cuenta en Supabase Auth ni un perfil real. Es un bloqueo de
 producción y deberá resolverse desde un endpoint de servidor protegido para
-administradores, nunca exponiendo una `service_role` en el navegador.
+administradores, nunca exponiendo una `service_role` en el navegador. El usuario
+decidió dejar este bloque para la última fase.
 
-### 4. Pruebas funcionales pendientes
+### 3. Pruebas funcionales pendientes
 
 Faltan pruebas automatizadas de navegador que provoquen respuestas fallidas y
 comprueben que los formularios conservan los datos. También sigue pendiente el
@@ -126,6 +133,13 @@ recorrido manual completo con cada rol indicado en la Fase 0.
   proyecto Supabase de prueba.
 - Migración `20260910120000_structure_opportunity_contacts.sql`: aplicada;
   conserva los memos y clasifica las actividades existentes.
+- Migración `20260911110000_atomic_lead_mutations.sql`: aplicada; crea las RPC
+  transaccionales para alta, importación y edición de leads.
+- Migración `20260911113000_enforce_opportunity_phase_fk.sql`: aplicada después
+  de confirmar que no existían fases huérfanas.
+- `supabase/tests/atomic-lead-mutations.sql`: PASS para todos los perfiles Auth;
+  comprobó alta, edición, importación, autor, permisos y rollback total ante una
+  fila inválida. Todas las escrituras terminaron con `ROLLBACK`.
 - `supabase/tests/structured-opportunity-contacts.sql`: PASS; comprobó tipos,
   metadatos, actor, fecha efectiva, compatibilidad, auditoría e inmutabilidad y
   terminó con `ROLLBACK`.
@@ -135,14 +149,18 @@ recorrido manual completo con cada rol indicado en la Fase 0.
   de escritura por rol.
 - `npm run security:supabase:anon`: PASS; una sesión anónima sigue sin poder leer
   ninguna tabla protegida.
+- `npx next build --webpack`: PASS con las 13 rutas. Turbopack no pudo abrir su
+  proceso local dentro del entorno restringido, por lo que se verificó con el
+  compilador webpack soportado por Next.js.
 - Navegador local con Facu/Coordinador: Leads carga 3316 registros; los diálogos
   de Nuevo lead, Importar CSV y Agregar visita abren correctamente después de los
   cambios. No se escribieron datos durante esta comprobación.
 
 ## Próximo bloque recomendado
 
-Completar la atomicidad de `crear lead + historial`, `importar leads + historial`
-y `editar lead + historial`. Después se debe conectar la gestión real de usuarios
-con Supabase Auth.
+Completar los recorridos funcionales de navegador por rol, especialmente alta,
+edición e importación de leads con datos de prueba. La eliminación documental
+recuperable continúa pendiente y la gestión real de usuarios con Supabase Auth
+queda pospuesta para la última fase.
 
 El CRM todavía no se declara apto para producción.

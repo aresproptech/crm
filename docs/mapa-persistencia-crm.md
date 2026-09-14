@@ -22,9 +22,9 @@ Documento auditado desde el front actual. Indica que acciones leen o escriben da
 | Accion en front | Tabla / vista | Operacion | Columnas usadas | Persistencia | Archivo |
 |---|---|---|---|---|---|
 | Listar leads | `crm_leads_view` | `select` | `*` | Solo lectura | `app/(crm)/leads/page.tsx` |
-| Importar CSV | `opportunities` | `insert` | `propietario`, `domicilio`, `telefono`, `tasacion`, `estado`, `fecha`, `source_desc`, `comercial_user_desc`, `contact_user_desc`, `dominio_desc`, `postal_id`, `fase_id`, `created_at`, `memo`, `en_venta`, `medio`, `source_id`, `comercial_user_id`, `contact_user_id`, `team_id`, `deleted_at` | Guarda | `app/(crm)/leads/page.tsx` |
-| Crear lead manual | `opportunities` | `insert` | `propietario`, `domicilio`, `telefono`, `tasacion`, `estado`, `fecha`, `fecha_contacto`, `fecha_valoracion`, `hora`, `source_desc`, `comercial_user_desc`, `contact_user_desc`, `dominio_desc`, `postal_id`, `fase_id`, `created_at`, `memo`, `en_venta`, `medio`, IDs relacionales null | Guarda | `app/(crm)/leads/page.tsx` |
-| Editar lead | `opportunities` | `update` | `propietario`, `domicilio`, `telefono`, `tasacion`, `estado`, `fecha`, `fecha_contacto`, `fecha_valoracion`, `hora`, `source_desc`, `comercial_user_desc`, `contact_user_desc`, `dominio_desc`, `memo`, `medio`, `en_venta`, `fase_id`, `postal_id` | Guarda | `app/(crm)/leads/page.tsx` |
+| Importar CSV | `opportunities` + `opportunity_contacts` | RPC transaccional | Campos del lead + evento `lead_imported`; incluye fechas de contacto, valoración y hora | Guarda todo o revierte todo el archivo | `app/(crm)/leads/page.tsx` |
+| Crear lead manual | `opportunities` + `opportunity_contacts` | RPC transaccional | Campos del lead + evento `lead_created` con autor real | Guarda todo o revierte todo | `app/(crm)/leads/page.tsx` |
+| Editar lead | `opportunities` + `opportunity_contacts` | RPC transaccional | Campos del lead + evento `lead_updated` con detalle, `before` y `after` | Guarda todo o revierte todo | `app/(crm)/leads/page.tsx` |
 | Leer lead actualizado | `crm_leads_view` | `select` | `*` por `id` | Solo lectura | `app/(crm)/leads/page.tsx` |
 | Mover en Kanban / cambiar fase | `opportunities` + `opportunity_contacts` | RPC transaccional | `fase_id` + evento `phase_changed` | Guarda | `app/(crm)/leads/page.tsx` |
 | Marcar favorito | `opportunities` | `update` | `is_favorite` | Guarda | `app/(crm)/leads/page.tsx` |
@@ -41,7 +41,7 @@ Documento auditado desde el front actual. Indica que acciones leen o escriben da
 | Cargar observaciones e historial | `opportunity_contacts` | `select` | campos base + `event_type`, actor y `metadata` | Solo lectura | Filtra por `opportunity_id` y tipo |
 | Click en llamar | `opportunity_contacts` | RPC | evento `call` con teléfono en `metadata` | Guarda | No depende de buscar “Llamó” en el memo |
 | Contador ultima llamada | `opportunity_contacts` | lectura/calculo | `created_at`, `event_type` | No guarda contador | Se calcula desde eventos `call` |
-| Cambios en campos del panel | `opportunities` + `opportunity_contacts` | `update` + `insert historial` | Campos del lead + memo historial | Guarda | Edicion real via `onSaveLead`; auditoria en historial |
+| Cambios en campos del panel | `opportunities` + `opportunity_contacts` | RPC `crm_update_lead_with_activity` | Campos del lead + evento estructurado con detalle, `before` y `after` | Guarda atómicamente | Una edición sin diferencias no crea historial |
 
 ## Valoraciones
 

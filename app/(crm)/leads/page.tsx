@@ -823,23 +823,6 @@ export default function LeadsPage() {
     return resolved ?? PHASE_ID_MAP[phase] ?? 1;
   }
 
-  async function persistLeadActivity(
-    leadId: string,
-    text: string,
-    eventType: "lead_created" | "lead_imported"
-  ) {
-    const { error } = await supabase.rpc("crm_add_contact_activity", {
-      p_opportunity_id: Number(leadId),
-      p_event_type: eventType,
-      p_text: text,
-      p_metadata: { lead_id: Number(leadId) },
-    });
-
-    if (error) {
-      console.error("Error guardando historial del lead:", error);
-    }
-  }
-
   async function loadLeadsFromSupabase(options?: { append?: boolean }) {
     const append = options?.append ?? false;
     const from = append ? leads.length : 0;
@@ -913,13 +896,15 @@ export default function LeadsPage() {
       tasacion: cleanNullable(lead.valor),
       estado: cleanNullable(lead.status),
       fecha: cleanNullable(lead.fechaNoticia),
+      fecha_contacto: cleanNullable(lead.fechaContacto),
+      fecha_valoracion: cleanNullable(lead.fechaValoracion),
+      hora: cleanNullable(lead.hora),
       source_desc: cleanNullable(lead.source),
       comercial_user_desc: cleanNullable(lead.owner),
       contact_user_desc: cleanNullable(lead.planner),
       dominio_desc: cleanNullable((lead as Lead & { dominio?: string | null }).dominio),
       postal_id: normalizePostalId(lead.cp),
       fase_id: phaseIds.get(lead.phase) ?? PHASE_ID_MAP[lead.phase] ?? 1,
-      created_at: new Date().toISOString(),
       memo: cleanNullable(lead.notes),
       en_venta: null,
       medio: cleanNullable(lead.medio),
@@ -927,13 +912,12 @@ export default function LeadsPage() {
       comercial_user_id: profileIdFor(lead.owner),
       contact_user_id: profileIdFor(lead.planner),
       team_id: null,
-      deleted_at: null,
     }));
 
-    const { data: insertedRows, error } = await supabase
-      .from("opportunities")
-      .insert(rowsToInsert)
-      .select("id");
+    const { data: insertedIds, error } = await supabase.rpc(
+      "crm_import_leads_with_activity",
+      { p_rows: rowsToInsert }
+    );
 
     if (error) {
       console.error("Error importing CSV to Supabase:", error);
@@ -942,15 +926,13 @@ export default function LeadsPage() {
       return message;
     }
 
-    await Promise.all(
-      (insertedRows ?? []).map((row) =>
-        persistLeadActivity(
-          String(row.id),
-          "Importó el lead por CSV",
-          "lead_imported"
-        )
-      )
-    );
+    if (!Array.isArray(insertedIds) || insertedIds.length !== rowsToInsert.length) {
+      const message =
+        "La importación no confirmó todos los leads. No se cerrará el archivo para evitar perder datos.";
+      console.error(message, { insertedIds, expected: rowsToInsert.length });
+      setPageError(message);
+      return message;
+    }
 
     await loadLeadsFromSupabase({ append: false });
     return null;
@@ -962,39 +944,40 @@ export default function LeadsPage() {
 
     const resolvedPhaseId = await resolvePhaseId(form.phase as Lead["phase"]);
 
-    const rowsToInsert = [
-      {
-        propietario: cleanNullable(form.ownerName),
-        domicilio: cleanNullable(form.address),
-        telefono: cleanNullable(form.phone),
-        tasacion: cleanNullable(form.valor),
-        estado: cleanNullable(form.status),
-        fecha: cleanNullable(form.fechaNoticia),
-        fecha_contacto: cleanNullable(form.fechaContacto),
-        fecha_valoracion: cleanNullable(form.fechaValoracion),
-        hora: cleanNullable(form.hora),
-        source_desc: cleanNullable(form.source),
-        comercial_user_desc: cleanNullable(form.owner),
-        contact_user_desc: cleanNullable(form.planner),
-        dominio_desc: cleanNullable((form as NewLeadFormData & { dominio?: string | null }).dominio),
-        postal_id: normalizePostalId(form.cp),
-        fase_id: resolvedPhaseId,
-        created_at: new Date().toISOString(),
-        memo: cleanNullable(form.notes),
-        en_venta: cleanNullable(form.enVenta),
-        medio: cleanNullable(form.medio),
-        source_id: sourceIdFor(form.source),
-        comercial_user_id: profileIdFor(form.owner),
-        contact_user_id: profileIdFor(form.planner),
-        team_id: null,
-        deleted_at: null,
-      },
-    ];
+    const rowToInsert = {
+      propietario: cleanNullable(form.ownerName),
+      domicilio: cleanNullable(form.address),
+      telefono: cleanNullable(form.phone),
+      tasacion: cleanNullable(form.valor),
+      estado: cleanNullable(form.status),
+      fecha: cleanNullable(form.fechaNoticia),
+      fecha_contacto: cleanNullable(form.fechaContacto),
+      fecha_valoracion: cleanNullable(form.fechaValoracion),
+      hora: cleanNullable(form.hora),
+      source_desc: cleanNullable(form.source),
+      comercial_user_desc: cleanNullable(form.owner),
+      contact_user_desc: cleanNullable(form.planner),
+      dominio_desc: cleanNullable(
+        (form as NewLeadFormData & { dominio?: string | null }).dominio
+      ),
+      postal_id: normalizePostalId(form.cp),
+      fase_id: resolvedPhaseId,
+      memo: cleanNullable(form.notes),
+      en_venta: cleanNullable(form.enVenta),
+      medio: cleanNullable(form.medio),
+      source_id: sourceIdFor(form.source),
+      comercial_user_id: profileIdFor(form.owner),
+      contact_user_id: profileIdFor(form.planner),
+      team_id: null,
+    };
 
-    const { data: insertedRows, error } = await supabase
-      .from("opportunities")
-      .insert(rowsToInsert)
-      .select("id");
+    const { data: insertedId, error } = await supabase.rpc(
+      "crm_create_lead_with_activity",
+      {
+        p_data: rowToInsert,
+        p_event_type: "lead_created",
+      }
+    );
 
     if (error) {
       console.error("Error creating lead in Supabase:", error);
@@ -1003,16 +986,19 @@ export default function LeadsPage() {
       return message;
     }
 
-    const insertedId = insertedRows?.[0]?.id;
-    if (insertedId) {
-      await persistLeadActivity(String(insertedId), "Creó el lead", "lead_created");
+    if (!insertedId) {
+      const message =
+        "Supabase no confirmó el lead creado. El formulario permanecerá abierto.";
+      console.error(message, { insertedId });
+      setPageError(message);
+      return message;
     }
 
     await loadLeadsFromSupabase({ append: false });
     return null;
   }
 
-  async function handleSaveLead(next: Lead) {
+  async function handleSaveLead(next: Lead, changeDetails: string[]) {
     if (!canEdit) return;
     setPageError(null);
 
@@ -1045,11 +1031,14 @@ export default function LeadsPage() {
       contact_user_id: profileIdFor(next.planner),
     };
 
-    const { data: updatedRows, error } = await supabase
-      .from("opportunities")
-      .update(updatePayload)
-      .eq("id", Number(next.id))
-      .select("*");
+    const { data: updatedId, error } = await supabase.rpc(
+      "crm_update_lead_with_activity",
+      {
+        p_opportunity_id: Number(next.id),
+        p_data: updatePayload,
+        p_change_details: changeDetails.join(" · ") || null,
+      }
+    );
 
     if (error) {
       console.error("Error actualizando lead:", error);
@@ -1058,12 +1047,10 @@ export default function LeadsPage() {
       throw new Error(message);
     }
 
-    const updatedOpportunity = updatedRows?.[0];
-
-    if (!updatedOpportunity) {
+    if (!updatedId) {
       const message =
-        "Supabase no devolvió la fila actualizada. Puede haber un problema de permisos/RLS o el ID no coincide.";
-      console.error(message, { leadId: next.id, updatePayload, updatedRows });
+        "Supabase no confirmó la actualización. Puede haber un problema de permisos/RLS o el ID no coincide.";
+      console.error(message, { leadId: next.id, updatePayload, updatedId });
       setPageError(message);
       throw new Error(message);
     }
@@ -1075,9 +1062,11 @@ export default function LeadsPage() {
 
     if (readBackError) {
       console.error("Error leyendo lead actualizado:", readBackError);
-      const message = `El lead se guardó, pero no se pudo leer la vista actualizada: ${readBackError.message}`;
-      setPageError(message);
-      throw new Error(message);
+      setPageError(
+        `El lead y su historial se guardaron, pero no se pudo refrescar la vista: ${readBackError.message}`
+      );
+      setSelectedLead(next);
+      return;
     }
 
     const savedRow = savedRows?.[0] as CrmLeadRow | undefined;

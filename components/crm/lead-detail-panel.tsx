@@ -86,7 +86,7 @@ const STATUS_CONFIG = {
 interface LeadDetailPanelProps {
   lead: Lead | null;
   onClose: () => void;
-  onSaveLead: (next: Lead) => Promise<void>;
+  onSaveLead: (next: Lead, changeDetails: string[]) => Promise<void>;
   readOnly?: boolean;
   ownerOptions?: string[];
   plannerOptions?: string[];
@@ -1723,20 +1723,18 @@ export function LeadDetailPanel({
     if (!effectiveLead || readOnly) return;
 
     const changes = buildFieldChangeEvents(effectiveLead, next);
-    await onSaveLead(next);
+    const changeDetails = changes.map(
+      (event) =>
+        `Cambió ${fieldDisplayName(event.field!)} de ${formatFieldValue(
+          event.field!,
+          event.prevValue || ""
+        )} a ${formatFieldValue(event.field!, event.newValue || "")}`
+    );
+
+    await onSaveLead(next, changeDetails);
     setLocalLead(next);
 
     if (changes.length > 0) {
-      await Promise.all(
-        changes.map((event) =>
-          persistActivity(
-            `Cambió ${fieldDisplayName(event.field!)} de ${formatFieldValue(
-              event.field!,
-              event.prevValue || ""
-            )} a ${formatFieldValue(event.field!, event.newValue || "")}`
-          )
-        )
-      );
       await loadObservations(next.id);
     }
   }

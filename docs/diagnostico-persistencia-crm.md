@@ -138,7 +138,8 @@ clasificación y las métricas ya no dependen de prefijos.
 
 ### 3. Historial de acciones
 
-Estado: revisado, con correcciones pendientes.
+Estado: estructurado y transaccional; quedan pendientes los recorridos completos
+de navegador por rol.
 
 El historial ya muestra acciones y persiste en `opportunity_contacts`, pero no todas se registran con el mismo nivel de detalle.
 
@@ -215,8 +216,10 @@ Sin snapshots, el dashboard puede recalcular datos historicos con informacion ac
 ## Recomendaciones priorizadas
 
 1. Completar las pruebas de navegador por cada rol; las reglas RLS y el bloqueo anónimo ya están aplicados y comprobados mediante SQL.
-2. Estandarizar el historial de acciones para que siempre guarde usuario, fecha, accion y cambios.
-3. Mantener los prefijos estandarizados de `opportunity_contacts` en todos los nuevos flujos.
+2. Mantener las operaciones compuestas dentro de RPC transaccionales; altas,
+   importaciones y ediciones de leads ya guardan su historial atómicamente.
+3. Mantener `event_type` y `metadata` como clasificación estructurada de
+   `opportunity_contacts`; los prefijos quedan sólo para lectura humana y legado.
 4. Evaluar snapshots diarios para metricas historicas del dashboard.
 5. Resolver manualmente los valores ambiguos restantes de comerciales, planners y orígenes; las coincidencias únicas y las nuevas escrituras ya usan IDs.
 
@@ -224,8 +227,11 @@ Sin snapshots, el dashboard puede recalcular datos historicos con informacion ac
 
 El CRM tiene una base de persistencia correcta para empezar a operar: leads, visitas, valoraciones, R.G., encargos, observaciones e historial tienen conexion con Supabase.
 
-La seguridad crítica de datos quedó reforzada en la Fase 0. Antes de producción todavía hay que completar las pruebas funcionales por rol, normalizar asignaciones y mejorar la trazabilidad:
+La seguridad crítica de datos quedó reforzada en la Fase 0 y las operaciones
+principales ya conservan trazabilidad estructurada y transaccional. Antes de
+producción todavía hay que completar las pruebas funcionales por rol y resolver
+las decisiones de negocio pendientes:
 
 - confirmar los recorridos de cada perfil en el navegador,
-- ordenar mejor los eventos,
+- resolver las asignaciones heredadas ambiguas,
 - y decidir si el dashboard debe ser calculado en vivo o guardar cortes historicos diarios.
