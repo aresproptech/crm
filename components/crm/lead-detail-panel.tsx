@@ -1630,7 +1630,7 @@ export function LeadDetailPanel({
       )
       .eq("opportunity_id", Number(leadId))
       .eq("event_type", "rg")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: true });
 
     if (error) {
       console.error("Error cargando R.G.:", error);
@@ -1649,7 +1649,7 @@ export function LeadDetailPanel({
       )
       .eq("opportunity_id", Number(leadId))
       .eq("event_type", "valuation")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: true });
 
     if (error) {
       console.error("Error cargando valoraciones:", error);
@@ -2138,7 +2138,7 @@ export function LeadDetailPanel({
 
     return {
       id: String(row.id),
-      numero: rgEntries.length - index,
+      numero: index + 1,
       fecha: row.fecha || row.created_at || "",
       hora: detail.fields.hora || "",
       medio: detail.fields.medio || "—",
@@ -2181,7 +2181,7 @@ export function LeadDetailPanel({
 
       return {
         id: String(row.id),
-        numero: valuationEntries.length - index,
+        numero: index + 1,
         fecha: row.fecha || row.created_at || "",
         hora: detail.fields.hora || "",
         medio: detail.fields.medio || "—",
