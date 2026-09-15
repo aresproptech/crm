@@ -16,7 +16,7 @@ CREATE OR REPLACE FUNCTION public.crm_can_write_opportunity (
         public.crm_current_role() in ('admin', 'coordinador')
         or (
           public.crm_current_role() = 'comercial'
-          and not public.crm_is_visitador()
+          and not public.crm_can_manage_visits()
           and (
             (o.comercial_user_id is not null
               and o.comercial_user_id = public.crm_current_profile_id())

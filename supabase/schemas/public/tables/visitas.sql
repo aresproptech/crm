@@ -37,23 +37,23 @@ CREATE INDEX idx_visitas_opportunity_id ON public.visitas USING btree (opportuni
 CREATE POLICY "visitas_delete_by_role" ON "public"."visitas"
   FOR DELETE
   TO "authenticated"
-  USING ((public.crm_is_visitador() OR public.crm_can_write_opportunity(opportunity_id)));
+  USING ((public.crm_can_manage_visits() OR public.crm_can_write_opportunity(opportunity_id)));
 
 CREATE POLICY "visitas_insert_by_role" ON "public"."visitas"
   FOR INSERT
   TO "authenticated"
-  WITH CHECK ((public.crm_is_visitador() OR public.crm_can_write_opportunity(opportunity_id)));
+  WITH CHECK (public.crm_can_create_visit_for_opportunity(opportunity_id));
 
 CREATE POLICY "visitas_select_by_role" ON "public"."visitas"
   FOR SELECT
   TO "authenticated"
-  USING (public.crm_can_read_opportunity(opportunity_id));
+  USING ((public.crm_can_manage_visits() OR public.crm_can_read_opportunity(opportunity_id)));
 
 CREATE POLICY "visitas_update_by_role" ON "public"."visitas"
   FOR UPDATE
   TO "authenticated"
-  USING ((public.crm_is_visitador() OR public.crm_can_write_opportunity(opportunity_id)))
-  WITH CHECK ((public.crm_is_visitador() OR public.crm_can_write_opportunity(opportunity_id)));
+  USING ((public.crm_can_manage_visits() OR public.crm_can_write_opportunity(opportunity_id)))
+  WITH CHECK (public.crm_can_create_visit_for_opportunity(opportunity_id));
 
 GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE "public"."visitas" TO "appsheet_user";
 

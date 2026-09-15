@@ -24,7 +24,7 @@ begin
           lower(btrim(p.rol)) in ('admin', 'coordinador')
           or (
             lower(btrim(p.rol)) = 'comercial'
-            and lower(btrim(p.name)) not in ('gonza', 'gonzalo')
+            and not p.can_manage_visits
             and (
               o.comercial_user_id = p.id
               or (

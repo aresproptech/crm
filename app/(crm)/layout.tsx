@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Menu } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
 import { Sidebar } from "@/components/crm/sidebar";
+import { canManageVisits, useUser } from "@/lib/hooks/useUser";
 
 export default function CRMLayout({
   children,
@@ -10,6 +12,26 @@ export default function CRMLayout({
   children: React.ReactNode;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const pathname = usePathname();
+  const router = useRouter();
+  const { userWithRole, loading } = useUser();
+  const visitOnly = Boolean(
+    userWithRole?.crmUser && canManageVisits(userWithRole.crmUser)
+  );
+
+  useEffect(() => {
+    if (!loading && visitOnly && pathname !== "/visitas") {
+      router.replace("/visitas");
+    }
+  }, [loading, pathname, router, visitOnly]);
+
+  if (!loading && visitOnly && pathname !== "/visitas") {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background text-sm text-muted-foreground">
+        Abriendo Visitas...
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">

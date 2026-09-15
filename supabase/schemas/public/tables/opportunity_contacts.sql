@@ -19,7 +19,8 @@ CREATE TABLE "public"."opportunity_contacts" (
     ((event_type = ANY (ARRAY['legacy'::text, 'activity'::text, 'note'::text, 'call'::text, 'valuation'::text, 'valuation_updated'::text, 'rg'::text, 'rg_updated'::text,
     'lead_created'::text,
     'lead_imported'::text,
-    'lead_updated'::text, 'lead_deleted'::text, 'phase_changed'::text, 'visit_created'::text, 'visit_updated'::text, 'order_created'::text, 'order_updated'::text]))),
+    'lead_updated'::text, 'lead_deleted'::text, 'phase_changed'::text, 'visit_created'::text, 'visit_updated'::text, 'order_created'::text, 'order_updated'::text,
+    'document_uploaded'::text, 'document_viewed'::text]))),
   CONSTRAINT "order_contacts_pkey" PRIMARY KEY (id),
   CONSTRAINT "opportunity_contacts_parent_event_id_fkey" FOREIGN KEY (parent_event_id) REFERENCES public.opportunity_contacts(id) ON DELETE SET NULL,
   CONSTRAINT "opportunity_contacts_actor_profile_id_fkey" FOREIGN KEY (actor_profile_id) REFERENCES public.profiles(id) ON DELETE SET NULL
@@ -40,11 +41,6 @@ CREATE TRIGGER crm_prepare_opportunity_contact_trigger
   FOR EACH ROW
   EXECUTE FUNCTION public.crm_prepare_opportunity_contact();
 
-CREATE POLICY "contacts_delete_by_opportunity" ON "public"."opportunity_contacts"
-  FOR DELETE
-  TO "authenticated"
-  USING (public.crm_can_write_opportunity(opportunity_id));
-
 CREATE POLICY "contacts_insert_by_opportunity" ON "public"."opportunity_contacts"
   FOR INSERT
   TO "authenticated"
@@ -61,7 +57,7 @@ CREATE POLICY "contacts_update_by_opportunity" ON "public"."opportunity_contacts
   USING (public.crm_can_write_opportunity(opportunity_id))
   WITH CHECK (public.crm_can_write_opportunity(opportunity_id));
 
-GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE "public"."opportunity_contacts" TO "appsheet_user";
+GRANT INSERT, SELECT, UPDATE ON TABLE "public"."opportunity_contacts" TO "appsheet_user";
 
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE "public"."opportunity_contacts" TO "postgres", "service_role";
 
@@ -69,4 +65,4 @@ COMMENT ON TABLE "public"."opportunity_contacts" IS 'Oportunidad Contactos';
 
 REVOKE ALL ON TABLE "public"."opportunity_contacts" FROM "authenticated";
 
-GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE "public"."opportunity_contacts" TO "authenticated";
+GRANT INSERT, SELECT, UPDATE ON TABLE "public"."opportunity_contacts" TO "authenticated";

@@ -16,6 +16,7 @@ export type CrmUser = {
   rol: "Admin" | "Coordinador" | "Comercial";
   user: string | null;
   enabled: boolean;
+  can_manage_visits: boolean;
 };
 
 // Cliente singleton para el browser

@@ -25,16 +25,18 @@ begin
 
     select id
     into readable_opportunity_id
-    from public.crm_leads_view
+    from public.crm_visit_property_options()
     order by id
     limit 1;
 
     if readable_opportunity_id is not null then
+      reset role;
       select count(*)
       into history_count
       from public.opportunity_contacts
       where opportunity_id = readable_opportunity_id;
 
+      set local role authenticated;
       select public.crm_save_visit_with_activity(
         null,
         readable_opportunity_id,
@@ -53,6 +55,7 @@ begin
         raise exception 'La RPC no creó la visita para el rol %', profile_row.role_name;
       end if;
 
+      reset role;
       if (
         select count(*)
         from public.opportunity_contacts
@@ -61,6 +64,7 @@ begin
         raise exception 'La visita no creó exactamente una línea de historial';
       end if;
 
+      set local role authenticated;
       perform public.crm_save_visit_with_activity(
         saved_visit_id,
         readable_opportunity_id,
@@ -73,6 +77,7 @@ begin
         ': prueba de edición'
       );
 
+      reset role;
       if (
         select count(*)
         from public.opportunity_contacts
@@ -84,6 +89,7 @@ begin
       checked_visits := checked_visits + 1;
     end if;
 
+    set local role authenticated;
     select id
     into writable_opportunity_id
     from public.opportunities

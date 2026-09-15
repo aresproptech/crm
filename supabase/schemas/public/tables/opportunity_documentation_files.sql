@@ -18,31 +18,15 @@ ALTER TABLE "public"."opportunity_documentation_files"
 
 CREATE INDEX opportunity_documentation_files_opportunity_idx ON public.opportunity_documentation_files USING btree (opportunity_id, requirement_key);
 
-CREATE POLICY "documentation_files_delete" ON "public"."opportunity_documentation_files"
-  FOR DELETE
-  TO "authenticated"
-  USING (public.crm_can_write_opportunity(opportunity_id));
-
-CREATE POLICY "documentation_files_insert" ON "public"."opportunity_documentation_files"
-  FOR INSERT
-  TO "authenticated"
-  WITH CHECK (public.crm_can_write_opportunity(opportunity_id));
-
 CREATE POLICY "documentation_files_select" ON "public"."opportunity_documentation_files"
   FOR SELECT
   TO "authenticated"
   USING (public.crm_can_read_opportunity(opportunity_id));
 
-CREATE POLICY "documentation_files_update" ON "public"."opportunity_documentation_files"
-  FOR UPDATE
-  TO "authenticated"
-  USING (public.crm_can_write_opportunity(opportunity_id))
-  WITH CHECK (public.crm_can_write_opportunity(opportunity_id));
-
-GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE "public"."opportunity_documentation_files" TO "appsheet_user";
+GRANT SELECT ON TABLE "public"."opportunity_documentation_files" TO "appsheet_user";
 
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE "public"."opportunity_documentation_files" TO "postgres", "service_role";
 
 REVOKE ALL ON TABLE "public"."opportunity_documentation_files" FROM "authenticated";
 
-GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE "public"."opportunity_documentation_files" TO "authenticated";
+GRANT SELECT ON TABLE "public"."opportunity_documentation_files" TO "authenticated";

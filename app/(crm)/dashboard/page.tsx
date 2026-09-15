@@ -10,10 +10,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import {
+  canManageVisits,
   canViewAllLeads,
-  isVisitador,
   useUser,
-  VISITADOR_PROFILE_NAMES,
 } from "@/lib/hooks/useUser";
 import { PHASE_LABELS } from "@/lib/crm-data";
 
@@ -811,14 +810,47 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (userLoading || !userWithRole?.crmUser) return;
+    const crmUser = userWithRole.crmUser;
+    let cancelled = false;
 
-    const keys = new Set(
-      VISITADOR_PROFILE_NAMES.map((name) => normalizePersonKey(name)).filter(Boolean)
-    );
-    if (isVisitador(userWithRole.crmUser)) {
-      keys.add(normalizePersonKey(userWithRole.crmUser.name));
+    async function loadVisitManagers() {
+      if (canManageVisits(crmUser)) {
+        setVisitadorKeys(new Set([normalizePersonKey(crmUser.name)]));
+        return;
+      }
+
+      const role = String(crmUser.rol || "").trim().toLowerCase();
+      if (role !== "admin" && role !== "coordinador") {
+        setVisitadorKeys(new Set());
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("name")
+        .eq("can_manage_visits", true)
+        .eq("enabled", true);
+
+      if (cancelled) return;
+      if (error) {
+        console.error("Supabase visit managers error:", error);
+        setVisitadorKeys(new Set());
+        return;
+      }
+
+      setVisitadorKeys(
+        new Set(
+          (data ?? [])
+            .map((profile) => normalizePersonKey(profile.name))
+            .filter(Boolean)
+        )
+      );
     }
-    setVisitadorKeys(keys);
+
+    void loadVisitManagers();
+    return () => {
+      cancelled = true;
+    };
   }, [userLoading, userWithRole]);
 
   const currentRange = useMemo(() => {

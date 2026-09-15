@@ -16,6 +16,9 @@ Documento auditado desde el front actual. Indica que acciones leen o escriben da
 | `phases` | Resolver IDs de fase | No | Si |
 | `profiles` | Usuario CRM y rol | No | Si |
 | `postal` | Lookup de codigo postal | No | Si |
+| `opportunity_documentation_cases` | Configuracion y requisitos aplicables del expediente | Si | Si |
+| `opportunity_documentation_files` | Metadatos inmutables de los documentos | Si, mediante RPC | Si |
+| Storage `lead-documentation` | Archivos privados del expediente | Si | Si, mediante URL temporal |
 
 ## Oportunidades / Leads
 
@@ -42,6 +45,16 @@ Documento auditado desde el front actual. Indica que acciones leen o escriben da
 | Click en llamar | `opportunity_contacts` | RPC | evento `call` con teléfono en `metadata` | Guarda | No depende de buscar “Llamó” en el memo |
 | Contador ultima llamada | `opportunity_contacts` | lectura/calculo | `created_at`, `event_type` | No guarda contador | Se calcula desde eventos `call` |
 | Cambios en campos del panel | `opportunities` + `opportunity_contacts` | RPC `crm_update_lead_with_activity` | Campos del lead + evento estructurado con detalle, `before` y `after` | Guarda atómicamente | Una edición sin diferencias no crea historial |
+
+## Documentación
+
+| Acción en front | Destino | Operación | Persistencia | Observación |
+|---|---|---|---|---|
+| Configurar expediente | `opportunity_documentation_cases` | `upsert` por `opportunity_id` | Guarda | Define propietarios y requisitos condicionales |
+| Adjuntar archivo | Storage + `opportunity_documentation_files` + `opportunity_contacts` | Carga física y RPC `crm_register_document_upload` | Conserva archivo; metadatos y auditoría se guardan atómicamente | Evento `document_uploaded` con autor y fecha |
+| Abrir archivo | `opportunity_contacts` + Storage | RPC `crm_record_document_view` y URL firmada de 60 segundos | Guarda auditoría antes de abrir | Evento `document_viewed` con autor y fecha |
+| Eliminar o modificar un archivo | No disponible | N/A | No elimina ni altera | Los usuarios normales sólo leen metadatos y no pueden borrar ni reemplazar objetos documentales |
+| Eliminar lead desde el listado | `opportunities` + `opportunity_contacts` | RPC `crm_soft_delete_leads` | Borrado lógico | Conserva la fila, relaciones, documentos e historial |
 
 ## Valoraciones
 
@@ -88,10 +101,10 @@ Formato actual de memo: `[R.G.] Nombre: Medio: X | Resultado: Y | Hora: HH:mm`.
 |---|---|---|---|---|---|
 | Listar visitas | `visitas` | `select` | `*` | Solo lectura | `app/(crm)/visitas/page.tsx` |
 | Filtrar visitas para Comercial | `visitas` | `select` con filtro | `owner`, `planner` | Solo lectura | `app/(crm)/visitas/page.tsx` |
-| Cargar inmuebles para visita | `crm_leads_view` | `select` | `id`, `propietario`, `domicilio`, `comercial_name`, `dominio_desc`, `telefono`, `estado` | Solo lectura | `app/(crm)/visitas/page.tsx` |
-| Agregar visita | `visitas` | `insert` | `opportunity_id`, `estado`, `dominio`, `planner`, `owner`, `fecha_visita`, `hora`, `buyer`, `nombre_apellido`, `telefono`, `dni`, `vende`, `observaciones_visita`, `created_by` | Guarda | `app/(crm)/visitas/page.tsx` |
-| Editar visita | `visitas` | `update` | `fecha_visita`, `hora`, `nombre_apellido`, `telefono`, `buyer`, `dni`, `vende`, `observaciones_visita` por `id` | Guarda | `app/(crm)/visitas/page.tsx` |
-| Registrar historial de visita | `opportunity_contacts` | `insert` | `opportunity_id`, `fecha`, `memo`, `resultado` | Guarda | Texto: agrego/edito visita |
+| Cargar inmuebles para visita | RPC `crm_visit_property_options` | DTO seguro | `id`, `propietario`, `domicilio`, `owner`, `planner`, `estado`, `dominio` | Solo lectura | El gestor de visitas no obtiene acceso a `crm_leads_view` |
+| Agregar visita | RPC `crm_save_visit_with_activity` | `insert` transaccional | `opportunity_id`, datos de visita y autor real | Guarda | RPC/RLS exigen oportunidad activa en Encargo |
+| Editar visita | RPC `crm_save_visit_with_activity` | `update` transaccional | datos editables por `id`; no reasigna el inmueble | Guarda | `app/(crm)/visitas/page.tsx` |
+| Registrar historial de visita | RPC → `opportunity_contacts` | `insert` en la misma transacción | evento tipado, `visit_id`, detalle y actor | Guarda | Si falla el historial, se revierte la visita |
 | Copiar telefonos seleccionados | Clipboard navegador | N/A | `telefono` | No guarda | Solo portapapeles |
 | Click telefono / WhatsApp | Navegacion externa | N/A | `telefono` | No guarda | Abre WhatsApp/telefono segun implementacion |
 | Impacto dashboard comercial | `visitas` | lectura/calculo | `opportunity_id`, `fecha_visita`, `created_at` | No guarda metrica | Cuenta visitas por fecha |
@@ -122,6 +135,7 @@ Formato actual de memo: `[R.G.] Nombre: Medio: X | Resultado: Y | Hora: HH:mm`.
 | Obtener usuario CRM | `profiles` | `select` | `*` filtrando `auth_id` | Solo lectura |
 | Login | Supabase Auth | `signInWithPassword` | email/password | Sesion Auth |
 | Logout | Supabase Auth | `signOut` | N/A | Cierra sesion |
+| Gestionar visitas globales | `profiles` + RPC/RLS | permiso `can_manage_visits` | booleano explícito | Guarda | No depende del nombre del usuario |
 | Ver todos los leads | Regla frontend | N/A | `rol` | No guarda |
 | Editar leads | Regla frontend | N/A | `rol` | No guarda |
 
@@ -160,3 +174,4 @@ Pendiente de confirmar en backend:
 | Dashboard no guarda snapshots | Todo se recalcula al abrir | Si se necesita historico fijo, crear tabla de snapshots |
 | Seguridad depende de RLS | El front filtra, pero no alcanza como seguridad fuerte | Auditar policies Supabase |
 | Campos `_desc` vs IDs relacionales | El front inserta muchos IDs como null y guarda descripciones | Confirmar triggers/vista o normalizar |
+| Objeto sin metadatos tras fallo excepcional | Storage y PostgreSQL no comparten una transacción | Conservar el objeto y añadir una conciliación administrativa futura |

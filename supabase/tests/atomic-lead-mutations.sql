@@ -207,7 +207,7 @@ begin
     set local role authenticated;
 
     should_create := profile_row.role_name in ('admin', 'coordinador') or (
-      profile_row.role_name = 'comercial' and not public.crm_is_visitador()
+      profile_row.role_name = 'comercial' and not public.crm_can_manage_visits()
     );
     permission_blocked := false;
     created_id := null;

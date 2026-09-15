@@ -48,17 +48,12 @@ CREATE INDEX idx_opportunities_contact_user_id ON public.opportunities USING btr
 CREATE INDEX idx_opportunities_source_id ON public.opportunities USING btree (source_id)
   WHERE (deleted_at IS NULL);
 
-CREATE POLICY "opportunities_delete_by_role" ON "public"."opportunities"
-  FOR DELETE
-  TO "authenticated"
-  USING (public.crm_can_write_opportunity(id));
-
 CREATE POLICY "opportunities_insert_by_role" ON "public"."opportunities"
   FOR INSERT
   TO "authenticated"
   WITH
     CHECK
-    (((public.crm_current_role() = ANY (ARRAY['admin'::text, 'coordinador'::text])) OR ((public.crm_current_role() = 'comercial'::text) AND (NOT public.crm_is_visitador()) AND
+    (((public.crm_current_role() = ANY (ARRAY['admin'::text, 'coordinador'::text])) OR ((public.crm_current_role() = 'comercial'::text) AND (NOT public.crm_can_manage_visits()) AND
     (((comercial_user_id IS
     NOT NULL) AND (comercial_user_id = public.crm_current_profile_id())) OR
     ((comercial_user_id IS NULL) AND (lower(btrim(COALESCE(comercial_user_desc, ''::text))) = lower(btrim(COALESCE(public.crm_current_name(), ''::text)))))))));
@@ -67,8 +62,7 @@ CREATE POLICY "opportunities_select_by_role" ON "public"."opportunities"
   FOR SELECT
   TO "authenticated"
   USING
-    (((deleted_at IS NULL) AND ((public.crm_current_role() = ANY (ARRAY['admin'::text, 'coordinador'::text])) OR public.crm_is_visitador() OR ((public.crm_current_role() =
-    'comercial'::text) AND (((comercial_user_id IS
+    (((deleted_at IS NULL) AND ((public.crm_current_role() = ANY (ARRAY['admin'::text, 'coordinador'::text])) OR ((public.crm_current_role() = 'comercial'::text) AND (NOT public.crm_can_manage_visits()) AND (((comercial_user_id IS
     NOT NULL) AND (comercial_user_id = public.crm_current_profile_id())) OR
     ((comercial_user_id IS NULL) AND (lower(btrim(COALESCE(comercial_user_desc, ''::text))) = lower(btrim(COALESCE(public.crm_current_name(), ''::text))))))))));
 
@@ -78,12 +72,12 @@ CREATE POLICY "opportunities_update_by_role" ON "public"."opportunities"
   USING (public.crm_can_write_opportunity(id))
   WITH
     CHECK
-    (((public.crm_current_role() = ANY (ARRAY['admin'::text, 'coordinador'::text])) OR ((public.crm_current_role() = 'comercial'::text) AND (NOT public.crm_is_visitador()) AND
+    (((public.crm_current_role() = ANY (ARRAY['admin'::text, 'coordinador'::text])) OR ((public.crm_current_role() = 'comercial'::text) AND (NOT public.crm_can_manage_visits()) AND
     (((comercial_user_id IS
     NOT NULL) AND (comercial_user_id = public.crm_current_profile_id())) OR
     ((comercial_user_id IS NULL) AND (lower(btrim(COALESCE(comercial_user_desc, ''::text))) = lower(btrim(COALESCE(public.crm_current_name(), ''::text)))))))));
 
-GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE "public"."opportunities" TO "appsheet_user";
+GRANT INSERT, SELECT, UPDATE ON TABLE "public"."opportunities" TO "appsheet_user";
 
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE "public"."opportunities" TO "postgres", "service_role";
 
@@ -91,4 +85,4 @@ COMMENT ON TABLE "public"."opportunities" IS 'Oportunidades';
 
 REVOKE ALL ON TABLE "public"."opportunities" FROM "authenticated";
 
-GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE "public"."opportunities" TO "authenticated";
+GRANT INSERT, SELECT, UPDATE ON TABLE "public"."opportunities" TO "authenticated";

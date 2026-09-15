@@ -13,11 +13,6 @@ CREATE TABLE "public"."opportunity_documentation_cases" (
 ALTER TABLE "public"."opportunity_documentation_cases"
   ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "documentation_cases_delete" ON "public"."opportunity_documentation_cases"
-  FOR DELETE
-  TO "authenticated"
-  USING (public.crm_can_write_opportunity(opportunity_id));
-
 CREATE POLICY "documentation_cases_insert" ON "public"."opportunity_documentation_cases"
   FOR INSERT
   TO "authenticated"
@@ -34,10 +29,10 @@ CREATE POLICY "documentation_cases_update" ON "public"."opportunity_documentatio
   USING (public.crm_can_write_opportunity(opportunity_id))
   WITH CHECK (public.crm_can_write_opportunity(opportunity_id));
 
-GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE "public"."opportunity_documentation_cases" TO "appsheet_user";
+GRANT INSERT, SELECT, UPDATE ON TABLE "public"."opportunity_documentation_cases" TO "appsheet_user";
 
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE "public"."opportunity_documentation_cases" TO "postgres", "service_role";
 
 REVOKE ALL ON TABLE "public"."opportunity_documentation_cases" FROM "authenticated";
 
-GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE "public"."opportunity_documentation_cases" TO "authenticated";
+GRANT INSERT, SELECT, UPDATE ON TABLE "public"."opportunity_documentation_cases" TO "authenticated";

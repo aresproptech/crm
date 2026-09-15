@@ -65,9 +65,15 @@ Matriz de permisos aplicada en el frontend:
 | Admin | Todos los registros y metricas | Todo el CRM |
 | Coordinador | Todos los registros y metricas | Todo el CRM |
 | Comercial | Solo sus leads y datos relacionados | Solo sus leads y datos relacionados |
-| Visitador | Todos los registros de todas las pestañas | Solo Visitas |
+| Gestor de visitas | Sólo Visitas y datos mínimos del inmueble | Crear y editar Visitas |
 
-Gonzalo mantiene `profiles.rol = 'Comercial'`, pero el frontend reconoce los nombres de perfil `Gonza` y `Gonzalo` como la excepcion de Visitador. En Oportunidades, Valoraciones, Encargos, R.G. y Planning dispone de acceso de solo lectura; en Visitas puede crear y editar registros asociados a cualquier inmueble. Tampoco se incluye como comercial en las comparativas de rendimiento.
+Gonzalo mantiene `profiles.rol = 'Comercial'` y tiene
+`profiles.can_manage_visits = true`. Oportunidades y los flujos comerciales le
+devuelven cero registros. En Visitas puede leer, crear y editar visitas; el selector
+de inmuebles usa `crm_visit_property_options` y sólo entrega los campos necesarios
+de inmuebles en Encargo. La RPC y la política RLS validan también esa fase antes
+de crear la visita, por lo que el selector no es la única barrera. Tampoco se
+incluye en las comparativas comerciales.
 
 Estado actualizado el 9 de septiembre: políticas RLS aplicadas en la base de prueba y aislamiento comprobado mediante SQL. Quedan las pruebas completas de navegador; ver `fase-0-seguridad-supabase.md`.
 
@@ -82,13 +88,13 @@ Situación histórica detectada en la auditoría de solo lectura del 14 de julio
 
 Conclusión histórica: un cliente anónimo podía consultar datos del CRM. Ese riesgo crítico quedó corregido en la Fase 0.
 
-El 8 de septiembre de 2026 se confirmó y cerró el acceso anónimo mediante las migraciones versionadas. El usuario autorizó aplicarlas directamente a la base de prueba sin backup. Gonzalo conserva temporalmente el rol Comercial con una excepción nominal. La sonda API y las pruebas SQL por usuario pasan; el alcance y los pendientes constan en `fase-0-seguridad-supabase.md`.
+El 8 de septiembre de 2026 se confirmó y cerró el acceso anónimo mediante las migraciones versionadas. El usuario autorizó aplicarlas directamente a la base de prueba sin backup. El 14 de septiembre se sustituyó la excepción nominal de Gonzalo por `can_manage_visits`. La sonda API y las pruebas SQL por usuario pasan; el alcance y los pendientes constan en `fase-0-seguridad-supabase.md`.
 
 Controles aplicados y comprobados en Supabase mediante pruebas SQL:
 
 - Que cada Comercial solo pueda leer y modificar sus propios leads y datos relacionados.
 - Que Admin y Coordinador tengan acceso completo.
-- Que el Visitador pueda leer globalmente, pero escribir unicamente en Visitas.
+- Que el gestor de visitas vea cero oportunidades y pueda operar únicamente en Visitas.
 - Que no haya escrituras abiertas por error.
 - Que las tablas criticas tengan Row Level Security bien configurado.
 

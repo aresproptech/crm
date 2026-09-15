@@ -15,7 +15,7 @@ import {
   Eye,
   CalendarDays,
 } from "lucide-react";
-import { useUser } from "@/lib/hooks/useUser";
+import { canManageVisits, useUser } from "@/lib/hooks/useUser";
 import type { CrmUser } from "@/lib/supabase";
 
 type NavItem = {
@@ -101,9 +101,11 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
     .join("")
     .toUpperCase();
 
-  const visibleItems = rol
-    ? navItems.filter((item) => item.roles.includes(rol))
-    : [];
+  const visibleItems = userWithRole?.crmUser && canManageVisits(userWithRole.crmUser)
+    ? navItems.filter((item) => item.href === "/visitas")
+    : rol
+      ? navItems.filter((item) => item.roles.includes(rol))
+      : [];
 
   return (
     <>

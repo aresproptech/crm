@@ -5,6 +5,7 @@ CREATE TABLE "public"."profiles" (
   "name"       text,
   "enabled"    boolean,
   "auth_id"    uuid,
+  "can_manage_visits" boolean NOT NULL DEFAULT false,
   CONSTRAINT "Users_pkey" PRIMARY KEY (id),
   CONSTRAINT "users_auth_id_fkey" FOREIGN KEY (auth_id) REFERENCES auth.users(id),
   CONSTRAINT "users_name_key" UNIQUE (name)

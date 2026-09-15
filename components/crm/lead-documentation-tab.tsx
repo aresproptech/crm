@@ -10,7 +10,6 @@ import {
   MinusCircle,
   Paperclip,
   Settings2,
-  Trash2,
   Upload,
   XCircle,
 } from "lucide-react";
@@ -21,16 +20,6 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -256,9 +245,6 @@ export function LeadDocumentationTab({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
-  const [deletingFileId, setDeletingFileId] = useState<string | null>(null);
-  const [filePendingDelete, setFilePendingDelete] =
-    useState<DocumentationFile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [schemaMissing, setSchemaMissing] = useState(false);
   const [configurationOpen, setConfigurationOpen] = useState(false);
@@ -427,23 +413,24 @@ export function LeadDocumentationTab({
       return;
     }
 
-    const { data, error: recordError } = await supabase
-      .from("opportunity_documentation_files")
-      .insert({
-        opportunity_id: Number(leadId),
-        requirement_key: requirementKey,
-        file_name: file.name,
-        storage_path: storagePath,
-        mime_type: file.type,
-        file_size: file.size,
-        uploaded_by: currentUserName || "Usuario",
-      })
-      .select("*")
-      .single();
+    const { data, error: recordError } = await supabase.rpc(
+      "crm_register_document_upload",
+      {
+        p_opportunity_id: Number(leadId),
+        p_data: {
+          requirement_key: requirementKey,
+          file_name: file.name,
+          storage_path: storagePath,
+          mime_type: file.type,
+          file_size: file.size,
+        },
+      }
+    );
 
     if (recordError) {
-      await supabase.storage.from(BUCKET_NAME).remove([storagePath]);
-      setError(`El archivo se subió, pero no se pudo registrar: ${recordError.message}`);
+      setError(
+        `El archivo se conservó en Storage, pero no se pudo registrar en el expediente: ${recordError.message}`
+      );
     } else {
       setFiles((current) => [data as DocumentationFile, ...current]);
     }
@@ -463,43 +450,26 @@ export function LeadDocumentationTab({
       window.open(file.preview_url, "_blank", "noopener,noreferrer");
       return;
     }
+
+    const { data: storagePath, error: auditError } = await supabase.rpc(
+      "crm_record_document_view",
+      { p_file_id: file.id }
+    );
+    if (auditError || !storagePath) {
+      setError(
+        `No se pudo registrar la apertura del documento: ${auditError?.message || "ruta no disponible"}`
+      );
+      return;
+    }
+
     const { data, error: signedUrlError } = await supabase.storage
       .from(BUCKET_NAME)
-      .createSignedUrl(file.storage_path, 60);
+      .createSignedUrl(String(storagePath), 60);
     if (signedUrlError) {
       setError(`No se pudo abrir el archivo: ${signedUrlError.message}`);
       return;
     }
     window.open(data.signedUrl, "_blank", "noopener,noreferrer");
-  }
-
-  async function handleDelete(file: DocumentationFile) {
-    if (locked) return;
-    if (file.is_local) {
-      if (file.preview_url) URL.revokeObjectURL(file.preview_url);
-      setFiles((current) => current.filter((item) => item.id !== file.id));
-      return;
-    }
-    setDeletingFileId(file.id);
-    setError(null);
-    const { error: storageError } = await supabase.storage
-      .from(BUCKET_NAME)
-      .remove([file.storage_path]);
-    if (storageError) {
-      setError(`No se pudo eliminar el archivo: ${storageError.message}`);
-      setDeletingFileId(null);
-      return;
-    }
-    const { error: recordError } = await supabase
-      .from("opportunity_documentation_files")
-      .delete()
-      .eq("id", file.id);
-    if (recordError) {
-      setError(`El archivo se eliminó, pero no se pudo actualizar la lista: ${recordError.message}`);
-    } else {
-      setFiles((current) => current.filter((item) => item.id !== file.id));
-    }
-    setDeletingFileId(null);
   }
 
   const sections = useMemo<Section[]>(() => {
@@ -821,19 +791,6 @@ export function LeadDocumentationTab({
                   <Download className="h-3.5 w-3.5" />
                   <span className="sr-only">Abrir archivo</span>
                 </Button>
-                {!locked && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-destructive hover:text-destructive"
-                    disabled={deletingFileId === file.id}
-                    onClick={() => setFilePendingDelete(file)}
-                  >
-                    {deletingFileId === file.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                    <span className="sr-only">Eliminar archivo</span>
-                  </Button>
-                )}
               </div>
             ))}
             {!locked && (
@@ -1147,49 +1104,9 @@ export function LeadDocumentationTab({
         </DialogContent>
       </Dialog>
 
-      <AlertDialog
-        open={Boolean(filePendingDelete)}
-        onOpenChange={(open) => {
-          if (!open && !deletingFileId) setFilePendingDelete(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar este documento?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Se eliminará “{filePendingDelete?.file_name}”. Esta acción no se puede deshacer.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={Boolean(deletingFileId)}>
-              Cancelar
-            </AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={Boolean(deletingFileId)}
-              onClick={(event) => {
-                event.preventDefault();
-                if (!filePendingDelete) return;
-                void (async () => {
-                  await handleDelete(filePendingDelete);
-                  setFilePendingDelete(null);
-                })();
-              }}
-            >
-              {deletingFileId ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Eliminando...
-                </>
-              ) : (
-                "Eliminar documento"
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <p className="text-[11px] text-muted-foreground">Formatos admitidos: PDF, JPG, PNG y WEBP · Máximo 15 MB por archivo.</p>
+      <p className="text-[11px] text-muted-foreground">
+        Formatos admitidos: PDF, JPG, PNG y WEBP · Máximo 15 MB por archivo · Los documentos se conservan sin opción de eliminación.
+      </p>
     </div>
   );
 }

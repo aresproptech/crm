@@ -9,12 +9,6 @@ export type UserWithRole = {
   crmUser: CrmUser;
 };
 
-export const VISITADOR_PROFILE_NAMES = ["Gonza", "Gonzalo"] as const;
-
-function normalizeProfileName(value: string | null | undefined) {
-  return String(value || "").trim().toLocaleLowerCase("es-ES");
-}
-
 async function fetchCrmUser(userId: string): Promise<CrmUser | null> {
   const { data, error } = await supabase
     .from("profiles")
@@ -76,17 +70,18 @@ export function useUser() {
 
 export function canViewAllLeads(crmUser: CrmUser): boolean {
   const role = String(crmUser.rol || "").trim().toLowerCase();
-  return role === "admin" || role === "coordinador" || isVisitador(crmUser);
+  return role === "admin" || role === "coordinador";
 }
 
 export function canEditLeads(crmUser: CrmUser): boolean {
   const role = String(crmUser.rol || "").trim().toLowerCase();
-  if (isVisitador(crmUser)) return false;
+  if (canManageVisits(crmUser)) return false;
   return role === "admin" || role === "coordinador" || role === "comercial";
 }
 
-export function isVisitador(crmUser: CrmUser): boolean {
+export function canManageVisits(crmUser: CrmUser): boolean {
   const role = String(crmUser.rol || "").trim().toLowerCase();
-  const visitadorNames = VISITADOR_PROFILE_NAMES.map(normalizeProfileName);
-  return role === "comercial" && visitadorNames.includes(normalizeProfileName(crmUser.name));
+  return role === "comercial" && crmUser.can_manage_visits === true;
 }
+
+export const isVisitador = canManageVisits;

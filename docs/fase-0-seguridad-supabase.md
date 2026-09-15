@@ -1,6 +1,6 @@
 # Fase 0 — seguridad de Supabase
 
-Actualizado: 9 de septiembre de 2026. Proyecto de prueba: `rzgedcknhcoprcpdtrki`.
+Actualizado: 14 de septiembre de 2026. Proyecto de prueba: `rzgedcknhcoprcpdtrki`.
 El usuario confirmó que los datos son desechables y autorizó continuar sin backup.
 No se hizo reset ni se borraron datos como parte del despliegue.
 
@@ -63,12 +63,16 @@ Prueba de navegador realizada con la sesión existente Facu (Coordinador):
 |---|---|---|
 | Admin / Coordinador | CRM activo | CRM activo y gestión de perfiles/catálogos |
 | Comercial | Oportunidades asignadas por nombre | Sus oportunidades |
-| Visitador Comercial Gonza/Gonzalo | CRM activo | Visitas e historial de visitas |
+| Comercial con `can_manage_visits` | Sólo Visitas y datos mínimos del inmueble | Crear y editar Visitas |
 | Deshabilitado / sin perfil | Sin datos operativos | Sin escritura operativa |
 | Anónimo | Sin acceso | Sin acceso |
 
 El perfil propio puede consultarse para resolver el estado de la sesión.
-La identificación por nombre del propietario y del visitador es transitoria.
+La identificación del gestor de visitas ya usa un permiso explícito en el perfil.
+El rol de Gonzalo continúa siendo `Comercial`, pero no puede leer Oportunidades ni
+los flujos comerciales. La base de datos sólo permite crear una visita nueva si
+la oportunidad está activa y en fase Encargo; conocer otro ID no permite saltar
+esa regla.
 Cinco perfiles aún no están vinculados a una cuenta Auth.
 
 ## Pendiente antes de declarar producción
@@ -80,9 +84,9 @@ Cinco perfiles aún no están vinculados a una cuenta Auth.
    Docker no está instalado.
 3. Ejecutar la suite pgTAP y ampliar pruebas de archivos, usuarios deshabilitados
    y accesos cruzados. Revisar permiso de Coordinador para administrar perfiles.
-4. Completar los casos ambiguos de asignación y definir un permiso explícito de
-   visitador. Las coincidencias únicas y las nuevas escrituras ya usan IDs; ver
-   `fase-1-integridad-datos.md`.
+4. Completar los casos ambiguos de asignación. El permiso explícito de gestión de
+   visitas ya está aplicado; las coincidencias únicas y las nuevas escrituras usan
+   IDs. Ver `fase-1-integridad-datos.md`.
 5. Revisar configuración Auth remota (registro, contraseñas, URLs); los valores
    de `config.toml` no se aplican a Auth remoto mediante `db push`.
 6. Resolver progresivamente los 43 avisos actuales de lint, además de completar

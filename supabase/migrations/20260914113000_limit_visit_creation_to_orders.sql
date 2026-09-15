@@ -1,14 +1,56 @@
-CREATE OR REPLACE FUNCTION public.crm_save_visit_with_activity (
-  p_visit_id       bigint,
+-- Hace cumplir en Supabase la misma regla que usa el selector del frontend:
+-- una visita nueva solo puede asociarse a una oportunidad activa en Encargo.
+
+begin;
+
+create or replace function public.crm_can_create_visit_for_opportunity(target_id bigint)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+    from public.opportunities o
+    join public.phases phase on phase.id = o.fase_id
+    where o.id = target_id
+      and o.deleted_at is null
+      and lower(btrim(phase.name)) = 'encargo'
+      and (
+        public.crm_can_manage_visits()
+        or public.crm_can_write_opportunity(o.id)
+      )
+  )
+$$;
+
+drop policy if exists visitas_insert_by_role on public.visitas;
+create policy visitas_insert_by_role
+on public.visitas for insert to authenticated
+with check (public.crm_can_create_visit_for_opportunity(opportunity_id));
+
+drop policy if exists visitas_update_by_role on public.visitas;
+create policy visitas_update_by_role
+on public.visitas for update to authenticated
+using (
+  public.crm_can_manage_visits()
+  or public.crm_can_write_opportunity(opportunity_id)
+)
+with check (
+  public.crm_can_create_visit_for_opportunity(opportunity_id)
+);
+
+create or replace function public.crm_save_visit_with_activity(
+  p_visit_id bigint,
   p_opportunity_id bigint,
-  p_data           jsonb,
+  p_data jsonb,
   p_change_details text
 )
-  RETURNS bigint
-  LANGUAGE plpgsql
-  SECURITY DEFINER
-  SET search_path TO ''
-  AS $function$
+returns bigint
+language plpgsql
+security definer
+set search_path = ''
+as $$
 declare
   target_opportunity_id bigint;
   saved_visit_id bigint;
@@ -135,8 +177,9 @@ begin
 
   return saved_visit_id;
 end
-$function$;
+$$;
 
-GRANT EXECUTE ON FUNCTION "public"."crm_save_visit_with_activity"(bigint, bigint, jsonb, text) TO "authenticated", "postgres", "service_role";
+revoke all on function public.crm_can_create_visit_for_opportunity(bigint) from public, anon;
+grant execute on function public.crm_can_create_visit_for_opportunity(bigint) to authenticated, service_role;
 
-REVOKE ALL ON FUNCTION "public"."crm_save_visit_with_activity"(bigint, bigint, jsonb, text) FROM PUBLIC;
+commit;
