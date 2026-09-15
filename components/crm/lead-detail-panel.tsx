@@ -2401,12 +2401,6 @@ export function LeadDetailPanel({
                         )}
                       </div>
                       <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
-                        <SmallDataCard label="Propietario">
-                          {effectiveLead.ownerName || "—"}
-                        </SmallDataCard>
-                        <SmallDataCard label="Teléfono">
-                          <MaskedPhone value={effectiveLead.phone} />
-                        </SmallDataCard>
                         <SmallDataCard label="Última llamada">
                           <span>{lastCallLabel(lastCallDays)}</span>
                           {lastCallEvent ? (
