@@ -2227,12 +2227,14 @@ export function LeadDetailPanel({
     <aside className="fixed right-0 top-0 z-40 flex h-screen w-[1080px] max-w-[calc(100vw-1rem)] flex-col border-l border-border bg-background shadow-2xl">
       <div className="relative flex shrink-0 border-b border-border px-5 py-4">
         <div className="min-w-0 w-full pr-8 text-center md:text-left">
-          <h2 className="truncate text-base font-semibold text-foreground">
-            {effectiveLead.ownerName}
-          </h2>
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">
-            {effectiveLead.address || "—"}
-          </p>
+          <div className="flex min-w-0 flex-wrap items-baseline justify-center gap-x-3 gap-y-0.5 md:justify-start">
+            <h2 className="max-w-full truncate text-2xl font-semibold text-foreground">
+              {effectiveLead.ownerName}
+            </h2>
+            <p className="min-w-0 max-w-full truncate text-sm text-muted-foreground">
+              {effectiveLead.address || "—"}
+            </p>
+          </div>
 
           {effectiveLead.phone && effectiveLead.phone !== "—" && (
             readOnly ? (

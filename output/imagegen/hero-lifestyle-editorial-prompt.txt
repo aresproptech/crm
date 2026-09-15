@@ -1,0 +1,5 @@
+Modo: herramienta integrada image_gen.
+
+Use case: photorealistic-natural
+Asset type: banner hero horizontal, fotografía lifestyle editorial.
+Crear una fotografía realista del interior de un piso en España, ordenado y en buen estado, ambiente profesional pero hogareño. Una sola persona adulta de entre 30 y 45 años sentada a una mesa o escritorio con una laptop, revisando información con expresión calma y resuelta. La mirada está en la pantalla, postura natural que transmite control y organización. Luz natural suave, tonos cálidos neutros, texturas y piel auténticas, acabado editorial fotográfico. Composición horizontal panorámica con amplio espacio negativo despejado a un costado para permitir superponer texto posteriormente; integrar ese espacio de forma natural en el interior. La persona ocupa el otro sector del encuadre. No incluir texto dentro de la imagen ni texto legible en pantalla. Sin logos ni marcas de agua. Sin llaves en mano, sin apretón de manos, sin carteles, sin gente sonriendo directamente a cámara. No transmitir estrés ni urgencia de venta. No oficina corporativa.

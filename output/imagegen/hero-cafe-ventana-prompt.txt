@@ -1,0 +1,5 @@
+Modo: herramienta integrada image_gen.
+
+Use case: photorealistic-natural
+Asset type: fotografía para banner hero horizontal panorámico.
+Crear una foto realista estilo lifestyle editorial. Interior de un piso luminoso y acogedor en España. Una sola persona adulta joven de 25 a 35 años, de pie o apoyada junto a una ventana grande, sosteniendo una taza de café. Expresión sutil de alivio y satisfacción genuina, como alguien que ya resolvió algo importante; postura relajada, momento espontáneo, sin posado forzado. Su mirada se dirige hacia fuera de la ventana, nunca directamente a cámara. Luz natural cálida de tarde. Tonos cálidos y neutros, atmósfera hogareña y tranquila, piel y materiales de textura realista. Formato horizontal panorámico, con amplio espacio negativo en un lateral para superponer posteriormente texto y botón; ese lateral debe ser visualmente sereno y despejado y la persona ocupar el otro sector. No incluir texto, letras, logos, marcas de agua, llaves en mano. Sin mirar directo a cámara sonriendo. Fotografía editorial auténtica.

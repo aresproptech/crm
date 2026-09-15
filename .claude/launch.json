@@ -6,6 +6,15 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 3000
+    },
+    {
+      "name": "seamos-marketing",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/facundoa.lopezgordillo/Documents/Facundo/Proyectos/seamos-marketing && pnpm dev --port 3001"
+      ],
+      "port": 3001
     }
   ]
 }
