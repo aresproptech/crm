@@ -2229,9 +2229,10 @@ export function LeadDetailPanel({
     <aside className="fixed right-0 top-0 z-40 flex h-screen w-[1080px] max-w-[calc(100vw-1rem)] flex-col border-l border-border bg-background shadow-2xl">
       <div className="relative grid shrink-0 gap-4 border-b border-border px-5 py-4 md:grid-cols-[minmax(0,1fr)_minmax(280px,auto)] md:items-start">
         <div className="min-w-0 text-center md:text-left">
-          <h2 className="truncate text-2xl font-semibold text-foreground">
+          <h2 className="truncate text-3xl font-bold tracking-tight text-foreground">
             {effectiveLead.ownerName}
           </h2>
+          <div className="mx-auto mt-1 h-1 w-10 rounded-full bg-primary md:mx-0" />
 
           {effectiveLead.phone && effectiveLead.phone !== "—" && (
             readOnly ? (
@@ -2266,16 +2267,35 @@ export function LeadDetailPanel({
               </>
             )
           )}
+
+          <div className="mt-2 flex items-baseline justify-center gap-2 md:justify-start">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Valor
+            </span>
+            <span className="text-sm font-bold text-foreground">
+              {formatEuroValue(effectiveLead.valor) || effectiveLead.valor || "—"}
+            </span>
+          </div>
+
+          <div className="mt-1 flex flex-wrap items-center justify-center gap-x-2 text-[11px] font-medium text-muted-foreground md:justify-start">
+            <span>Última llamada: {lastCallLabel(lastCallDays)}</span>
+            <span aria-hidden="true">·</span>
+            <span>
+              {callEvents.length} {callEvents.length === 1 ? "llamada realizada" : "llamadas realizadas"}
+            </span>
+          </div>
         </div>
 
-        <div className="min-w-0 pr-8">
-          <div className="space-y-0.5 text-right text-xs font-semibold text-foreground">
-            <p className="truncate">{effectiveLead.address || "—"}</p>
-            <p className="truncate">{effectiveLead.distrito || "—"}</p>
-            <p className="truncate">{effectiveLead.cp || "—"}</p>
-            <p className="truncate">{effectiveLead.municipio || "—"}</p>
-            <p className="truncate">{effectiveLead.provincia || "—"}</p>
-            <p className="truncate">{getLeadDominio(effectiveLead) || "—"}</p>
+        <div className="min-w-0 pr-8 text-right">
+          <div className="inline-flex max-w-full flex-col items-end rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 shadow-sm">
+            <p className="max-w-full truncate text-lg font-bold leading-tight text-foreground">
+              {effectiveLead.address || "—"}
+            </p>
+            <div className="mt-1 space-y-0.5 text-sm font-semibold text-muted-foreground">
+              <p className="truncate">{effectiveLead.distrito || "—"}</p>
+              <p className="truncate">{effectiveLead.cp || "—"}</p>
+              <p className="truncate">{effectiveLead.provincia || "—"}</p>
+            </div>
           </div>
         </div>
 
@@ -2315,22 +2335,20 @@ export function LeadDetailPanel({
           {PHASE_LABELS[effectiveLead.phase]}
         </Badge>
 
-        {getLeadDominio(effectiveLead) && (
-          <Badge
-            variant="outline"
-            className="h-7 rounded-md px-3 text-sm font-semibold"
-            style={getDominioBadgeStyle(getLeadDominio(effectiveLead))}
-          >
-            {getLeadDominio(effectiveLead)}
-          </Badge>
-        )}
-
         <Badge
           variant="outline"
           className="h-7 rounded-md px-3 text-sm font-semibold"
           style={getSourceBadgeStyle(effectiveLead.source)}
         >
           {effectiveLead.source || "—"}
+        </Badge>
+
+        <Badge
+          variant="outline"
+          className="h-7 rounded-md px-3 text-sm font-semibold"
+          style={getDominioBadgeStyle(getLeadDominio(effectiveLead))}
+        >
+          {getLeadDominio(effectiveLead) || "Sin dominio"}
         </Badge>
       </div>
 
@@ -2460,42 +2478,64 @@ export function LeadDetailPanel({
                           </Button>
                         )}
                       </div>
-                      <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
-                        <SmallDataCard label="Última llamada">
-                          <span>{lastCallLabel(lastCallDays)}</span>
-                          {lastCallEvent ? (
-                            <span className="mt-1 block text-xs text-muted-foreground">
-                              {fmtDateTimeShort(lastCallEvent.createdAt)}
-                            </span>
-                          ) : null}
-                        </SmallDataCard>
-                        <SmallDataCard label="Llamadas realizadas">
-                          <span>{callEvents.length}</span>
-                          <span className="mt-1 block text-xs text-muted-foreground">
-                            {callEvents.length === 1 ? "registrada" : "registradas"}
-                          </span>
-                        </SmallDataCard>
-                        <SmallDataCard label="Valor">
-                          {effectiveLead.valor || "—"}
-                        </SmallDataCard>
-                        <SmallDataCard label="F. Noticia">
-                          {fmtDate(effectiveLead.fechaNoticia)}
-                        </SmallDataCard>
-                        <SmallDataCard label="F. Contacto">
-                          {fmtDate(effectiveLead.fechaContacto)}
-                        </SmallDataCard>
-                        <SmallDataCard label="En Venta">
-                          {effectiveLead.enVenta || "—"}
-                        </SmallDataCard>
-                        <SmallDataCard label="Planner">
-                          {effectiveLead.planner || "—"}
-                        </SmallDataCard>
-                        <SmallDataCard label="Owner">
-                          {effectiveLead.owner || "—"}
-                        </SmallDataCard>
-                        <SmallDataCard label="Buyer">
-                          {buyerName}
-                        </SmallDataCard>
+                      <div className="grid gap-3 lg:grid-cols-[3fr_2fr]">
+                        <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+                          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            <User className="h-3.5 w-3.5 text-primary" />
+                            Responsables
+                          </div>
+                          <dl className="mt-4 grid gap-4 sm:grid-cols-3">
+                            <div className="min-w-0">
+                              <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                Planner
+                              </dt>
+                              <dd className="mt-1 truncate text-sm font-semibold text-foreground">
+                                {effectiveLead.planner || "—"}
+                              </dd>
+                            </div>
+                            <div className="min-w-0 border-border sm:border-l sm:pl-4">
+                              <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                Owner
+                              </dt>
+                              <dd className="mt-1 truncate text-sm font-semibold text-foreground">
+                                {effectiveLead.owner || "—"}
+                              </dd>
+                            </div>
+                            <div className="min-w-0 border-border sm:border-l sm:pl-4">
+                              <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                Buyer
+                              </dt>
+                              <dd className="mt-1 truncate text-sm font-semibold text-foreground">
+                                {buyerName}
+                              </dd>
+                            </div>
+                          </dl>
+                        </div>
+
+                        <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+                          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            <Clock className="h-3.5 w-3.5 text-primary" />
+                            Fechas clave
+                          </div>
+                          <dl className="mt-4 grid gap-4 sm:grid-cols-2">
+                            <div className="min-w-0">
+                              <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                F. Noticia
+                              </dt>
+                              <dd className="mt-1 truncate text-sm font-semibold text-foreground">
+                                {fmtDate(effectiveLead.fechaNoticia)}
+                              </dd>
+                            </div>
+                            <div className="min-w-0 border-border sm:border-l sm:pl-4">
+                              <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                F. Contacto
+                              </dt>
+                              <dd className="mt-1 truncate text-sm font-semibold text-foreground">
+                                {fmtDate(effectiveLead.fechaContacto)}
+                              </dd>
+                            </div>
+                          </dl>
+                        </div>
                       </div>
                     </section>
 
