@@ -2222,19 +2222,16 @@ export function LeadDetailPanel({
   );
   const lastCallEvent = callEvents[0] || null;
   const lastCallDays = daysSince(lastCallEvent?.createdAt);
+  const buyerName =
+    visits.find((visit) => visit.buyer?.trim())?.buyer?.trim() || "—";
 
   return (
     <aside className="fixed right-0 top-0 z-40 flex h-screen w-[1080px] max-w-[calc(100vw-1rem)] flex-col border-l border-border bg-background shadow-2xl">
-      <div className="relative flex shrink-0 border-b border-border px-5 py-4">
-        <div className="min-w-0 w-full pr-8 text-center md:text-left">
-          <div className="flex min-w-0 flex-wrap items-baseline justify-center gap-x-3 gap-y-0.5 md:justify-start">
-            <h2 className="max-w-full truncate text-2xl font-semibold text-foreground">
-              {effectiveLead.ownerName}
-            </h2>
-            <p className="min-w-0 max-w-full truncate text-sm text-muted-foreground">
-              {effectiveLead.address || "—"}
-            </p>
-          </div>
+      <div className="relative grid shrink-0 gap-4 border-b border-border px-5 py-4 md:grid-cols-[minmax(0,1fr)_minmax(280px,auto)] md:items-start">
+        <div className="min-w-0 text-center md:text-left">
+          <h2 className="truncate text-2xl font-semibold text-foreground">
+            {effectiveLead.ownerName}
+          </h2>
 
           {effectiveLead.phone && effectiveLead.phone !== "—" && (
             readOnly ? (
@@ -2269,6 +2266,17 @@ export function LeadDetailPanel({
               </>
             )
           )}
+        </div>
+
+        <div className="min-w-0 pr-8">
+          <div className="space-y-0.5 text-right text-xs font-semibold text-foreground">
+            <p className="truncate">{effectiveLead.address || "—"}</p>
+            <p className="truncate">{effectiveLead.distrito || "—"}</p>
+            <p className="truncate">{effectiveLead.cp || "—"}</p>
+            <p className="truncate">{effectiveLead.municipio || "—"}</p>
+            <p className="truncate">{effectiveLead.provincia || "—"}</p>
+            <p className="truncate">{getLeadDominio(effectiveLead) || "—"}</p>
+          </div>
         </div>
 
         <div className="absolute right-5 top-4 flex items-center gap-2">
@@ -2485,37 +2493,12 @@ export function LeadDetailPanel({
                         <SmallDataCard label="Owner">
                           {effectiveLead.owner || "—"}
                         </SmallDataCard>
-                        <SmallDataCard label="Origen">
-                          {effectiveLead.source || "—"}
+                        <SmallDataCard label="Buyer">
+                          {buyerName}
                         </SmallDataCard>
                       </div>
                     </section>
 
-                    <section className="space-y-3 border-t border-border pt-4">
-                      <h4 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        Datos del inmueble
-                      </h4>
-                      <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
-                        <SmallDataCard label="Domicilio">
-                          {domicilioParts.length > 0 ? domicilioParts.join(", ") : "—"}
-                        </SmallDataCard>
-                        <SmallDataCard label="Distrito">
-                          {effectiveLead.distrito || "—"}
-                        </SmallDataCard>
-                        <SmallDataCard label="CP">
-                          {effectiveLead.cp || "—"}
-                        </SmallDataCard>
-                        <SmallDataCard label="Municipio">
-                          {effectiveLead.municipio || "—"}
-                        </SmallDataCard>
-                        <SmallDataCard label="Provincia">
-                          {effectiveLead.provincia || "—"}
-                        </SmallDataCard>
-                        <SmallDataCard label="Dominio">
-                          {getLeadDominio(effectiveLead) || "—"}
-                        </SmallDataCard>
-                      </div>
-                    </section>
                   </div>
 
                   <div className="mt-5 border-t border-border pt-4">
