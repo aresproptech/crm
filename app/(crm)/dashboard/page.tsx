@@ -389,15 +389,15 @@ function ExecutiveFunnel({ items }: { items: FunnelMetricItem[] }) {
   const widths = ["100%", "92%", "84%", "76%", "68%"];
 
   return (
-    <Card className="border-white/10 bg-white/95 shadow-xl">
-      <CardHeader className="pb-2">
+    <Card className="gap-3 border-white/10 bg-white/95 py-4 shadow-xl sm:gap-6 sm:py-6">
+      <CardHeader className="gap-1 px-4 pb-0 sm:gap-2 sm:px-6 sm:pb-2">
         <CardTitle className="text-base">Embudo ejecutivo</CardTitle>
         <p className="text-xs text-slate-500">
           Hoy, acumulado y proyección del periodo seleccionado.
         </p>
       </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
+      <CardContent className="px-4 sm:px-6">
+        <div className="space-y-1.5 sm:space-y-4">
           {items.map((item, index) => (
             <div
               key={item.label}
@@ -406,18 +406,18 @@ function ExecutiveFunnel({ items }: { items: FunnelMetricItem[] }) {
             >
               <div
                 className={cn(
-                  "px-4 py-2 text-center text-sm font-semibold text-white",
+                  "px-4 py-1 text-center text-xs font-semibold text-white sm:py-2 sm:text-sm",
                   getToneClass(item.tone)
                 )}
               >
                 {item.label}
               </div>
-              <div className="grid min-w-0 grid-cols-3 gap-1 px-2 py-4 text-center sm:divide-x sm:divide-slate-200 sm:px-4">
+              <div className="grid min-w-0 grid-cols-3 gap-1 px-2 py-1.5 text-center sm:divide-x sm:divide-slate-200 sm:px-4 sm:py-4">
                 <div className="min-w-0 px-1">
                   <div className="truncate text-[10px] font-medium uppercase tracking-normal text-slate-500 sm:text-xs sm:tracking-wide">
                     Hoy
                   </div>
-                  <div className="mt-1 text-2xl font-semibold tabular-nums text-fuchsia-700">
+                  <div className="text-lg font-semibold leading-tight tabular-nums text-fuchsia-700 sm:mt-1 sm:text-2xl">
                     {item.today}
                   </div>
                 </div>
@@ -425,7 +425,7 @@ function ExecutiveFunnel({ items }: { items: FunnelMetricItem[] }) {
                   <div className="truncate text-[10px] font-medium uppercase tracking-normal text-slate-500 sm:text-xs sm:tracking-wide">
                     Realizado
                   </div>
-                  <div className="mt-1 text-2xl font-semibold tabular-nums text-slate-950">
+                  <div className="text-lg font-semibold leading-tight tabular-nums text-slate-950 sm:mt-1 sm:text-2xl">
                     {item.value}
                   </div>
                 </div>
@@ -433,7 +433,7 @@ function ExecutiveFunnel({ items }: { items: FunnelMetricItem[] }) {
                   <div className="truncate text-[10px] font-medium uppercase tracking-normal text-slate-500 sm:text-xs sm:tracking-wide">
                     Proyectado
                   </div>
-                  <div className="mt-1 text-2xl font-semibold tabular-nums text-[#006699]">
+                  <div className="text-lg font-semibold leading-tight tabular-nums text-[#006699] sm:mt-1 sm:text-2xl">
                     {item.projected}
                   </div>
                 </div>
@@ -454,22 +454,22 @@ function ForecastPanel({
   ratios: RatioMetricRow[];
 }) {
   return (
-    <Card className="border-white/10 bg-white/95 shadow-xl">
-      <CardHeader className="pb-2">
+    <Card className="gap-3 border-white/10 bg-white/95 py-4 shadow-xl sm:gap-6 sm:py-6">
+      <CardHeader className="gap-1 px-4 pb-0 sm:gap-2 sm:px-6 sm:pb-2">
         <CardTitle className="text-base">Promedio, realizado y proyectado</CardTitle>
         <p className="text-xs text-slate-500">
           QTD corresponde al acumulado del periodo y EAC a la proyección.
         </p>
       </CardHeader>
-      <CardContent>
-        <div className="space-y-5">
+      <CardContent className="px-4 sm:px-6">
+        <div className="space-y-2.5 sm:space-y-5">
           {rows.map((row) => (
-            <div key={row.label} className="rounded-xl border border-slate-200 bg-white p-4">
-              <div className="mb-3 flex items-center justify-between border-b border-slate-200 pb-2">
-                <h3 className="font-semibold text-slate-950">{row.label}</h3>
+            <div key={row.label} className="rounded-xl border border-slate-200 bg-white p-2.5 sm:p-4">
+              <div className="mb-2 flex items-center justify-between border-b border-slate-200 pb-1.5 sm:mb-3 sm:pb-2">
+                <h3 className="text-sm font-semibold text-slate-950 sm:text-base">{row.label}</h3>
                 <div
                   className={cn(
-                    "rounded-md px-2 py-1 text-xs font-semibold tabular-nums",
+                    "rounded-md px-1.5 py-0.5 text-[10px] font-semibold tabular-nums sm:px-2 sm:py-1 sm:text-xs",
                     row.gap >= 0
                       ? "bg-emerald-100 text-emerald-800"
                       : "bg-red-100 text-red-800"
@@ -479,33 +479,33 @@ function ForecastPanel({
                   {formatNumber(row.gap)}
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-3 text-sm">
+              <div className="grid grid-cols-3 gap-1.5 text-sm sm:gap-3">
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-slate-500">
+                  <div className="text-[10px] uppercase tracking-normal text-slate-500 sm:text-xs sm:tracking-wide">
                     Promedio
                   </div>
-                  <div className="mt-1 text-xl font-semibold tabular-nums text-slate-950">
+                  <div className="text-lg font-semibold leading-tight tabular-nums text-slate-950 sm:mt-1 sm:text-xl">
                     {formatNumber(row.average, 1)}
                   </div>
-                  <div className="text-xs text-slate-500">AVG</div>
+                  <div className="text-[10px] text-slate-500 sm:text-xs">AVG</div>
                 </div>
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-slate-500">
+                  <div className="text-[10px] uppercase tracking-normal text-slate-500 sm:text-xs sm:tracking-wide">
                     Realizado
                   </div>
-                  <div className="mt-1 text-xl font-semibold tabular-nums text-slate-950">
+                  <div className="text-lg font-semibold leading-tight tabular-nums text-slate-950 sm:mt-1 sm:text-xl">
                     {formatNumber(row.realized)}
                   </div>
-                  <div className="text-xs text-slate-500">QTD</div>
+                  <div className="text-[10px] text-slate-500 sm:text-xs">QTD</div>
                 </div>
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-slate-500">
+                  <div className="text-[10px] uppercase tracking-normal text-slate-500 sm:text-xs sm:tracking-wide">
                     Proyectado
                   </div>
-                  <div className="mt-1 text-xl font-semibold tabular-nums text-slate-950">
+                  <div className="text-lg font-semibold leading-tight tabular-nums text-slate-950 sm:mt-1 sm:text-xl">
                     {formatNumber(row.projected)}
                   </div>
-                  <div className="text-xs text-slate-500">EAC</div>
+                  <div className="text-[10px] text-slate-500 sm:text-xs">EAC</div>
                 </div>
               </div>
             </div>
@@ -1258,13 +1258,13 @@ export default function DashboardPage() {
       <main className="mt-14 flex min-h-0 flex-1 flex-col overflow-hidden bg-[#006699]">
         <div className="flex shrink-0 flex-col gap-4 px-6 py-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="text-white">
-            <h1 className="text-2xl font-semibold">{activeDashboardTitle}</h1>
-            <p className="mt-1 text-sm text-white/75">
+            <h1 className="hidden text-2xl font-semibold md:block">{activeDashboardTitle}</h1>
+            <p className="mt-1 hidden text-sm text-white/75 md:block">
               {activeDashboardTab === "commercials"
                 ? "Comparativa por comercial del periodo seleccionado"
                 : `${dashboardScope} · rendimiento del periodo seleccionado`}
             </p>
-            <div className="mt-4 inline-flex rounded-xl bg-white/15 p-1 text-sm font-semibold shadow-sm">
+            <div className="inline-flex rounded-xl bg-white/15 p-1 text-sm font-semibold shadow-sm md:mt-4">
               <button
                 type="button"
                 onClick={() => setActiveDashboardTab("general")}

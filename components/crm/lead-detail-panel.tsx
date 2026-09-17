@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useUser } from "@/lib/hooks/useUser";
 import {
@@ -18,6 +18,8 @@ import {
   LocateFixed,
   Loader2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -1317,6 +1319,9 @@ export function LeadDetailPanel({
   const [relatedLoading, setRelatedLoading] = useState(false);
   const [relatedError, setRelatedError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<LeadDetailTab>("resumen");
+  const tabsNavRef = useRef<HTMLElement>(null);
+  const [canScrollTabsLeft, setCanScrollTabsLeft] = useState(false);
+  const [canScrollTabsRight, setCanScrollTabsRight] = useState(false);
   const [openRgRowId, setOpenRgRowId] = useState<string | null>(null);
   const [openValuationRowId, setOpenValuationRowId] = useState<string | null>(null);
   const [openOrderRowId, setOpenOrderRowId] = useState<string | null>(null);
@@ -1415,6 +1420,50 @@ export function LeadDetailPanel({
 
     void loadRelatedData(lead.id);
   }, [lead?.id]);
+
+  const updateTabScrollIndicators = useCallback(() => {
+    const element = tabsNavRef.current;
+    if (!element) return;
+
+    const maxScrollLeft = element.scrollWidth - element.clientWidth;
+    setCanScrollTabsLeft(element.scrollLeft > 4);
+    setCanScrollTabsRight(maxScrollLeft - element.scrollLeft > 4);
+  }, []);
+
+  useEffect(() => {
+    const element = tabsNavRef.current;
+    if (!element) return;
+
+    updateTabScrollIndicators();
+    const animationFrameId = window.requestAnimationFrame(updateTabScrollIndicators);
+    const settledLayoutTimer = window.setTimeout(updateTabScrollIndicators, 120);
+    element.addEventListener("scroll", updateTabScrollIndicators, { passive: true });
+    window.addEventListener("resize", updateTabScrollIndicators);
+
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(updateTabScrollIndicators)
+        : null;
+    resizeObserver?.observe(element);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrameId);
+      window.clearTimeout(settledLayoutTimer);
+      element.removeEventListener("scroll", updateTabScrollIndicators);
+      window.removeEventListener("resize", updateTabScrollIndicators);
+      resizeObserver?.disconnect();
+    };
+  }, [localLead?.id, updateTabScrollIndicators]);
+
+  function scrollTabs(direction: -1 | 1) {
+    const element = tabsNavRef.current;
+    if (!element) return;
+
+    element.scrollBy({
+      left: direction * Math.max(element.clientWidth * 0.7, 180),
+      behavior: "smooth",
+    });
+  }
 
   const effectiveLead = localLead;
 
@@ -2286,12 +2335,12 @@ export function LeadDetailPanel({
           </div>
         </div>
 
-        <div className="min-w-0 pr-8 text-right">
-          <div className="inline-flex max-w-full flex-col items-end rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 shadow-sm">
-            <p className="max-w-full truncate text-lg font-bold leading-tight text-foreground">
+        <div className="min-w-0 text-center md:pr-8 md:text-right">
+          <div className="inline-flex w-full max-w-full flex-col items-start rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-left shadow-sm md:w-auto md:items-end md:px-4 md:py-3 md:text-right">
+            <p className="max-w-full truncate text-sm font-bold leading-tight text-foreground md:text-lg">
               {effectiveLead.address || "—"}
             </p>
-            <div className="mt-1 space-y-0.5 text-sm font-semibold text-muted-foreground">
+            <div className="mt-1 space-y-0.5 text-xs font-semibold leading-tight text-muted-foreground md:text-sm md:leading-normal">
               <p className="truncate">{effectiveLead.distrito || "—"}</p>
               <p className="truncate">{effectiveLead.cp || "—"}</p>
               <p className="truncate">{effectiveLead.provincia || "—"}</p>
@@ -2311,19 +2360,19 @@ export function LeadDetailPanel({
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-1.5 border-b border-border px-5 py-3">
+      <div className="flex flex-wrap gap-1 border-b border-border px-4 py-2.5 md:gap-1.5 md:px-5 md:py-3">
         <Badge
           variant="outline"
-          className="h-7 gap-1.5 rounded-md px-3 text-sm font-semibold"
+          className="h-6 gap-1 rounded-md px-2 text-xs font-semibold md:h-7 md:gap-1.5 md:px-3 md:text-sm"
           style={getStatusConfig(effectiveLead.status).badgeStyle}
         >
-          <Circle className="h-2 w-2 fill-current" />
+          <Circle className="h-1.5 w-1.5 fill-current md:h-2 md:w-2" />
           {getStatusConfig(effectiveLead.status).label}
         </Badge>
 
         <Badge
           variant="outline"
-          className="h-7 rounded-md px-3 text-sm font-semibold"
+          className="h-6 rounded-md px-2 text-xs font-semibold md:h-7 md:px-3 md:text-sm"
           style={
             PHASE_BADGE_STYLES[effectiveLead.phase] ?? {
               backgroundColor: "#F1F5F9",
@@ -2337,7 +2386,7 @@ export function LeadDetailPanel({
 
         <Badge
           variant="outline"
-          className="h-7 rounded-md px-3 text-sm font-semibold"
+          className="h-6 rounded-md px-2 text-xs font-semibold md:h-7 md:px-3 md:text-sm"
           style={getSourceBadgeStyle(effectiveLead.source)}
         >
           {effectiveLead.source || "—"}
@@ -2345,75 +2394,109 @@ export function LeadDetailPanel({
 
         <Badge
           variant="outline"
-          className="h-7 rounded-md px-3 text-sm font-semibold"
+          className="h-6 rounded-md px-2 text-xs font-semibold md:h-7 md:px-3 md:text-sm"
           style={getDominioBadgeStyle(getLeadDominio(effectiveLead))}
         >
           {getLeadDominio(effectiveLead) || "Sin dominio"}
         </Badge>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 py-4">
-        <div className="mt-5 border-t border-border pt-4">
+      <div className="flex-1 overflow-y-auto px-4 py-3 md:px-5 md:py-4">
+        <div className="mt-3 border-t border-border pt-3 md:mt-5 md:pt-4">
           {relatedError && (
             <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive">
               No se pudieron cargar algunas relaciones: {relatedError}
             </div>
           )}
 
-          <div className="space-y-4">
-            <nav className="flex w-full touch-pan-x gap-1 overflow-x-auto rounded-xl border border-border bg-muted/20 p-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:grid md:grid-cols-6 md:overflow-visible">
-              {LEAD_DETAIL_TABS.map((tab) => {
-                const isActive = activeTab === tab.value;
-                const count =
-                  tab.value === "encargo"
-                    ? orders.length
-                    : tab.value === "visitas"
-                      ? visits.length
-                      : tab.value === "rg"
-                        ? rgHistoryEvents.length
-                        : tab.value === "valoracion"
-                          ? valuationHistoryEvents.length
-                          : undefined;
+          <div className="space-y-3 md:space-y-4">
+            <div className="relative">
+              <nav
+                ref={tabsNavRef}
+                className="flex w-full touch-pan-x gap-1 overflow-x-auto rounded-xl border border-border bg-muted/20 p-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:grid md:grid-cols-6 md:overflow-visible"
+              >
+                {LEAD_DETAIL_TABS.map((tab) => {
+                  const isActive = activeTab === tab.value;
+                  const count =
+                    tab.value === "encargo"
+                      ? orders.length
+                      : tab.value === "visitas"
+                        ? visits.length
+                        : tab.value === "rg"
+                          ? rgHistoryEvents.length
+                          : tab.value === "valoracion"
+                            ? valuationHistoryEvents.length
+                            : undefined;
 
-                return (
-                  <button
-                    key={tab.value}
-                    type="button"
-                    onClick={() => setActiveTab(tab.value)}
-                    className={cn(
-                      "inline-flex h-10 min-w-max flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-center text-[11px] font-semibold uppercase tracking-wide transition sm:px-4 md:min-w-0 md:px-2",
-                      isActive
-                        ? "bg-primary text-primary-foreground shadow-sm"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                    )}
-                  >
-                    <span>{tab.label}</span>
-                    {count !== undefined && (
-                      <span
-                        className={cn(
-                          "shrink-0 rounded-full px-1.5 py-0.5 text-[10px]",
-                          isActive
-                            ? "bg-primary-foreground/20 text-primary-foreground"
-                            : "bg-background text-muted-foreground"
-                        )}
-                      >
-                        {count}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </nav>
+                  return (
+                    <button
+                      key={tab.value}
+                      type="button"
+                      onClick={(event) => {
+                        setActiveTab(tab.value);
+                        event.currentTarget.scrollIntoView({
+                          behavior: "smooth",
+                          block: "nearest",
+                          inline: "center",
+                        });
+                      }}
+                      className={cn(
+                        "inline-flex h-10 min-w-max flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-center text-[11px] font-semibold uppercase tracking-wide transition sm:px-4 md:min-w-0 md:px-2",
+                        isActive
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      )}
+                    >
+                      <span>{tab.label}</span>
+                      {count !== undefined && (
+                        <span
+                          className={cn(
+                            "shrink-0 rounded-full px-1.5 py-0.5 text-[10px]",
+                            isActive
+                              ? "bg-primary-foreground/20 text-primary-foreground"
+                              : "bg-background text-muted-foreground"
+                          )}
+                        >
+                          {count}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </nav>
 
-            <div className="min-w-0 rounded-xl border border-border bg-background p-5 shadow-sm">
+              {canScrollTabsLeft && (
+                <button
+                  type="button"
+                  onClick={() => scrollTabs(-1)}
+                  className="absolute left-1 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-background/95 text-primary shadow-md backdrop-blur transition hover:bg-muted md:hidden"
+                  aria-label="Ver pestañas anteriores"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+              )}
+
+              {canScrollTabsRight && (
+                <button
+                  type="button"
+                  onClick={() => scrollTabs(1)}
+                  className="absolute right-1 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-background/95 text-primary shadow-md backdrop-blur transition hover:bg-muted md:hidden"
+                  aria-label="Ver más pestañas"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            <div className="min-w-0 rounded-xl border border-border bg-background p-3 shadow-sm md:p-5">
               {activeTab === "resumen" && (
                 <div className="space-y-3">
-                  <div className="space-y-5">
-                    <section className="space-y-3">
-                      <h4 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <div className="space-y-4 md:space-y-5">
+                    <section className="space-y-2 md:space-y-3">
+                      <h4 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground md:text-[11px]">
                         Resumen de actividad
                       </h4>
-                      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                      <div className="grid grid-cols-2 gap-2 md:gap-3 xl:grid-cols-4">
                         {([
                           {
                             tab: "valoracion",
@@ -2444,16 +2527,16 @@ export function LeadDetailPanel({
                             key={item.tab}
                             type="button"
                             onClick={() => setActiveTab(item.tab)}
-                            className="rounded-lg border border-border bg-muted/20 p-4 text-left transition hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                            className="rounded-lg border border-border bg-muted/20 p-3 text-left transition hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 md:p-4"
                             aria-label={`Abrir ${item.label}: ${item.count}`}
                           >
-                            <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            <span className="block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground md:text-[11px]">
                               {item.label}
                             </span>
-                            <span className="mt-1 block text-2xl font-semibold text-foreground">
+                            <span className="mt-0.5 block text-xl font-semibold text-foreground md:mt-1 md:text-2xl">
                               {item.count}
                             </span>
-                            <span className="mt-1 block text-[11px] font-medium text-primary">
+                            <span className="mt-0.5 block text-[10px] font-medium text-primary md:mt-1 md:text-[11px]">
                               Ver detalle
                             </span>
                           </button>
@@ -2484,28 +2567,28 @@ export function LeadDetailPanel({
                             <User className="h-3.5 w-3.5 text-primary" />
                             Responsables
                           </div>
-                          <dl className="mt-4 grid gap-4 sm:grid-cols-3">
+                          <dl className="mt-3 grid grid-cols-3 gap-2 md:mt-4 md:gap-4">
                             <div className="min-w-0">
                               <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                                 Planner
                               </dt>
-                              <dd className="mt-1 truncate text-sm font-semibold text-foreground">
+                              <dd className="mt-1 truncate text-[11px] font-semibold text-foreground md:text-sm">
                                 {effectiveLead.planner || "—"}
                               </dd>
                             </div>
-                            <div className="min-w-0 border-border sm:border-l sm:pl-4">
+                            <div className="min-w-0 border-l border-border pl-2 md:pl-4">
                               <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                                 Owner
                               </dt>
-                              <dd className="mt-1 truncate text-sm font-semibold text-foreground">
+                              <dd className="mt-1 truncate text-[11px] font-semibold text-foreground md:text-sm">
                                 {effectiveLead.owner || "—"}
                               </dd>
                             </div>
-                            <div className="min-w-0 border-border sm:border-l sm:pl-4">
+                            <div className="min-w-0 border-l border-border pl-2 md:pl-4">
                               <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                                 Buyer
                               </dt>
-                              <dd className="mt-1 truncate text-sm font-semibold text-foreground">
+                              <dd className="mt-1 truncate text-[11px] font-semibold text-foreground md:text-sm">
                                 {buyerName}
                               </dd>
                             </div>
@@ -2517,20 +2600,20 @@ export function LeadDetailPanel({
                             <Clock className="h-3.5 w-3.5 text-primary" />
                             Fechas clave
                           </div>
-                          <dl className="mt-4 grid gap-4 sm:grid-cols-2">
+                          <dl className="mt-3 grid grid-cols-2 gap-2 md:mt-4 md:gap-4">
                             <div className="min-w-0">
                               <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                                 F. Noticia
                               </dt>
-                              <dd className="mt-1 truncate text-sm font-semibold text-foreground">
+                              <dd className="mt-1 truncate text-[11px] font-semibold text-foreground md:text-sm">
                                 {fmtDate(effectiveLead.fechaNoticia)}
                               </dd>
                             </div>
-                            <div className="min-w-0 border-border sm:border-l sm:pl-4">
+                            <div className="min-w-0 border-l border-border pl-2 md:pl-4">
                               <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                                 F. Contacto
                               </dt>
-                              <dd className="mt-1 truncate text-sm font-semibold text-foreground">
+                              <dd className="mt-1 truncate text-[11px] font-semibold text-foreground md:text-sm">
                                 {fmtDate(effectiveLead.fechaContacto)}
                               </dd>
                             </div>
