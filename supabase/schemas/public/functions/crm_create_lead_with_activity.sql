@@ -28,9 +28,9 @@ begin
   insert into public.opportunities (
     propietario, domicilio, telefono, tasacion, estado, fecha,
     fecha_contacto, fecha_valoracion, hora, source_desc,
-    comercial_user_desc, contact_user_desc, dominio_desc, postal_id,
+    comercial_user_desc, contact_user_desc, buyer_user_desc, dominio_desc, postal_id,
     fase_id, memo, en_venta, medio, source_id, comercial_user_id,
-    contact_user_id, team_id, deleted_at
+    contact_user_id, buyer_user_id, team_id, deleted_at
   )
   values (
     nullif(btrim(p_data ->> 'propietario'), ''),
@@ -45,6 +45,7 @@ begin
     nullif(btrim(p_data ->> 'source_desc'), ''),
     nullif(btrim(p_data ->> 'comercial_user_desc'), ''),
     nullif(btrim(p_data ->> 'contact_user_desc'), ''),
+    nullif(btrim(p_data ->> 'buyer_user_desc'), ''),
     nullif(btrim(p_data ->> 'dominio_desc'), ''),
     nullif(p_data ->> 'postal_id', '')::bigint,
     nullif(p_data ->> 'fase_id', '')::bigint,
@@ -54,6 +55,7 @@ begin
     nullif(p_data ->> 'source_id', '')::bigint,
     nullif(p_data ->> 'comercial_user_id', '')::bigint,
     nullif(p_data ->> 'contact_user_id', '')::bigint,
+    nullif(p_data ->> 'buyer_user_id', '')::bigint,
     nullif(p_data ->> 'team_id', '')::bigint,
     null
   )

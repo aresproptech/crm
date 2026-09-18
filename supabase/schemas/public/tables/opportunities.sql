@@ -5,6 +5,7 @@ CREATE TABLE "public"."opportunities" (
   "dominio_desc"        text,
   "comercial_user_desc" text,
   "contact_user_desc"   text,
+  "buyer_user_desc"     text,
   "source_desc"         text,
   "postal_id"           bigint,
   "tasacion"            text,
@@ -17,6 +18,7 @@ CREATE TABLE "public"."opportunities" (
   "source_id"           bigint,
   "comercial_user_id"   bigint,
   "contact_user_id"     bigint,
+  "buyer_user_id"       bigint,
   "team_id"             bigint,
   "created_at"          timestamp without time zone DEFAULT now(),
   "fase_id"             bigint,
@@ -32,6 +34,7 @@ CREATE TABLE "public"."opportunities" (
   CONSTRAINT "opportunities_postal_id_fkey" FOREIGN KEY (postal_id) REFERENCES public.postal(id),
   CONSTRAINT "opportunities_comercial_user_id_fkey" FOREIGN KEY (comercial_user_id) REFERENCES public.profiles(id),
   CONSTRAINT "opportunities_contact_user_id_fkey" FOREIGN KEY (contact_user_id) REFERENCES public.profiles(id),
+  CONSTRAINT "opportunities_buyer_user_id_fkey" FOREIGN KEY (buyer_user_id) REFERENCES public.profiles(id),
   CONSTRAINT "opportunities_source_id_fkey" FOREIGN KEY (source_id) REFERENCES public.sources(id),
   CONSTRAINT "opportunities_fase_id_fkey" FOREIGN KEY (fase_id) REFERENCES public.phases(id)
 );
@@ -43,6 +46,9 @@ CREATE INDEX idx_opportunities_comercial_user_id ON public.opportunities USING b
   WHERE (deleted_at IS NULL);
 
 CREATE INDEX idx_opportunities_contact_user_id ON public.opportunities USING btree (contact_user_id)
+  WHERE (deleted_at IS NULL);
+
+CREATE INDEX idx_opportunities_buyer_user_id ON public.opportunities USING btree (buyer_user_id)
   WHERE (deleted_at IS NULL);
 
 CREATE INDEX idx_opportunities_source_id ON public.opportunities USING btree (source_id)

@@ -68,7 +68,7 @@ export default function LoginPage() {
             Iniciar sesión
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Accede al CRM con tu email y contraseña.
+            Ingresa tu email y contraseña.
           </p>
         </div>
 

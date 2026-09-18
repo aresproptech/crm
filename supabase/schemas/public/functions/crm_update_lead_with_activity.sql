@@ -56,6 +56,7 @@ begin
     source_desc = nullif(btrim(p_data ->> 'source_desc'), ''),
     comercial_user_desc = nullif(btrim(p_data ->> 'comercial_user_desc'), ''),
     contact_user_desc = nullif(btrim(p_data ->> 'contact_user_desc'), ''),
+    buyer_user_desc = nullif(btrim(p_data ->> 'buyer_user_desc'), ''),
     dominio_desc = nullif(btrim(p_data ->> 'dominio_desc'), ''),
     postal_id = nullif(p_data ->> 'postal_id', '')::bigint,
     fase_id = nullif(p_data ->> 'fase_id', '')::bigint,
@@ -64,7 +65,8 @@ begin
     medio = nullif(btrim(p_data ->> 'medio'), ''),
     source_id = nullif(p_data ->> 'source_id', '')::bigint,
     comercial_user_id = nullif(p_data ->> 'comercial_user_id', '')::bigint,
-    contact_user_id = nullif(p_data ->> 'contact_user_id', '')::bigint
+    contact_user_id = nullif(p_data ->> 'contact_user_id', '')::bigint,
+    buyer_user_id = nullif(p_data ->> 'buyer_user_id', '')::bigint
   where id = p_opportunity_id
   returning * into saved_opportunity;
 

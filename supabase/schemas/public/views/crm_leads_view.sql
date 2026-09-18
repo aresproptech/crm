@@ -26,12 +26,15 @@ CREATE VIEW "public"."crm_leads_view" WITH (security_invoker=true) AS  SELECT o.
     o.deleted_at,
     o.fecha_contacto,
     o.fecha_valoracion,
-    o.hora
-   FROM (((((public.opportunities o
+    o.hora,
+    o.buyer_user_id,
+    COALESCE(ub.name, o.buyer_user_desc, 'Sin buyer'::text) AS buyer_name
+   FROM ((((((public.opportunities o
      LEFT JOIN public.phases p ON ((p.id = o.fase_id)))
      LEFT JOIN public.sources s ON ((s.id = o.source_id)))
      LEFT JOIN public.profiles u ON ((u.id = o.comercial_user_id)))
      LEFT JOIN public.profiles uc ON ((uc.id = o.contact_user_id)))
+     LEFT JOIN public.profiles ub ON ((ub.id = o.buyer_user_id)))
      LEFT JOIN public.postal po ON ((po.id = o.postal_id)))
   WHERE (o.deleted_at IS NULL);
 

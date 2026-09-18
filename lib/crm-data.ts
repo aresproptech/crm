@@ -40,6 +40,8 @@ export interface Lead {
   plannerId?: number | null;
   owner: string;
   ownerId?: number | null;
+  buyer?: string;
+  buyerId?: number | null;
   createdAt: string;
   assignedUser: string;
   propertyAddress: string;

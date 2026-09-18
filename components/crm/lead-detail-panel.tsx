@@ -367,7 +367,7 @@ type LeadDetailTab =
   | "visitas"
   | "documentacion";
 
-type EditLeadTab = "resumen" | "inmueble" | "asignacion";
+type EditLeadTab = "oportunidad" | "propietario" | "inmueble";
 
 const LEAD_DETAIL_TABS: Array<{ value: LeadDetailTab; label: string }> = [
   { value: "resumen", label: "Resumen" },
@@ -379,9 +379,9 @@ const LEAD_DETAIL_TABS: Array<{ value: LeadDetailTab; label: string }> = [
 ];
 
 const EDIT_LEAD_TABS: Array<{ value: EditLeadTab; label: string }> = [
-  { value: "resumen", label: "Resumen" },
+  { value: "oportunidad", label: "Oportunidad" },
+  { value: "propietario", label: "Propietario" },
   { value: "inmueble", label: "Inmueble" },
-  { value: "asignacion", label: "Asignación" },
 ];
 
 const LEAD_DETAIL_PHASE_OPTIONS = PHASE_OPTIONS.filter((opt) =>
@@ -395,16 +395,6 @@ const LEAD_DETAIL_STATUS_OPTIONS = [
 ];
 
 const LEAD_DETAIL_MEDIO_OPTIONS = ["Presencial", "Videollamada", "Teléfono"];
-const LEAD_DETAIL_EN_VENTA_OPTIONS = ["SI", "NO", "No Sabe"];
-
-const LEAD_DETAIL_DOMINIO_OPTIONS = [
-  "Alcorcón",
-  "Chamartín",
-  "Investment",
-  "Móstoles",
-  "Proptech",
-];
-
 const PHASE_BADGE_STYLES: Record<
   string,
   { backgroundColor: string; color: string; borderColor: string }
@@ -622,6 +612,8 @@ function fieldDisplayName(field: keyof LeadWithDominio): string {
       return "Planner";
     case "owner":
       return "Owner";
+    case "buyer":
+      return "Buyer";
     case "medio":
       return "Medio";
     case "enVenta":
@@ -896,7 +888,7 @@ function EditLeadModal({
   const [cpAutoFilled, setCpAutoFilled] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [activeEditTab, setActiveEditTab] = useState<EditLeadTab>("resumen");
+  const [activeEditTab, setActiveEditTab] = useState<EditLeadTab>("oportunidad");
 
   useEffect(() => {
     setForm({
@@ -905,7 +897,7 @@ function EditLeadModal({
     });
     setCpAutoFilled(false);
     setSaveError(null);
-    setActiveEditTab("resumen");
+    setActiveEditTab("oportunidad");
   }, [lead]);
 
   function set(field: keyof LeadWithDominio, value: string) {
@@ -1002,14 +994,13 @@ function EditLeadModal({
             </aside>
 
             <div className="min-h-0 overflow-y-auto px-6 py-5">
-              {activeEditTab === "resumen" && (
-                <div className="space-y-6">
-                  <section className="space-y-3">
+              {activeEditTab === "oportunidad" && (
+                <section className="space-y-3">
                     <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       Estado del lead
                     </h3>
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                      <div className="flex flex-col gap-1.5 md:col-span-2">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+                      <div className="flex flex-col gap-1.5">
                         <Label className="text-xs font-medium">Fase</Label>
                         <Select value={form.phase} onValueChange={(v) => set("phase", v)}>
                           <SelectTrigger className="h-9 text-sm">
@@ -1025,7 +1016,7 @@ function EditLeadModal({
                         </Select>
                       </div>
 
-                      <div className="flex flex-col gap-1.5 md:col-span-2">
+                      <div className="flex flex-col gap-1.5">
                         <Label className="text-xs font-medium">Estado</Label>
                         <Select
                           value={form.status}
@@ -1043,64 +1034,118 @@ function EditLeadModal({
                           </SelectContent>
                         </Select>
                       </div>
-                    </div>
-                  </section>
 
-                  <section className="space-y-3 border-t border-border pt-4">
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Datos principales
-                    </h3>
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                      <div className="flex flex-col gap-1.5 md:col-span-2">
-                        <Label className="text-xs font-medium">Propietario</Label>
-                        <Input
-                          value={form.ownerName}
-                          onChange={(e) => set("ownerName", e.target.value)}
-                          className="h-9 text-sm"
-                        />
-                      </div>
-
-                      <div className="flex flex-col gap-1.5 md:col-span-2">
-                        <Label className="text-xs font-medium">Teléfono</Label>
-                        <Input
-                          value={form.phone}
-                          onChange={(e) => set("phone", e.target.value)}
-                          className="h-9 text-sm"
-                        />
-                      </div>
-
-                      <div className="flex flex-col gap-1.5 md:col-span-2">
-                        <Label className="text-xs font-medium">Valor</Label>
-                        <Input
-                          value={form.valor}
-                          onChange={(e) => handleValorChange(e.target.value)}
-                          className="h-9 text-sm"
-                          placeholder="Ej. 450.000 €"
-                          inputMode="numeric"
-                        />
-                      </div>
-
-                      <div className="flex flex-col gap-1.5 md:col-span-2">
-                        <Label className="text-xs font-medium">En Venta</Label>
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="edit-lead-planner" className="text-xs font-medium">
+                          Planner
+                        </Label>
                         <Select
-                          value={form.enVenta ?? "No Sabe"}
-                          onValueChange={(v) => set("enVenta", v)}
+                          value={form.planner ?? ""}
+                          onValueChange={(v) => set("planner", v)}
                         >
-                          <SelectTrigger className="h-9 text-sm">
-                            <SelectValue placeholder="Seleccionar" />
+                          <SelectTrigger id="edit-lead-planner" className="h-9 text-sm">
+                            <SelectValue placeholder="Seleccionar planner" />
                           </SelectTrigger>
                           <SelectContent>
-                            {LEAD_DETAIL_EN_VENTA_OPTIONS.map((option) => (
-                              <SelectItem key={option} value={option} className="text-sm">
-                                {option}
+                            {Array.from(
+                              new Set(
+                                [...plannerOptions, form.planner]
+                                  .map((value) => value?.trim())
+                                  .filter(
+                                    (value): value is string =>
+                                      Boolean(value) && value !== "—"
+                                  )
+                              )
+                            ).map((agent) => (
+                              <SelectItem key={agent} value={agent} className="text-sm">
+                                {agent}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium">Owner</Label>
+                        <Select value={form.owner} onValueChange={(v) => set("owner", v)}>
+                          <SelectTrigger className="h-9 text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from(
+                              new Set(
+                                [...ownerOptions, form.owner]
+                                  .map((value) => value?.trim())
+                                  .filter(
+                                    (value): value is string =>
+                                      Boolean(value) && value !== "—"
+                                  )
+                              )
+                            ).map((agent) => (
+                              <SelectItem key={agent} value={agent} className="text-sm">
+                                {agent}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs font-medium">Buyer</Label>
+                        <Select
+                          value={form.buyer ?? ""}
+                          onValueChange={(v) => set("buyer", v)}
+                        >
+                          <SelectTrigger className="h-9 text-sm">
+                            <SelectValue placeholder="Seleccionar buyer" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from(
+                              new Set(
+                                [...ownerOptions, form.buyer]
+                                  .map((value) => value?.trim())
+                                  .filter(
+                                    (value): value is string =>
+                                      Boolean(value) && value !== "—"
+                                  )
+                              )
+                            ).map((agent) => (
+                              <SelectItem key={agent} value={agent} className="text-sm">
+                                {agent}
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       </div>
                     </div>
-                  </section>
-                </div>
+                </section>
+              )}
+
+              {activeEditTab === "propietario" && (
+                <section className="space-y-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Datos del propietario
+                  </h3>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium">Propietario</Label>
+                      <Input
+                        value={form.ownerName}
+                        onChange={(e) => set("ownerName", e.target.value)}
+                        className="h-9 text-sm"
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium">Teléfono</Label>
+                      <Input
+                        value={form.phone}
+                        onChange={(e) => set("phone", e.target.value)}
+                        className="h-9 text-sm"
+                      />
+                    </div>
+                  </div>
+                </section>
               )}
 
               {activeEditTab === "inmueble" && (
@@ -1109,7 +1154,25 @@ function EditLeadModal({
                     Datos del inmueble
                   </h3>
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                  
+                    <div className="flex flex-col gap-1.5 md:col-span-3">
+                      <Label className="text-xs font-medium">Domicilio</Label>
+                      <Input
+                        value={form.address}
+                        onChange={(e) => set("address", e.target.value)}
+                        className="h-9 text-sm"
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium">Valor</Label>
+                      <Input
+                        value={form.valor}
+                        onChange={(e) => handleValorChange(e.target.value)}
+                        className="h-9 text-sm"
+                        placeholder="Ej. 450.000 €"
+                        inputMode="numeric"
+                      />
+                    </div>
 
                     <div className="flex flex-col gap-1.5">
                       <Label className="text-xs font-medium">CP</Label>
@@ -1191,85 +1254,6 @@ function EditLeadModal({
                   </div>
                 </section>
               )}
-
-
-              {activeEditTab === "asignacion" && (
-                <section className="space-y-3">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Asignación interna
-                  </h3>
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                    <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="planner" className="text-xs font-medium">
-                        Planner
-                      </Label>
-                      <Select
-                        value={form.planner ?? ""}
-                        onValueChange={(v) => set("planner", v)}
-                      >
-                        <SelectTrigger id="planner" className="h-9 text-sm">
-                          <SelectValue placeholder="Seleccionar planner" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Array.from(
-                            new Set(
-                              [...plannerOptions, form.planner]
-                                .map((value) => value?.trim())
-                                .filter((value): value is string => Boolean(value) && value !== "—")
-                            )
-                          ).map((agent) => (
-                            <SelectItem key={agent} value={agent} className="text-sm">
-                              {agent}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium">Dominio</Label>
-                      <Select
-                        value={form.dominio ?? ""}
-                        onValueChange={(v) => set("dominio", v)}
-                      >
-                        <SelectTrigger className="h-9 text-sm">
-                          <SelectValue placeholder="Seleccionar dominio" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {LEAD_DETAIL_DOMINIO_OPTIONS.map((option) => (
-                            <SelectItem key={option} value={option} className="text-sm">
-                              {option}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-xs font-medium">Owner</Label>
-                      <Select value={form.owner} onValueChange={(v) => set("owner", v)}>
-                        <SelectTrigger className="h-9 text-sm">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Array.from(
-                            new Set(
-                              [...ownerOptions, form.owner]
-                                .map((value) => value?.trim())
-                                .filter((value): value is string => Boolean(value) && value !== "—")
-                            )
-                          ).map((a) => (
-                            <SelectItem key={a} value={a} className="text-sm">
-                              {a}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </section>
-              )}
-
             </div>
           </div>
         </div>
@@ -1289,7 +1273,7 @@ function EditLeadModal({
               Cancelar
             </Button>
             <Button size="sm" onClick={handleSave} disabled={saving}>
-              {saving ? "Guardando..." : "Guardar cambios"}
+              {saving ? "Guardando..." : "Guardar"}
             </Button>
           </DialogFooter>
         </div>
@@ -1744,6 +1728,7 @@ export function LeadDetailPanel({
       "planner",
       "dominio",
       "owner",
+      "buyer",
       "enVenta",
       "notes",
     ];
@@ -2272,7 +2257,9 @@ export function LeadDetailPanel({
   const lastCallEvent = callEvents[0] || null;
   const lastCallDays = daysSince(lastCallEvent?.createdAt);
   const buyerName =
-    visits.find((visit) => visit.buyer?.trim())?.buyer?.trim() || "—";
+    effectiveLead.buyer?.trim() ||
+    visits.find((visit) => visit.buyer?.trim())?.buyer?.trim() ||
+    "—";
 
   return (
     <aside className="fixed right-0 top-0 z-40 flex h-screen w-[1080px] max-w-[calc(100vw-1rem)] flex-col border-l border-border bg-background shadow-2xl">
@@ -2557,7 +2544,7 @@ export function LeadDetailPanel({
                             onClick={() => setEditOpen(true)}
                           >
                             <Pencil className="h-3.5 w-3.5" />
-                            Editar datos
+                            Editar
                           </Button>
                         )}
                       </div>

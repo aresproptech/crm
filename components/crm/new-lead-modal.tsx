@@ -6,7 +6,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -37,6 +36,7 @@ export interface NewLeadFormData {
   provincia: string;
   cp: string;
   valor: string;
+  dominio: string;
   phone: string;
   source: string;
   medio: string;
@@ -49,6 +49,7 @@ export interface NewLeadFormData {
   hora: string;
   owner: string;
   planner: string;
+  buyer: string;
   notes: string;
 }
 
@@ -60,6 +61,7 @@ const EMPTY_FORM: NewLeadFormData = {
   provincia: "",
   cp: "",
   valor: "",
+  dominio: "",
   phone: "",
   source: "",
   medio: "",
@@ -72,6 +74,7 @@ const EMPTY_FORM: NewLeadFormData = {
   hora: "",
   owner: "",
   planner: "",
+  buyer: "",
   notes: "",
 };
 
@@ -115,7 +118,9 @@ interface NewLeadModalProps {
   onSubmit?: (data: NewLeadFormData) => Promise<string | null>;
   ownerOptions?: string[];
   plannerOptions?: string[];
+  buyerOptions?: string[];
   sourceOptions?: string[];
+  domainOptions?: string[];
 }
 
 export function NewLeadModal({
@@ -124,7 +129,9 @@ export function NewLeadModal({
   onSubmit,
   ownerOptions = AGENT_OPTIONS,
   plannerOptions = AGENT_OPTIONS,
+  buyerOptions = AGENT_OPTIONS,
   sourceOptions = SOURCE_OPTIONS,
+  domainOptions = [],
 }: NewLeadModalProps) {
   const [form, setForm] = useState<NewLeadFormData>(EMPTY_FORM);
   const [cpLoading, setCpLoading] = useState(false);
@@ -202,9 +209,20 @@ export function NewLeadModal({
     form.ownerName.trim() &&
     form.address.trim() &&
     form.phone.trim() &&
+    form.cp.trim() &&
+    form.municipio.trim() &&
+    form.distrito.trim() &&
+    form.provincia.trim() &&
+    form.valor.trim() &&
+    form.dominio &&
     form.source &&
     form.status &&
-    form.phase;
+    form.phase &&
+    form.fechaNoticia &&
+    form.owner &&
+    form.planner &&
+    form.buyer &&
+    form.notes.trim();
 
   return (
     <Dialog
@@ -218,9 +236,6 @@ export function NewLeadModal({
           <DialogTitle className="text-base font-semibold">
             Nuevo lead
           </DialogTitle>
-          <DialogDescription className="text-xs text-muted-foreground">
-            Introduce los datos principales del nuevo lead.
-          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="mt-1 flex flex-col gap-5">
@@ -282,7 +297,7 @@ export function NewLeadModal({
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="cp" className="text-xs font-medium">
-                CP
+                CP <span className="text-destructive">*</span>
               </Label>
               <div className="relative">
                 <Input
@@ -294,6 +309,7 @@ export function NewLeadModal({
                   maxLength={5}
                   inputMode="numeric"
                   disabled={cpLoading}
+                  required
                 />
                 {cpLoading && (
                   <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-primary" />
@@ -307,6 +323,7 @@ export function NewLeadModal({
                 className="text-xs font-medium flex items-center gap-1.5"
               >
                 Municipio
+                <span className="text-destructive">*</span>
                 {cpAutoFilled && (
                   <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary leading-none">
                     <LocateFixed className="h-2.5 w-2.5" />
@@ -323,6 +340,7 @@ export function NewLeadModal({
                   cpAutoFilled && "border-primary/40 bg-primary/5"
                 )}
                 placeholder="—"
+                required
               />
             </div>
 
@@ -332,6 +350,7 @@ export function NewLeadModal({
                 className="text-xs font-medium flex items-center gap-1.5"
               >
                 Distrito
+                <span className="text-destructive">*</span>
                 {cpAutoFilled && (
                   <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary leading-none">
                     <LocateFixed className="h-2.5 w-2.5" />
@@ -348,6 +367,7 @@ export function NewLeadModal({
                   cpAutoFilled && "border-primary/40 bg-primary/5"
                 )}
                 placeholder="—"
+                required
               />
             </div>
 
@@ -357,6 +377,7 @@ export function NewLeadModal({
                 className="text-xs font-medium flex items-center gap-1.5"
               >
                 Provincia
+                <span className="text-destructive">*</span>
                 {cpAutoFilled && (
                   <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary leading-none">
                     <LocateFixed className="h-2.5 w-2.5" />
@@ -373,12 +394,13 @@ export function NewLeadModal({
                   cpAutoFilled && "border-primary/40 bg-primary/5"
                 )}
                 placeholder="—"
+                required
               />
             </div>
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="valor" className="text-xs font-medium">
-                Valor
+                Valor <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="valor"
@@ -387,7 +409,29 @@ export function NewLeadModal({
                 onChange={(e) => handleValorChange(e.target.value)}
                 className="h-8 text-sm"
                 inputMode="numeric"
+                required
               />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="dominio" className="text-xs font-medium">
+                Dominio <span className="text-destructive">*</span>
+              </Label>
+              <Select
+                value={form.dominio}
+                onValueChange={(value) => handleField("dominio", value)}
+              >
+                <SelectTrigger id="dominio" className="h-8 text-sm">
+                  <SelectValue placeholder="Seleccionar dominio" />
+                </SelectTrigger>
+                <SelectContent>
+                  {domainOptions.map((domain) => (
+                    <SelectItem key={domain} value={domain}>
+                      {domain}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -459,7 +503,7 @@ export function NewLeadModal({
           <div className="grid gap-3 md:grid-cols-4">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="fechaNoticia" className="text-xs font-medium">
-                Fecha noticia
+                Fecha noticia <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="fechaNoticia"
@@ -467,14 +511,15 @@ export function NewLeadModal({
                 value={form.fechaNoticia}
                 onChange={(e) => handleField("fechaNoticia", e.target.value)}
                 className="h-8 text-sm"
+                required
               />
             </div>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-3 md:grid-cols-3">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="owner" className="text-xs font-medium">
-                Owner
+                Owner <span className="text-destructive">*</span>
               </Label>
               <Select
                 value={form.owner}
@@ -495,7 +540,7 @@ export function NewLeadModal({
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="planner" className="text-xs font-medium">
-                Planner
+                Planner <span className="text-destructive">*</span>
               </Label>
               <Select
                 value={form.planner}
@@ -513,11 +558,32 @@ export function NewLeadModal({
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="buyer" className="text-xs font-medium">
+                Buyer <span className="text-destructive">*</span>
+              </Label>
+              <Select
+                value={form.buyer}
+                onValueChange={(value) => handleField("buyer", value)}
+              >
+                <SelectTrigger id="buyer" className="h-8 text-sm">
+                  <SelectValue placeholder="Seleccionar buyer" />
+                </SelectTrigger>
+                <SelectContent>
+                  {buyerOptions.map((agent) => (
+                    <SelectItem key={agent} value={agent}>
+                      {agent}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="notes" className="text-xs font-medium">
-              Observaciones iniciales
+              Observaciones iniciales <span className="text-destructive">*</span>
             </Label>
             <Textarea
               id="notes"
@@ -525,6 +591,7 @@ export function NewLeadModal({
               onChange={(e) => handleField("notes", e.target.value)}
               className="min-h-[72px] text-sm resize-none"
               placeholder="Notas u observaciones iniciales sobre el lead..."
+              required
             />
           </div>
 
@@ -545,7 +612,7 @@ export function NewLeadModal({
                   Guardando...
                 </>
               ) : (
-                "Crear lead"
+                "Crear"
               )}
             </Button>
           </DialogFooter>
